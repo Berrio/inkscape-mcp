@@ -115,6 +115,19 @@ try {
   if (exported.isError || exported.structuredContent?.width !== 400) {
     throw new Error("export_png did not publish the expected PNG");
   }
+  const pdf = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: resizedRevision,
+      outputPath: "a4.pdf",
+      path: "a4.svg",
+      pdfVersion: "1.5",
+      workspaceId: workspace.id,
+    },
+    name: "export_pdf",
+  });
+  if (pdf.isError || pdf.structuredContent?.version !== "1.5") {
+    throw new Error("export_pdf did not publish the expected PDF");
+  }
 } finally {
   await workspaceClient.close();
   await rm(workspaceRoot, { force: true, recursive: true });

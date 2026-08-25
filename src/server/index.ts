@@ -13,7 +13,7 @@ import {
 } from "../documents/index.js";
 import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
-import { verifyPng } from "../export/index.js";
+import { verifyPdf, verifyPng } from "../export/index.js";
 import { ProcessRunner } from "../runner/index.js";
 import { AtomicFileStore, ScratchManager } from "../storage/index.js";
 import { WorkspaceService } from "../workspace/index.js";
@@ -327,6 +327,99 @@ export function buildServer(config: ServerConfig): McpServer {
         targetPath: output.absolutePath,
       });
       const result = { ...png.metadata, revision: committed.revision };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
+
+  server.registerTool(
+    "export_pdf",
+    {
+      description:
+        "Exports an SVG document to a validated PDF through Inkscape using bounded, allowlisted options.",
+      inputSchema: z.object({
+        expectedOutputRevision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/u)
+          .optional(),
+        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        outputPath: z.string().min(1).max(1024),
+        path: z.string().min(1).max(1024),
+        pdfVersion: z.enum(["1.4", "1.5"]).optional(),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        version: z.string().regex(/^1\.[0-9]$/u),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({
+      expectedOutputRevision,
+      expectedRevision,
+      outputPath,
+      path,
+      pdfVersion,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const input = await workspace.resolveExisting(workspaceId, path);
+      const output = await workspace.resolveNewOutput(workspaceId, outputPath);
+      if (!/\.pdf$/iu.test(output.relativePath))
+        throw new Error("export_pdf requires a .pdf output path");
+      const discovery = await locateInkscape({
+        config,
+        cwd: process.cwd(),
+        runner,
+      });
+      const candidate = discovery.candidates[0];
+      if (!candidate) throw new Error("Inkscape executable is unavailable");
+      const probe = await probeInkscapeCandidate(
+        runner,
+        candidate,
+        process.cwd(),
+      );
+      if (!("version" in probe))
+        throw new Error("Inkscape executable could not be validated");
+      const pdf = await scratch.withDirectory("staging", async (directory) => {
+        const temporaryOutput = join(directory, "export.pdf");
+        const result = await runner.run(candidate.executablePath, {
+          args: [
+            input.absolutePath,
+            "--export-type=pdf",
+            `--export-filename=${temporaryOutput}`,
+            ...(pdfVersion === undefined
+              ? []
+              : [`--export-pdf-version=${pdfVersion}`]),
+          ],
+          cwd: directory,
+          maxStderrBytes: config.maxStderrBytes,
+          maxStdoutBytes: config.maxStdoutBytes,
+          timeoutMs: config.processTimeoutMs,
+        });
+        if (result.exitCode !== 0 || result.terminationReason !== "completed")
+          throw new Error("Inkscape PDF export failed");
+        return {
+          bytes: await readFile(temporaryOutput),
+          metadata: await verifyPdf(temporaryOutput),
+        };
+      });
+      const committed = await fileStore.commit({
+        contents: pdf.bytes,
+        ...(expectedOutputRevision === undefined
+          ? {}
+          : { expectedOutputRevision }),
+        expectedRevision,
+        sourcePath: input.absolutePath,
+        targetPath: output.absolutePath,
+      });
+      const result = {
+        revision: committed.revision,
+        version: pdf.metadata.version,
+      };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
         structuredContent: result,

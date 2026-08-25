@@ -1,30 +1,78 @@
 # inkscape-mcp
 
-Servidor MCP local para controlar Inkscape de forma headless y segura. La prioridad inicial es controlar tamaños de documento, unidades, `viewBox`, páginas y exportaciones fiables a PNG, PDF y SVG; después se ampliará a edición vectorial de alto nivel.
+Servidor MCP local, por `stdio`, para controlar Inkscape headless de forma
+acotada. Esta version pre-alpha se centra en documentos SVG/Inkscape, tamanos,
+paginas y exportaciones verificadas a PNG, PDF y SVG.
 
-> Estado: pre-alpha. El binario solo muestra ayuda y versión; todavía no hay un servidor MCP funcional ni paquete publicado.
+## Lo que funciona hoy
 
-## Alcance previsto
+- Descubrimiento de Inkscape, incluido el paquete MSIX de Windows, y
+  `--doctor` con evidencia de capacidades.
+- Workspaces autorizados con rutas relativas seguras, revisiones SHA-256,
+  locks, backups y commits atomicos.
+- Crear, inspeccionar y redimensionar documentos SVG con semantica
+  `page_only`.
+- Paginas explicitas de Inkscape 1.4: listar, agregar, actualizar, borrar y
+  reordenar con IDs estables.
+- Ajustes tipados de pagina: color/opacidad de pagina, color de escritorio y
+  color/opacidad del borde.
+- Preflight basico de SVG y exportaciones PNG, PDF 1.4/1.5 y SVG plano o de
+  Inkscape. Los resultados se verifican antes de publicarse.
 
-- Descubrir una instalación local de Inkscape, incluida la distribución MSIX de Windows.
-- Crear, inspeccionar y redimensionar documentos SVG/Inkscape.
-- Exportar PNG, PDF y SVG con validación de tamaño, páginas, estructura y hashes.
-- Exponer herramientas MCP semánticas para elementos, capas, estilos, paths, texto, imágenes y preflight.
-- Restringir acceso a workspaces autorizados y evitar comandos o argumentos arbitrarios.
+Todavia no es un editor vectorial completo: no anuncia manipulacion general de
+objetos, capas, texto, paths, selecciones, filtros ni dependencias locales.
+Consulta el [plan maestro](./PLAN_IMPLEMENTACION.md) para el alcance y las
+tareas pendientes.
 
-## Desarrollo
+## Requisitos
 
-La implementación sigue el [plan maestro](./PLAN_IMPLEMENTACION.md) y las [instrucciones para agentes](./AGENTS.md). Se ejecuta un solo work package por sesión, con pruebas y evidencia antes de cerrar cada tarea.
+- Node.js 24.x y npm 11.x.
+- Inkscape 1.4.4 o compatible. En Windows se detecta automaticamente la
+  instalacion MSIX observada durante el desarrollo.
 
-Requisitos planeados:
+## Ejecutar localmente
 
-- Node.js 24 LTS.
-- Inkscape 1.4.4 como baseline inicial en Windows.
+```powershell
+npm ci
+npm run check
+npm run test:mcp
+node dist/cli.js --doctor --json
+node dist/cli.js --workspace-root C:\ruta\a\tus\disenos
+```
 
-## Estado y seguridad
+El ultimo comando mantiene el protocolo MCP exclusivamente en stdout. Configura
+tu cliente MCP para iniciarlo con `node`, argumento `dist/cli.js`, y uno o mas
+argumentos `--workspace-root`; solo esos directorios seran visibles para las
+tools de documentos.
 
-El servidor aún no procesa archivos. Cuando exista, la versión 1.0 declarará de forma explícita sus límites de seguridad: protegerá rutas, XML, argumentos, revisiones y artefactos, pero no afirmará aislar vulnerabilidades desconocidas de parsers nativos sin un sandbox reforzado.
+## Tools MCP actuales
+
+| Tool | Uso |
+| --- | --- |
+| `inkscape_status` | Estado, capacidades y postura de seguridad. |
+| `workspace_list`, `workspace_list_documents` | Workspaces disponibles y SVG/SVGZ permitidos. |
+| `document_create`, `document_inspect`, `document_resize` | Crear y gestionar viewport, `viewBox` y revision. |
+| `document_pages` | Listar o mutar paginas explicitas de Inkscape 1.4. |
+| `document_settings` | Leer o editar fondo de pagina, escritorio y borde. |
+| `document_preflight` | Detectar contenido activo, recursos externos y errores basicos. |
+| `export_png`, `export_pdf`, `export_svg` | Exportar por Inkscape mediante staging y validar el artefacto. |
+
+Las mutaciones y exportaciones exigen `expectedRevision`. Si un archivo cambia
+entre la lectura y el commit, la operacion falla en lugar de sobrescribir una
+revision ajena. Toda exportacion entrega a Inkscape una copia verificada del SVG
+en staging, nunca la ruta viva del workspace.
+
+## Seguridad y estado
+
+El proyecto no promete aislar vulnerabilidades desconocidas de parsers nativos.
+Limita rutas, XML, argumentos, procesos, tamanos y sobrescrituras; la politica
+actual de input nativo es `trusted-local-only`. Los SVG con contenido activo o
+recursos remotos deben revisarse antes de exportarlos.
+
+Las instrucciones de contribucion y los invariantes se encuentran en
+[AGENTS.md](./AGENTS.md). El paquete sigue siendo privado: publicarlo en npm o
+en un registry requerira autorizacion explicita separada.
 
 ## Licencia
 
-[MIT](./LICENSE) © 2026 Berrio.
+[MIT](./LICENSE) Copyright 2026 Berrio.

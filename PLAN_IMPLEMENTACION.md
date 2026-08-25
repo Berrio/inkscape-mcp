@@ -1417,23 +1417,23 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### ADRs
 
-- [ ] `F00-T16` ADR-001: TypeScript/Node 24/npm/ESM.
-- [ ] `F00-T17` ADR-002: arquitectura híbrida DOM + CLI/actions.
-- [ ] `F00-T18` ADR-003: stdio predeterminado y HTTP opt-in.
-- [ ] `F00-T19` ADR-004: rutas relativas, URIs opacas y roots configurados; no usar acceso global.
-- [ ] `F00-T20` ADR-005: revisiones SHA-256, locks, temporales, backups y commit atómico.
-- [ ] `F00-T21` ADR-006: política de errores, warnings y compatibilidad.
-- [ ] `F00-T22` Registrar licencias de dependencias y riesgos de paquetes nativos.
-- [ ] `F00-T23` ADR-007 y schema de manifest de fixtures: origen/licencia, versión, capability, assertions numéricas/estructurales/visuales y tolerancias por fixture.
+- [x] `F00-T16` ADR-001: TypeScript/Node 24/npm/ESM.
+- [x] `F00-T17` ADR-002: arquitectura híbrida DOM + CLI/actions.
+- [x] `F00-T18` ADR-003: stdio predeterminado y HTTP opt-in.
+- [x] `F00-T19` ADR-004: rutas relativas, URIs opacas y roots configurados; no usar acceso global.
+- [x] `F00-T20` ADR-005: revisiones SHA-256, locks, temporales, backups y commit atómico.
+- [x] `F00-T21` ADR-006: política de errores, warnings y compatibilidad.
+- [x] `F00-T22` Registrar licencias de dependencias y riesgos de paquetes nativos. — Inventario directo MIT/Apache-2.0 y postinstall de Inspector sin aprobar.
+- [x] `F00-T23` ADR-007 y schema de manifest de fixtures: origen/licencia, versión, capability, assertions numéricas/estructurales/visuales y tolerancias por fixture.
 
 #### Puerta F00
 
 - [x] `F00-G01` `npm ci` funciona desde checkout limpio.
 - [x] `F00-G02` `npm run check` pasa.
 - [x] `F00-G03` `npm pack --dry-run` contiene únicamente archivos esperados.
-- [ ] `F00-G04` D001–D003 de la sección 20 están resueltas; cada decisión posterior tiene responsable, deadline y tarea/ADR, sin exigir resolver F02–F05 prematuramente.
+- [x] `F00-G04` D001–D003 de la sección 20 están resueltas; cada decisión posterior tiene responsable, deadline y tarea/ADR, sin exigir resolver F02–F05 prematuramente.
 - [x] `F00-G05` `docs/progress/F00.md` contiene evidencia.
-- [ ] `F00-G06` El manifest de fixtures prohíbe una tolerancia visual global vaga y exige aprobación explícita de cambios de golden.
+- [x] `F00-G06` El manifest de fixtures prohíbe una tolerancia visual global vaga y exige aprobación explícita de cambios de golden.
 
 ---
 
@@ -2471,9 +2471,9 @@ Estados: `open`, `proposed`, `resolved` o `waived`. Toda resolución enlaza ADR/
 
 | ID   | Decisión                               | Estado inicial | Responsable                   |           Plazo | Propuesta / evidencia esperada                                            |
 | ---- | -------------------------------------- | -------------- | ----------------------------- | --------------: | ------------------------------------------------------------------------- |
-| D001 | Nombre npm/MCP                         | open           | usuario                       |         F00-T01 | `inkscape-mcp` si está disponible; registrar elección                     |
-| D002 | Licencia                               | open           | usuario                       |         F00-T01 | MIT o Apache-2.0; archivo LICENSE                                         |
-| D003 | Node/SDK/Zod/version policy            | proposed       | implementer + review          |        F00-WP02 | Node 24 + SDK v2 + Zod 4 fijados; ADR/lock/tests                          |
+| D001 | Nombre npm/MCP                         | resolved       | usuario                       |         F00-T01 | `inkscape-mcp`; repositorio público `Berrio/inkscape-mcp`                 |
+| D002 | Licencia                               | resolved       | usuario                       |         F00-T01 | MIT; archivo `LICENSE`                                                    |
+| D003 | Node/SDK/Zod/version policy            | resolved       | implementer + review          |        F00-WP02 | Node 24, TypeScript 6, SDK v2 y Zod 4 fijados; ADR-001/lock/tests         |
 | D004 | Parser DOM/XML                         | open           | implementer + review          |         F02-T16 | elegir por corpus/fidelidad/seguridad/licencia; ADR                       |
 | D005 | Threat model TOCTOU/ACL                | proposed       | implementer + user            |         F02-T00 | cliente hostil, no atacante local concurrente; ADR                        |
 | D006 | Atomicidad batch                       | proposed       | implementer + review          |        F05-WP01 | directory rename o manifest commit; crash tests                           |
@@ -2639,7 +2639,7 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 
 ### Implementación
 
-- [~] F00 Bootstrap (`F00-WP01` y `F00-WP02` completados; pendiente `WP03`).
+- [x] F00 Bootstrap.
 - [ ] F01 Discovery/runner.
 - [ ] F02 Workspace/XML/transacciones.
 - [ ] F03 Tamaños/páginas.

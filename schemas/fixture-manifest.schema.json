@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Berrio/inkscape-mcp/schemas/fixture-manifest.schema.json",
+  "title": "Inkscape MCP fixture manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "fixtures"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "fixtures": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fixture" },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "license", "applicability", "assertions"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "origin"],
+          "properties": {
+            "file": { "type": "string", "pattern": "^[A-Za-z0-9._/-]+$" },
+            "origin": {
+              "type": "string",
+              "enum": ["first-party", "generated", "third-party"]
+            },
+            "sourceUrl": { "type": "string", "format": "uri" }
+          }
+        },
+        "license": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["spdx"],
+          "properties": {
+            "spdx": { "type": "string", "minLength": 1 },
+            "copyright": { "type": "string", "minLength": 1 }
+          }
+        },
+        "applicability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["inkscape", "capabilities"],
+          "properties": {
+            "inkscape": { "type": "string", "minLength": 1 },
+            "platforms": {
+              "type": "array",
+              "items": { "enum": ["windows", "linux", "macos"] },
+              "uniqueItems": true
+            },
+            "capabilities": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "uniqueItems": true
+            }
+          }
+        },
+        "assertions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["structural", "numeric", "visual"],
+          "properties": {
+            "structural": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "numeric": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "expected", "tolerance", "unit"],
+                "properties": {
+                  "name": { "type": "string", "minLength": 1 },
+                  "expected": { "type": "number" },
+                  "tolerance": { "type": "number", "minimum": 0 },
+                  "unit": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            "visual": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/visualAssertion" }
+            }
+          }
+        }
+      }
+    },
+    "visualAssertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "renderer",
+        "golden",
+        "background",
+        "widthPx",
+        "heightPx",
+        "threshold",
+        "approval"
+      ],
+      "properties": {
+        "renderer": { "type": "string", "minLength": 1 },
+        "golden": { "type": "string", "pattern": "^[A-Za-z0-9._/-]+$" },
+        "background": { "type": "string", "minLength": 1 },
+        "widthPx": { "type": "integer", "minimum": 1 },
+        "heightPx": { "type": "integer", "minimum": 1 },
+        "threshold": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maxDifferingPixels", "maxChannelDelta"],
+          "properties": {
+            "maxDifferingPixels": { "type": "integer", "minimum": 0 },
+            "maxChannelDelta": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            }
+          }
+        },
+        "approval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reason", "approvedBy"],
+          "properties": {
+            "reason": { "type": "string", "minLength": 1 },
+            "approvedBy": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

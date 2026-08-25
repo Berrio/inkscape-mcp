@@ -9,5 +9,9 @@ export {
   type MutationDocumentRef,
 } from "./revisions.js";
 export { ScratchManager } from "./scratch.js";
+export {
+  createNativeInputBundle,
+  type NativeInputBundle,
+} from "./native-input.js";
 export { SnapshotStore, type Snapshot } from "./snapshots.js";
 export { ArtifactStore, type Artifact } from "./artifacts.js";

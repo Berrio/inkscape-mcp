@@ -18,6 +18,7 @@ import { verifyPdf, verifyPng, verifySvg } from "../export/index.js";
 import { ProcessRunner } from "../runner/index.js";
 import {
   AtomicFileStore,
+  createNativeInputBundle,
   ScratchManager,
   sha256File,
 } from "../storage/index.js";
@@ -384,10 +385,15 @@ export function buildServer(config: ServerConfig): McpServer {
       if (!("version" in probe))
         throw new Error("Inkscape executable could not be validated");
       const png = await scratch.withDirectory("staging", async (directory) => {
+        const nativeInput = await createNativeInputBundle(
+          input.absolutePath,
+          expectedRevision,
+          directory,
+        );
         const temporaryOutput = join(directory, "export.png");
         const result = await runner.run(candidate.executablePath, {
           args: [
-            input.absolutePath,
+            nativeInput.path,
             "--export-type=png",
             `--export-filename=${temporaryOutput}`,
             ...(width === undefined ? [] : [`--export-width=${width}`]),
@@ -474,10 +480,15 @@ export function buildServer(config: ServerConfig): McpServer {
       if (!("version" in probe))
         throw new Error("Inkscape executable could not be validated");
       const pdf = await scratch.withDirectory("staging", async (directory) => {
+        const nativeInput = await createNativeInputBundle(
+          input.absolutePath,
+          expectedRevision,
+          directory,
+        );
         const temporaryOutput = join(directory, "export.pdf");
         const result = await runner.run(candidate.executablePath, {
           args: [
-            input.absolutePath,
+            nativeInput.path,
             "--export-type=pdf",
             `--export-filename=${temporaryOutput}`,
             ...(pdfVersion === undefined
@@ -567,10 +578,15 @@ export function buildServer(config: ServerConfig): McpServer {
       if (!("version" in probe))
         throw new Error("Inkscape executable could not be validated");
       const svg = await scratch.withDirectory("staging", async (directory) => {
+        const nativeInput = await createNativeInputBundle(
+          input.absolutePath,
+          expectedRevision,
+          directory,
+        );
         const temporaryOutput = join(directory, "export.svg");
         const run = await runner.run(candidate.executablePath, {
           args: [
-            input.absolutePath,
+            nativeInput.path,
             "--export-type=svg",
             `--export-filename=${temporaryOutput}`,
             ...(flavor === "plain" ? ["--export-plain-svg"] : []),

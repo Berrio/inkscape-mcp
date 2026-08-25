@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,6 +14,7 @@ import {
   AtomicFileStore,
   ArtifactStore,
   CanonicalPathLocks,
+  createNativeInputBundle,
   RevisionConflictError,
   ScratchManager,
   SnapshotStore,
@@ -28,6 +36,25 @@ afterEach(async () => {
 });
 
 describe("file revisions and atomic store", () => {
+  it("freezes a matching source before native processing", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const staging = join(root, "staging");
+    await writeFile(source, "<svg />");
+    await mkdir(staging);
+    const expectedRevision = await sha256File(source);
+    const bundle = await createNativeInputBundle(
+      source,
+      expectedRevision,
+      staging,
+    );
+    expect(bundle.revision).toBe(expectedRevision);
+    expect(await readFile(bundle.path, "utf8")).toBe("<svg />");
+    await writeFile(source, "changed");
+    await expect(
+      createNativeInputBundle(source, expectedRevision, staging),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+  });
   it("streams a revision and refuses stale source or output revisions", async () => {
     const root = await temporaryDirectory();
     const source = join(root, "source.svg");

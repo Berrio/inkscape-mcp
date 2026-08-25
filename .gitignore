@@ -1,0 +1,24 @@
+# Node.js / TypeScript
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Logs and local configuration
+*.log
+logs/
+.env
+.env.*
+!.env.example
+
+# MCP/Inkscape runtime data; never version user documents or generated exports.
+.inkscape-mcp/
+scratch/
+artifacts/
+exports/
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

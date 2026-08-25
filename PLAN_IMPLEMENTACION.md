@@ -591,13 +591,17 @@ type ViewportLength = PhysicalLength | CssPixelLength;
 type PageSize = { width: ViewportLength; height: ViewportLength };
 
 type UserCoordinateSpace =
-  | { kind: "document_user" }
-  | { kind: "page_local"; pageId: string };
+  { kind: "document_user" } | { kind: "page_local"; pageId: string };
 type ViewportCoordinateSpace =
-  | { kind: "document_css_px" }
-  | { kind: "page_css_px"; pageId: string };
+  { kind: "document_css_px" } | { kind: "page_css_px"; pageId: string };
 type UserPoint = { x: number; y: number; space: UserCoordinateSpace };
-type UserRect = { x: number; y: number; width: number; height: number; space: UserCoordinateSpace };
+type UserRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  space: UserCoordinateSpace;
+};
 type ViewportPoint = { x: number; y: number; space: ViewportCoordinateSpace };
 type AffineTransform = {
   from: UserCoordinateSpace | ViewportCoordinateSpace;
@@ -637,9 +641,9 @@ Política de `viewBox` obligatoria:
 
 ```ts
 type ViewBoxPolicy =
-  | "preserve_user_scale"   // default de page_only
-  | "preserve_viewbox"      // cambia la escala física del contenido
-  | "explicit";             // exige viewBox completo
+  | "preserve_user_scale" // default de page_only
+  | "preserve_viewbox" // cambia la escala física del contenido
+  | "explicit"; // exige viewBox completo
 
 type ViewBoxPolicyInput =
   | { policy: "preserve_user_scale" }
@@ -660,16 +664,16 @@ Reglas para escalar contenido:
 - Cada resultado declara fidelidad `exact|partial|approximate` y pérdidas concretas. `partial`/`approximate` requieren `allowApproximate=true`; de otro modo la operación falla sin mutar.
 - Probar specificity, `!important`, `currentColor`, custom properties, porcentajes, `objectBoundingBox`, `vector-effect="non-scaling-stroke"`, markers, clips, masks y filtros. Si no se puede conservar semántica, ofrecer aplanado de estilos calculados como modo explícito con warning.
 
-| Modo | Cambia página | Cambia `viewBox` | Cambia contenido | Uso |
-|---|---:|---:|---:|---|
-| `page_only` | Sí | Sí por default; política explícita | No | Cambiar lienzo sin tocar geometría |
-| `scale_content_contain` | Sí | Sí | Escala uniforme | Encajar todo sin recortar |
-| `scale_content_cover` | Sí | Sí | Escala uniforme y puede recortar | Llenar formato destino |
-| `scale_content_stretch` | Sí | Sí | Escala no uniforme | Solo opt-in con warning |
-| `fit_page_to_drawing` | Sí | Sí | No | Ajustar página al bounds del dibujo |
-| `fit_page_to_selection` | Sí | Sí | No | Ajustar a objetos seleccionados |
-| `crop` | Sí | Sí | No | Recortar viewport a rectángulo |
-| `expand` | Sí | Sí | No | Añadir márgenes/bleed |
+| Modo                    | Cambia página |                   Cambia `viewBox` |                 Cambia contenido | Uso                                 |
+| ----------------------- | ------------: | ---------------------------------: | -------------------------------: | ----------------------------------- |
+| `page_only`             |            Sí | Sí por default; política explícita |                               No | Cambiar lienzo sin tocar geometría  |
+| `scale_content_contain` |            Sí |                                 Sí |                  Escala uniforme | Encajar todo sin recortar           |
+| `scale_content_cover`   |            Sí |                                 Sí | Escala uniforme y puede recortar | Llenar formato destino              |
+| `scale_content_stretch` |            Sí |                                 Sí |               Escala no uniforme | Solo opt-in con warning             |
+| `fit_page_to_drawing`   |            Sí |                                 Sí |                               No | Ajustar página al bounds del dibujo |
+| `fit_page_to_selection` |            Sí |                                 Sí |                               No | Ajustar a objetos seleccionados     |
+| `crop`                  |            Sí |                                 Sí |                               No | Recortar viewport a rectángulo      |
+| `expand`                |            Sí |                                 Sí |                               No | Añadir márgenes/bleed               |
 
 Cada operación debe declarar:
 
@@ -715,8 +719,10 @@ Vectores normativos iniciales:
 
 ```ts
 type BleedSpec = {
-  top: PhysicalLength; right: PhysicalLength;
-  bottom: PhysicalLength; left: PhysicalLength;
+  top: PhysicalLength;
+  right: PhysicalLength;
+  bottom: PhysicalLength;
+  left: PhysicalLength;
   behavior: "metadata-only" | "expand-temporary-page";
 };
 ```
@@ -733,10 +739,15 @@ type BleedSpec = {
 ### 11.1 Contrato normalizado
 
 ```ts
-type CommonExport = { source: ReadDocumentRef; target: OutputTarget | MultiOutputTarget };
+type CommonExport = {
+  source: ReadDocumentRef;
+  target: OutputTarget | MultiOutputTarget;
+};
 type EdgeInsets = {
-  top: ViewportLength; right: ViewportLength;
-  bottom: ViewportLength; left: ViewportLength;
+  top: ViewportLength;
+  right: ViewportLength;
+  bottom: ViewportLength;
+  left: ViewportLength;
 };
 type SelectionArea = {
   kind: "selection";
@@ -758,43 +769,70 @@ type PngSize =
   | { mode: "dpi"; dpi: number }
   | { mode: "width"; widthPx: number; dpiHint?: number }
   | { mode: "height"; heightPx: number; dpiHint?: number }
-  | { mode: "exact"; widthPx: number; heightPx: number; dpiHint?: number; allowDistortion?: boolean };
+  | {
+      mode: "exact";
+      widthPx: number;
+      heightPx: number;
+      dpiHint?: number;
+      allowDistortion?: boolean;
+    };
 type PngBackground =
   | { mode: "document" }
   | { mode: "transparent" }
   | { mode: "solid"; color: string; opacity: number };
 
 type PngExportSpec = CommonExport & {
-  format: "png"; area: PngArea; size?: PngSize; margin?: EdgeInsets;
-  background: PngBackground; bitDepth?: 8 | 16; compression?: number;
-  antialias?: number; snapAreaToPixels?: boolean;
+  format: "png";
+  area: PngArea;
+  size?: PngSize;
+  margin?: EdgeInsets;
+  background: PngBackground;
+  bitDepth?: 8 | 16;
+  compression?: number;
+  antialias?: number;
+  snapAreaToPixels?: boolean;
 };
 type PdfExportSpec = CommonExport & {
-  format: "pdf"; area: VectorArea; version?: "1.4" | "1.5";
-  text: "preserve" | "paths"; filterRasterDpi?: number;
-  filters: "preserve" | "ignore-with-warning"; margin?: EdgeInsets;
+  format: "pdf";
+  area: VectorArea;
+  version?: "1.4" | "1.5";
+  text: "preserve" | "paths";
+  filterRasterDpi?: number;
+  filters: "preserve" | "ignore-with-warning";
+  margin?: EdgeInsets;
   latex?: boolean;
 };
 type SvgExportSpec = CommonExport & {
-  format: "svg" | "plain-svg" | "svgz"; area: VectorArea;
+  format: "svg" | "plain-svg" | "svgz";
+  area: VectorArea;
   text: "preserve" | "paths";
   resourcePolicy: "preserve-local" | "embed" | "reject-external";
 };
 type PsExportSpec = CommonExport & {
-  format: "ps"; area: Exclude<VectorArea, { kind: "document" }>;
-  level: 2 | 3; text: "preserve" | "paths"; filterRasterDpi?: number;
+  format: "ps";
+  area: Exclude<VectorArea, { kind: "document" }>;
+  level: 2 | 3;
+  text: "preserve" | "paths";
+  filterRasterDpi?: number;
 };
 type EpsExportSpec = CommonExport & {
-  format: "eps"; area: { kind: "drawing" } | SelectionArea;
-  level: 2 | 3; text: "preserve" | "paths"; filterRasterDpi?: number;
+  format: "eps";
+  area: { kind: "drawing" } | SelectionArea;
+  level: 2 | 3;
+  text: "preserve" | "paths";
+  filterRasterDpi?: number;
 };
 type MetafileExportSpec = CommonExport & {
   format: "emf" | "wmf" | "xaml";
   area: { kind: "drawing" } | SelectionArea;
 };
 type ExportSpec =
-  | PngExportSpec | PdfExportSpec | SvgExportSpec
-  | PsExportSpec | EpsExportSpec | MetafileExportSpec;
+  | PngExportSpec
+  | PdfExportSpec
+  | SvgExportSpec
+  | PsExportSpec
+  | EpsExportSpec
+  | MetafileExportSpec;
 ```
 
 La validación debe rechazar combinaciones fuera de la rama discriminada. `output: each` o múltiples páginas PNG exige `MultiOutputTarget`; un resultado único exige `OutputTarget`. La plantilla solo admite tokens allowlisted y nombres relativos seguros. El área custom es nativa solo para PNG en el contrato estable. Un formato vectorial puede simularla únicamente mediante documento temporal y estrategia registrada en el manifest. EPS nunca acepta área de página.
@@ -903,41 +941,41 @@ Requisitos:
 
 Mantener cerca de 30 tools semánticas (33 en este catálogo inicial). El catálogo debe ser estable; una capacidad ausente devuelve error recuperable, no elimina dinámicamente la tool.
 
-| Tool | Tipo | Fase | Propósito |
-|---|---|---:|---|
-| `inkscape_status` | lectura | F01 | Estado, versión, ruta redactada, capabilities y diagnósticos |
-| `workspace_list_documents` | lectura | F02 | Listar documentos permitidos con paginación |
-| `document_create` | mutación | F03 | Crear SVG/preset/páginas iniciales |
-| `document_inspect` | lectura | F03/F04 | Tamaños, páginas, elementos, recursos, fuentes, colores y warnings |
-| `document_settings` | mutación/lectura | F03 | Pagecolor/pageopacity, desk, border y ajustes documentales tipados |
-| `document_preflight` | lectura | F04 | Validar perfil web/print/interchange |
-| `document_optimize` | mutación/derivado | F08 | Limpiar/normalizar mediante plan seguro y verificable |
-| `document_resize` | mutación | F03 | Tamaño, orientación, viewBox, fit/crop/scale |
-| `document_pages` | mutación/lectura | F03 | List/add/update/delete/reorder de páginas |
-| `document_snapshot` | mutación segura | F02 | Crear snapshot explícito |
-| `document_restore` | destructiva | F02 | Restaurar snapshot con revisión esperada |
-| `document_render_preview` | artefacto | F04 | Preview PNG limitado |
-| `elements_query` | lectura | F06 | Buscar por ID, tipo, layer o selector seguro |
-| `elements_create` | mutación | F06 | Crear formas, texto, imagen, grupo/layer y fragmento seguro |
-| `elements_update` | mutación | F06 | Atributos/estilo/texto/geometry allowlisted |
-| `elements_delete` | destructiva | F06 | Eliminar IDs explícitos |
-| `elements_duplicate` | mutación | F06 | Duplicar/clone con IDs nuevos |
-| `elements_group` | mutación | F06 | Group/ungroup/reparent/order |
-| `elements_transform` | mutación | F06 | Move/scale/rotate/skew/flip/matrix |
-| `elements_arrange` | mutación | F06 | Align/distribute/z-order |
-| `styles_apply` | mutación | F06/F07 | Fill/stroke/opacity/typography/filter refs |
-| `defs_manage` | mutación | F07 | Gradients/patterns/markers/clip/mask/filter defs |
-| `paths_operate` | mutación | F07 | Boolean/combine/break/simplify/inset/outset/conversion |
-| `text_manage` | mutación | F07 | Contenido, tspans, text-on-path, flow y text-to-path |
-| `images_manage` | mutación | F07 | Place/embed/link/crop/relink/trace gateado |
-| `document_apply_operations` | mutación atómica | F06 | Unión discriminada de operaciones en una transacción |
-| `document_import` | mutación/artefacto | F08 | Convertir/importar con opciones seguras |
-| `document_export` | artefacto | F05 | Exportación individual validada |
-| `document_export_batch` | artefacto | F05/F08 | Variantes/presets/manifests |
-| `assets_package` | artefacto | F08 | Empaquetar documento, dependencias y manifest |
-| `job_get` | lectura | F09 | Estado/progreso/resultado de job largo |
-| `job_cancel` | mutación | F09 | Cancelar job autorizado |
-| `artifact_read_chunk` | lectura | F09 | Leer un rango acotado de un artefacto autorizado sin cargarlo completo |
+| Tool                        | Tipo               |    Fase | Propósito                                                              |
+| --------------------------- | ------------------ | ------: | ---------------------------------------------------------------------- |
+| `inkscape_status`           | lectura            |     F01 | Estado, versión, ruta redactada, capabilities y diagnósticos           |
+| `workspace_list_documents`  | lectura            |     F02 | Listar documentos permitidos con paginación                            |
+| `document_create`           | mutación           |     F03 | Crear SVG/preset/páginas iniciales                                     |
+| `document_inspect`          | lectura            | F03/F04 | Tamaños, páginas, elementos, recursos, fuentes, colores y warnings     |
+| `document_settings`         | mutación/lectura   |     F03 | Pagecolor/pageopacity, desk, border y ajustes documentales tipados     |
+| `document_preflight`        | lectura            |     F04 | Validar perfil web/print/interchange                                   |
+| `document_optimize`         | mutación/derivado  |     F08 | Limpiar/normalizar mediante plan seguro y verificable                  |
+| `document_resize`           | mutación           |     F03 | Tamaño, orientación, viewBox, fit/crop/scale                           |
+| `document_pages`            | mutación/lectura   |     F03 | List/add/update/delete/reorder de páginas                              |
+| `document_snapshot`         | mutación segura    |     F02 | Crear snapshot explícito                                               |
+| `document_restore`          | destructiva        |     F02 | Restaurar snapshot con revisión esperada                               |
+| `document_render_preview`   | artefacto          |     F04 | Preview PNG limitado                                                   |
+| `elements_query`            | lectura            |     F06 | Buscar por ID, tipo, layer o selector seguro                           |
+| `elements_create`           | mutación           |     F06 | Crear formas, texto, imagen, grupo/layer y fragmento seguro            |
+| `elements_update`           | mutación           |     F06 | Atributos/estilo/texto/geometry allowlisted                            |
+| `elements_delete`           | destructiva        |     F06 | Eliminar IDs explícitos                                                |
+| `elements_duplicate`        | mutación           |     F06 | Duplicar/clone con IDs nuevos                                          |
+| `elements_group`            | mutación           |     F06 | Group/ungroup/reparent/order                                           |
+| `elements_transform`        | mutación           |     F06 | Move/scale/rotate/skew/flip/matrix                                     |
+| `elements_arrange`          | mutación           |     F06 | Align/distribute/z-order                                               |
+| `styles_apply`              | mutación           | F06/F07 | Fill/stroke/opacity/typography/filter refs                             |
+| `defs_manage`               | mutación           |     F07 | Gradients/patterns/markers/clip/mask/filter defs                       |
+| `paths_operate`             | mutación           |     F07 | Boolean/combine/break/simplify/inset/outset/conversion                 |
+| `text_manage`               | mutación           |     F07 | Contenido, tspans, text-on-path, flow y text-to-path                   |
+| `images_manage`             | mutación           |     F07 | Place/embed/link/crop/relink/trace gateado                             |
+| `document_apply_operations` | mutación atómica   |     F06 | Unión discriminada de operaciones en una transacción                   |
+| `document_import`           | mutación/artefacto |     F08 | Convertir/importar con opciones seguras                                |
+| `document_export`           | artefacto          |     F05 | Exportación individual validada                                        |
+| `document_export_batch`     | artefacto          | F05/F08 | Variantes/presets/manifests                                            |
+| `assets_package`            | artefacto          |     F08 | Empaquetar documento, dependencias y manifest                          |
+| `job_get`                   | lectura            |     F09 | Estado/progreso/resultado de job largo                                 |
+| `job_cancel`                | mutación           |     F09 | Cancelar job autorizado                                                |
+| `artifact_read_chunk`       | lectura            |     F09 | Leer un rango acotado de un artefacto autorizado sin cargarlo completo |
 
 ### 12.1 Escape hatches permitidos
 
@@ -1083,38 +1121,38 @@ Errores recuperables del dominio regresan `status: error`, `isError: true` y rem
 
 Esta matriz evita que “diseño” quede reducido a exportar archivos. La columna backend indica la ruta preferida, no una promesa de que toda variante sea idéntica en todas las versiones.
 
-| Área | Capacidades previstas | Backend principal | Prioridad | Límites/validación |
-|---|---|---|---:|---|
-| Documento | crear, abrir, clonar, guardar como, metadata, namespaces | DOM | P0 | XML seguro y revisión |
-| Página/lienzo | tamaño, unidades, orientación, viewBox, márgenes, fit/crop/expand | híbrido | P0 | distinguir viewport/contenido |
-| Multipágina | P0 leer/exportar existente; P1 añadir/redimensionar/mover/eliminar/reordenar | DOM + CLI | P0/P1 | comportamiento por versión |
-| Consulta | IDs, tipos, layers, bounds, estilos, inventario | híbrido | P0/P1 | bounds visuales vs geométricos |
-| Formas | rect, rounded rect, circle, ellipse, line, polyline, polygon, star, spiral | DOM | P1 | normalizar atributos Inkscape |
-| Paths | crear/editar `d`, combine, break, reverse, simplify | híbrido | P1 | parser robusto, tolerancias |
-| Booleanas | union, difference, intersection, exclusion, division, cut | actions | P1 | selección/orden determinista |
-| Conversión | object/stroke/text to path | actions/CLI | P1 | irreversible; snapshot/warning |
-| Transform | move, scale, rotate, skew, flip, matrix, anchor | DOM | P1 | matrices anidadas y stroke |
-| Arrange | align, distribute, z-order, reparent | híbrido | P1 | bounds y referencia explícitos |
-| Capas/grupos | CRUD, label, visibilidad, lock, group/ungroup | DOM/actions | P1 | namespaces Inkscape |
-| Fill/stroke | solid, none, opacity, joins, caps, dash, paint order | DOM | P1 | color parse/normalización |
-| Gradientes | linear/radial, stops, spread, transforms, reuse | DOM | P1 | refs e IDs consistentes |
-| Patterns/markers | crear, aplicar, reutilizar | DOM | P1/P2 | bbox/userSpaceOnUse |
-| Clip/mask | crear, aplicar, quitar, inspeccionar | DOM/actions | P1 | referencias y bounds |
-| Filtros | blur, blend, shadow y primitives seleccionadas | DOM | P2 | diferencias de render |
-| Texto | texto, tspans, estilo, spacing, anchor, dirección | DOM | P1 | fuentes y layout dependientes |
-| Texto avanzado | text-on-path, flowed text, text-to-path | híbrido | P1/P2 | SVG2/compatibilidad |
-| Imágenes | colocar, embed, link local, relink, crop por clip | DOM | P1 | no red remota por defecto |
-| Bitmap trace | trazado con presets allowlisted | action/extensión | P2 | puede requerir GUI/extensión |
-| Símbolos/clones | defs/use, clone/unlink, instancias | DOM/actions | P2 | ciclos y referencias |
-| Guías/grids/snap | leer/escribir configuración documental | DOM | P2 | no depender de UI activa |
-| Live Path Effects | inspeccionar y subconjunto probado | actions/DOM | P2/P3 | alto riesgo de versión/GUI |
-| Metadatos | title, desc, RDF/license, author, keywords | DOM | P1 | privacidad y namespaces |
-| Accesibilidad | title/desc/ARIA básico, contraste como warning | DOM/preflight | P1 | no sustituye auditoría humana |
-| Colores | inventario, reemplazo, paletas, perfiles referenciados | DOM/preflight | P1/P2 | no prometer CMYK fiable |
-| Optimización | limpiar metadata/defs no usados, plain/optimized SVG | híbrido | P1/P2 | visual regression obligatoria |
-| Extensiones | catálogo y adaptadores allowlisted | CLI/extensión | P2 | nunca IDs arbitrarios públicos |
-| Importación | SVG/SVGZ/PDF/AI/EPS/EMF/WMF/DXF/raster según sonda | CLI/extensión | P1/P2 | opciones y plataforma |
-| Exportación | PNG/PDF/SVG + PS/EPS/EMF/WMF/XAML gateados | CLI | P0/P2 | validar cada artefacto |
+| Área              | Capacidades previstas                                                        | Backend principal | Prioridad | Límites/validación             |
+| ----------------- | ---------------------------------------------------------------------------- | ----------------- | --------: | ------------------------------ |
+| Documento         | crear, abrir, clonar, guardar como, metadata, namespaces                     | DOM               |        P0 | XML seguro y revisión          |
+| Página/lienzo     | tamaño, unidades, orientación, viewBox, márgenes, fit/crop/expand            | híbrido           |        P0 | distinguir viewport/contenido  |
+| Multipágina       | P0 leer/exportar existente; P1 añadir/redimensionar/mover/eliminar/reordenar | DOM + CLI         |     P0/P1 | comportamiento por versión     |
+| Consulta          | IDs, tipos, layers, bounds, estilos, inventario                              | híbrido           |     P0/P1 | bounds visuales vs geométricos |
+| Formas            | rect, rounded rect, circle, ellipse, line, polyline, polygon, star, spiral   | DOM               |        P1 | normalizar atributos Inkscape  |
+| Paths             | crear/editar `d`, combine, break, reverse, simplify                          | híbrido           |        P1 | parser robusto, tolerancias    |
+| Booleanas         | union, difference, intersection, exclusion, division, cut                    | actions           |        P1 | selección/orden determinista   |
+| Conversión        | object/stroke/text to path                                                   | actions/CLI       |        P1 | irreversible; snapshot/warning |
+| Transform         | move, scale, rotate, skew, flip, matrix, anchor                              | DOM               |        P1 | matrices anidadas y stroke     |
+| Arrange           | align, distribute, z-order, reparent                                         | híbrido           |        P1 | bounds y referencia explícitos |
+| Capas/grupos      | CRUD, label, visibilidad, lock, group/ungroup                                | DOM/actions       |        P1 | namespaces Inkscape            |
+| Fill/stroke       | solid, none, opacity, joins, caps, dash, paint order                         | DOM               |        P1 | color parse/normalización      |
+| Gradientes        | linear/radial, stops, spread, transforms, reuse                              | DOM               |        P1 | refs e IDs consistentes        |
+| Patterns/markers  | crear, aplicar, reutilizar                                                   | DOM               |     P1/P2 | bbox/userSpaceOnUse            |
+| Clip/mask         | crear, aplicar, quitar, inspeccionar                                         | DOM/actions       |        P1 | referencias y bounds           |
+| Filtros           | blur, blend, shadow y primitives seleccionadas                               | DOM               |        P2 | diferencias de render          |
+| Texto             | texto, tspans, estilo, spacing, anchor, dirección                            | DOM               |        P1 | fuentes y layout dependientes  |
+| Texto avanzado    | text-on-path, flowed text, text-to-path                                      | híbrido           |     P1/P2 | SVG2/compatibilidad            |
+| Imágenes          | colocar, embed, link local, relink, crop por clip                            | DOM               |        P1 | no red remota por defecto      |
+| Bitmap trace      | trazado con presets allowlisted                                              | action/extensión  |        P2 | puede requerir GUI/extensión   |
+| Símbolos/clones   | defs/use, clone/unlink, instancias                                           | DOM/actions       |        P2 | ciclos y referencias           |
+| Guías/grids/snap  | leer/escribir configuración documental                                       | DOM               |        P2 | no depender de UI activa       |
+| Live Path Effects | inspeccionar y subconjunto probado                                           | actions/DOM       |     P2/P3 | alto riesgo de versión/GUI     |
+| Metadatos         | title, desc, RDF/license, author, keywords                                   | DOM               |        P1 | privacidad y namespaces        |
+| Accesibilidad     | title/desc/ARIA básico, contraste como warning                               | DOM/preflight     |        P1 | no sustituye auditoría humana  |
+| Colores           | inventario, reemplazo, paletas, perfiles referenciados                       | DOM/preflight     |     P1/P2 | no prometer CMYK fiable        |
+| Optimización      | limpiar metadata/defs no usados, plain/optimized SVG                         | híbrido           |     P1/P2 | visual regression obligatoria  |
+| Extensiones       | catálogo y adaptadores allowlisted                                           | CLI/extensión     |        P2 | nunca IDs arbitrarios públicos |
+| Importación       | SVG/SVGZ/PDF/AI/EPS/EMF/WMF/DXF/raster según sonda                           | CLI/extensión     |     P1/P2 | opciones y plataforma          |
+| Exportación       | PNG/PDF/SVG + PS/EPS/EMF/WMF/XAML gateados                                   | CLI               |     P0/P2 | validar cada artefacto         |
 
 ### 14.1 Diferencias que el resultado debe declarar
 
@@ -1196,11 +1234,14 @@ type CapabilitySnapshot = {
   expiresAt: string;
   inputTypes: string[];
   outputTypes: string[];
-  actions: Record<string, {
-    description?: string;
-    source: "core" | "extension" | "unknown";
-    evidence: "declared" | "observed";
-  }>;
+  actions: Record<
+    string,
+    {
+      description?: string;
+      source: "core" | "extension" | "unknown";
+      evidence: "declared" | "observed";
+    }
+  >;
   flags: Record<string, boolean>;
   warnings: string[];
 };
@@ -1274,32 +1315,32 @@ Cada builder debe:
 
 Las fases son hitos; los work packages son la unidad de una sesión del modelo ejecutor. El rango incluye ambos extremos.
 
-| Fase | Work packages |
-|---|---|
-| F00 | `F00-WP01` T01–T07; `WP02` T08–T15; `WP03` T16–T23 |
-| F01 | `F01-WP01` T01–T04; `WP02` T05–T11; `WP03` T12–T18; `WP04` T19–T24; `WP05` T25–T28 |
-| F02 | `F02-WP01` T00–T07; `WP02` T08–T14; `WP03` T15–T21; `WP04` T22–T25 |
-| F03 | `F03-WP01` T00–T06; `WP02` T07–T11; `WP03` T12–T17; `WP04` T18–T23 |
-| F04 | `F04-WP01` T01–T08; `WP02` T09–T13; `WP03` T14–T18 |
-| F05 | `F05-WP01` T01–T07; `WP02` T08–T13; `WP03` T14–T20; `WP04` T21–T25; `WP05` T26–T29 |
-| F06 | `F06-WP01` T01–T05; `WP02` T06–T10; `WP03` T11–T15; `WP04` T16–T22; `WP05` T23–T29; `WP06` T30–T35; `WP07` T36–T40 |
-| F07 | `F07-WP01` T01–T05; `WP02` T06–T09; `WP03` T10–T17; `WP04` T18–T24; `WP05` T25–T31; `WP06` T32–T36; `WP07` T37–T40 |
-| F08 | `F08-WP01` T01–T05; `WP02` T06–T10; `WP03` T11–T17; `WP04` T18–T24; `WP05` T25–T30; `WP06` T31–T34 |
-| F09 | `F09-WP01` T01–T06; `WP02` T07–T11; `WP03` T12–T17; `WP04` T18–T23; `WP05` T24–T26 |
-| F10 | `F10-WP01` T01–T07; `WP02` T08–T13; `WP03` T14–T19 |
-| F11 | `F11-WP01` T01–T07; `WP02` T08–T12; `WP03` T13–T16; `WP04` T17–T22; `WP05` T23–T25 |
-| F12 | `F12-WP01` T01–T05; `WP02` T06–T10 |
+| Fase | Work packages                                                                                                      |
+| ---- | ------------------------------------------------------------------------------------------------------------------ |
+| F00  | `F00-WP01` T01–T07; `WP02` T08–T15; `WP03` T16–T23                                                                 |
+| F01  | `F01-WP01` T01–T04; `WP02` T05–T11; `WP03` T12–T18; `WP04` T19–T24; `WP05` T25–T28                                 |
+| F02  | `F02-WP01` T00–T07; `WP02` T08–T14; `WP03` T15–T21; `WP04` T22–T25                                                 |
+| F03  | `F03-WP01` T00–T06; `WP02` T07–T11; `WP03` T12–T17; `WP04` T18–T23                                                 |
+| F04  | `F04-WP01` T01–T08; `WP02` T09–T13; `WP03` T14–T18                                                                 |
+| F05  | `F05-WP01` T01–T07; `WP02` T08–T13; `WP03` T14–T20; `WP04` T21–T25; `WP05` T26–T29                                 |
+| F06  | `F06-WP01` T01–T05; `WP02` T06–T10; `WP03` T11–T15; `WP04` T16–T22; `WP05` T23–T29; `WP06` T30–T35; `WP07` T36–T40 |
+| F07  | `F07-WP01` T01–T05; `WP02` T06–T09; `WP03` T10–T17; `WP04` T18–T24; `WP05` T25–T31; `WP06` T32–T36; `WP07` T37–T40 |
+| F08  | `F08-WP01` T01–T05; `WP02` T06–T10; `WP03` T11–T17; `WP04` T18–T24; `WP05` T25–T30; `WP06` T31–T34                 |
+| F09  | `F09-WP01` T01–T06; `WP02` T07–T11; `WP03` T12–T17; `WP04` T18–T23; `WP05` T24–T26                                 |
+| F10  | `F10-WP01` T01–T07; `WP02` T08–T13; `WP03` T14–T19                                                                 |
+| F11  | `F11-WP01` T01–T07; `WP02` T08–T12; `WP03` T13–T16; `WP04` T17–T22; `WP05` T23–T25                                 |
+| F12  | `F12-WP01` T01–T05; `WP02` T06–T10                                                                                 |
 
 Corte de alcance Windows/stdio 1.0:
 
-| Alcance | Obligatorio para 1.0 | Puede quedar `[w]`/`[-]` sin bloquear 1.0 |
-|---|---|---|
-| F00–F06 y F09 | Todos los WP; una capability concreta puede ser `[-]` solo si no se anuncia | Nada a nivel de WP |
-| F07 | WP01–WP05; en WP06 son obligatorios T34–T35 | T16, T30, T32–T33, T36 y WP07 (T37–T40) son P2 |
-| F08 | WP01–WP02, WP04–WP05 | WP03 (formatos secundarios) y WP06 (extensiones/optimize) son P2 |
-| F10 | No | Toda la fase; expansión 1.x |
-| F11 | Sí | Publicación externa puede ser `[w]`, pero el paquete local debe pasar gates |
-| F12 | No | Toda la fase |
+| Alcance       | Obligatorio para 1.0                                                        | Puede quedar `[w]`/`[-]` sin bloquear 1.0                                   |
+| ------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| F00–F06 y F09 | Todos los WP; una capability concreta puede ser `[-]` solo si no se anuncia | Nada a nivel de WP                                                          |
+| F07           | WP01–WP05; en WP06 son obligatorios T34–T35                                 | T16, T30, T32–T33, T36 y WP07 (T37–T40) son P2                              |
+| F08           | WP01–WP02, WP04–WP05                                                        | WP03 (formatos secundarios) y WP06 (extensiones/optimize) son P2            |
+| F10           | No                                                                          | Toda la fase; expansión 1.x                                                 |
+| F11           | Sí                                                                          | Publicación externa puede ser `[w]`, pero el paquete local debe pasar gates |
+| F12           | No                                                                          | Toda la fase                                                                |
 
 `[-]` significa capability no anunciada/probada como ausente; `[w]` significa una decisión de alcance. Ninguno permite omitir tests de que la capability no aparece como soportada.
 
@@ -1320,6 +1361,7 @@ Antes de editar cada WP, completar esta ficha en `docs/progress/FXX.md`:
 
 ```markdown
 ## FXX-WPYY
+
 - Objetivo verificable:
 - Prerrequisitos/puertas:
 - Interfaces disponibles (no inventar otras):
@@ -1333,20 +1375,20 @@ Antes de editar cada WP, completar esta ficha en `docs/progress/FXX.md`:
 
 Evidencia específica adicional para WP de alto riesgo:
 
-| WP | Evidencia que debe fijarse antes de implementar |
-|---|---|
-| F01-WP02/03 | fake process cases, timeout/kill assertion y candidatos discovery |
-| F02-WP01/02 | threat model, tabla de paths/races y política crash/locks |
-| F02-WP03 | corpus XML, límites exactos y round-trip assertions |
-| F02-WP04 | contrato de chunks, manifest del bundle nativo y carrera con writer externo |
-| F03-WP01/03 | vectores normativos de §10 y tolerancias numéricas |
-| F05-WP01 | atomicidad lógica/output revision/cancel stages |
-| F05-WP02 | matriz PNG, megapíxeles y lectura IHDR |
-| F05-WP03 | ADR inspector/subset/margin + page count/boxes |
-| F06-WP02 | gramática path completa y corpus reject/accept |
-| F07-WP01/02 | operands, tolerancias y visual goldens por booleana |
-| F09-WP01/04 | protocolo fijado `2026-07-28`, legacy y snapshot catálogo |
-| F10-WP01 | Host/Origin/auth matrix y conformance fijada |
+| WP          | Evidencia que debe fijarse antes de implementar                             |
+| ----------- | --------------------------------------------------------------------------- |
+| F01-WP02/03 | fake process cases, timeout/kill assertion y candidatos discovery           |
+| F02-WP01/02 | threat model, tabla de paths/races y política crash/locks                   |
+| F02-WP03    | corpus XML, límites exactos y round-trip assertions                         |
+| F02-WP04    | contrato de chunks, manifest del bundle nativo y carrera con writer externo |
+| F03-WP01/03 | vectores normativos de §10 y tolerancias numéricas                          |
+| F05-WP01    | atomicidad lógica/output revision/cancel stages                             |
+| F05-WP02    | matriz PNG, megapíxeles y lectura IHDR                                      |
+| F05-WP03    | ADR inspector/subset/margin + page count/boxes                              |
+| F06-WP02    | gramática path completa y corpus reject/accept                              |
+| F07-WP01/02 | operands, tolerancias y visual goldens por booleana                         |
+| F09-WP01/04 | protocolo fijado `2026-07-28`, legacy y snapshot catálogo                   |
+| F10-WP01    | Host/Origin/auth matrix y conformance fijada                                |
 
 ### F00 — Bootstrap, decisiones y baseline
 
@@ -1364,14 +1406,14 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Toolchain
 
-- [ ] `F00-T08` Verificar Node 24 LTS y compatibilidad del SDK MCP v2; documentar rango en `engines`.
-- [ ] `F00-T09` Inicializar package ESM TypeScript con npm y lockfile.
-- [ ] `F00-T10` Instalar `@modelcontextprotocol/server`, Zod v4 y dependencias mínimas con versiones verificadas; añadir `@modelcontextprotocol/client` como devDependency para pruebas de negociación/transportes reales.
-- [ ] `F00-T11` Configurar TypeScript `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` y source maps.
-- [ ] `F00-T12` Configurar lint, format y Vitest sin reglas contradictorias.
-- [ ] `F00-T13` Definir scripts `build`, `typecheck`, `lint`, `format:check`, `test`, `check`, `pack:check`; reservar `test:mcp`, `inspect` y `test:conformance` para herramientas dev fijadas en lockfile.
-- [ ] `F00-T14` Crear un binario mínimo `inkscape-mcp --help` y `--version` sin servidor funcional.
-- [ ] `F00-T15` Añadir prueba smoke del binario empaquetado.
+- [x] `F00-T08` Verificar Node 24 LTS y compatibilidad del SDK MCP v2; documentar rango en `engines`. — Node `24.18.0`, npm `11.16.0` y SDK MCP v2 `2.0.0`.
+- [x] `F00-T09` Inicializar package ESM TypeScript con npm y lockfile.
+- [x] `F00-T10` Instalar `@modelcontextprotocol/server`, Zod v4 y dependencias mínimas con versiones verificadas; añadir `@modelcontextprotocol/client` como devDependency para pruebas de negociación/transportes reales. — Dependencias fijadas en `package-lock.json`.
+- [x] `F00-T11` Configurar TypeScript `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` y source maps.
+- [x] `F00-T12` Configurar lint, format y Vitest sin reglas contradictorias.
+- [x] `F00-T13` Definir scripts `build`, `typecheck`, `lint`, `format:check`, `test`, `check`, `pack:check`; reservar `test:mcp`, `inspect` y `test:conformance` para herramientas dev fijadas en lockfile.
+- [x] `F00-T14` Crear un binario mínimo `inkscape-mcp --help` y `--version` sin servidor funcional.
+- [x] `F00-T15` Añadir prueba smoke del binario empaquetado.
 
 #### ADRs
 
@@ -1386,11 +1428,11 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Puerta F00
 
-- [ ] `F00-G01` `npm ci` funciona desde checkout limpio.
-- [ ] `F00-G02` `npm run check` pasa.
-- [ ] `F00-G03` `npm pack --dry-run` contiene únicamente archivos esperados.
+- [x] `F00-G01` `npm ci` funciona desde checkout limpio.
+- [x] `F00-G02` `npm run check` pasa.
+- [x] `F00-G03` `npm pack --dry-run` contiene únicamente archivos esperados.
 - [ ] `F00-G04` D001–D003 de la sección 20 están resueltas; cada decisión posterior tiene responsable, deadline y tarea/ADR, sin exigir resolver F02–F05 prematuramente.
-- [ ] `F00-G05` `docs/progress/F00.md` contiene evidencia.
+- [x] `F00-G05` `docs/progress/F00.md` contiene evidencia.
 - [ ] `F00-G06` El manifest de fixtures prohíbe una tolerancia visual global vaga y exige aprobación explícita de cambios de golden.
 
 ---
@@ -2116,57 +2158,57 @@ El fake Inkscape debe poder configurarse para:
 
 ### 17.2 Corpus mínimo de fixtures
 
-| Fixture | Casos que cubre |
-|---|---|
-| `minimal.svg` | root/namespaces/viewBox básico |
-| `physical-units.svg` | mm/cm/in/pt/px y escala |
-| `no-viewbox.svg` | normalización y warnings |
-| `percentage-size.svg` | dimensiones relativas |
-| `negative-coordinates.svg` | origin/bounds negativos |
-| `nested-transforms.svg` | matrices anidadas |
-| `css-cascade.svg` | specificity, `!important`, variables, `currentColor`, porcentajes y wrapper-sensitive selectors |
-| `stroke-markers.svg` | bounds visuales |
-| `filters.svg` | blur/shadow/rasterización |
-| `gradients-patterns.svg` | defs/references |
-| `clip-mask.svg` | clips/masks |
-| `text-fonts.svg` | tspans, fuentes presente/faltante |
-| `text-on-path.svg` | referencias tipográficas |
-| `linked-images.svg` | local/externo/roto |
-| `embedded-images.svg` | data URI y límites |
-| `layers-groups.svg` | namespaces/orden/locks |
-| `clones-symbols.svg` | use/cycles/IDs |
-| `paths-complex.svg` | arcs, holes, self-intersection |
-| `multipage-1.4.svg` | `inkscape:page` y export completo |
-| `multipage-1.5.svg` | `svg:view`, inicialmente gateado |
-| `pdf-nonzero-viewbox.svg` | regresión PDF con origen de `viewBox` no cero (problema 6323) |
-| `plain-svg-viewbox-512.svg` | regresión plain SVG de `viewBox`/dimensión 512 (problema 6317) |
-| `id-delimiters.svg` | IDs con coma, punto y coma, espacios y Unicode; remapeo CLI/actions |
-| `metadata.svg` | RDF/license/title/desc |
-| `external-css.svg` | estilos/recurso externo |
-| `malicious-xxe.svg` | DTD/XXE |
-| `malicious-script.svg` | script/events/javascript/foreignObject |
-| `duplicate-ids.svg` | colisiones/refs ambiguas |
-| `large-but-valid.svg` | límites y paginación |
-| `corrupt.svg` | errores parseables |
+| Fixture                     | Casos que cubre                                                                                 |
+| --------------------------- | ----------------------------------------------------------------------------------------------- |
+| `minimal.svg`               | root/namespaces/viewBox básico                                                                  |
+| `physical-units.svg`        | mm/cm/in/pt/px y escala                                                                         |
+| `no-viewbox.svg`            | normalización y warnings                                                                        |
+| `percentage-size.svg`       | dimensiones relativas                                                                           |
+| `negative-coordinates.svg`  | origin/bounds negativos                                                                         |
+| `nested-transforms.svg`     | matrices anidadas                                                                               |
+| `css-cascade.svg`           | specificity, `!important`, variables, `currentColor`, porcentajes y wrapper-sensitive selectors |
+| `stroke-markers.svg`        | bounds visuales                                                                                 |
+| `filters.svg`               | blur/shadow/rasterización                                                                       |
+| `gradients-patterns.svg`    | defs/references                                                                                 |
+| `clip-mask.svg`             | clips/masks                                                                                     |
+| `text-fonts.svg`            | tspans, fuentes presente/faltante                                                               |
+| `text-on-path.svg`          | referencias tipográficas                                                                        |
+| `linked-images.svg`         | local/externo/roto                                                                              |
+| `embedded-images.svg`       | data URI y límites                                                                              |
+| `layers-groups.svg`         | namespaces/orden/locks                                                                          |
+| `clones-symbols.svg`        | use/cycles/IDs                                                                                  |
+| `paths-complex.svg`         | arcs, holes, self-intersection                                                                  |
+| `multipage-1.4.svg`         | `inkscape:page` y export completo                                                               |
+| `multipage-1.5.svg`         | `svg:view`, inicialmente gateado                                                                |
+| `pdf-nonzero-viewbox.svg`   | regresión PDF con origen de `viewBox` no cero (problema 6323)                                   |
+| `plain-svg-viewbox-512.svg` | regresión plain SVG de `viewBox`/dimensión 512 (problema 6317)                                  |
+| `id-delimiters.svg`         | IDs con coma, punto y coma, espacios y Unicode; remapeo CLI/actions                             |
+| `metadata.svg`              | RDF/license/title/desc                                                                          |
+| `external-css.svg`          | estilos/recurso externo                                                                         |
+| `malicious-xxe.svg`         | DTD/XXE                                                                                         |
+| `malicious-script.svg`      | script/events/javascript/foreignObject                                                          |
+| `duplicate-ids.svg`         | colisiones/refs ambiguas                                                                        |
+| `large-but-valid.svg`       | límites y paginación                                                                            |
+| `corrupt.svg`               | errores parseables                                                                              |
 
 Los archivos binarios de fixture deben tener origen/licencia registrados y tamaño mínimo.
 
 ### 17.3 Matriz mínima de exportación
 
-| Formato | Área | Tamaño | Opciones clave | Verificación |
-|---|---|---|---|---|
-| PNG | page | 96/300 dpi | alpha/bg | IHDR/dimensiones/píxel |
-| PNG | drawing | width-only | ratio | IHDR/bounds |
-| PNG | selection | exact px | id-only | visibilidad |
-| PNG | custom | rect/snap | AA/color mode | IHDR/visual |
-| PDF | single | physical | 1.4/1.5 | header/boxes/pages |
-| PDF | multipage all | physical | text/filter dpi | pages/visual |
-| PDF | selected pages | subset | prune/merge | pages/nombres |
-| SVG | document | source | Inkscape metadata | parse/reopen |
-| plain SVG | document | source | text preserve/path | namespaces/visual |
-| SVG | selection | fit | refs/defs | autónomo/reopen |
-| PS/EPS | drawing | physical | PS2/3/text/filter | signature/visual |
-| EMF/WMF/XAML | temp crop | capability | flatten policy | round-trip/visual |
+| Formato      | Área           | Tamaño     | Opciones clave     | Verificación           |
+| ------------ | -------------- | ---------- | ------------------ | ---------------------- |
+| PNG          | page           | 96/300 dpi | alpha/bg           | IHDR/dimensiones/píxel |
+| PNG          | drawing        | width-only | ratio              | IHDR/bounds            |
+| PNG          | selection      | exact px   | id-only            | visibilidad            |
+| PNG          | custom         | rect/snap  | AA/color mode      | IHDR/visual            |
+| PDF          | single         | physical   | 1.4/1.5            | header/boxes/pages     |
+| PDF          | multipage all  | physical   | text/filter dpi    | pages/visual           |
+| PDF          | selected pages | subset     | prune/merge        | pages/nombres          |
+| SVG          | document       | source     | Inkscape metadata  | parse/reopen           |
+| plain SVG    | document       | source     | text preserve/path | namespaces/visual      |
+| SVG          | selection      | fit        | refs/defs          | autónomo/reopen        |
+| PS/EPS       | drawing        | physical   | PS2/3/text/filter  | signature/visual       |
+| EMF/WMF/XAML | temp crop      | capability | flatten policy     | round-trip/visual      |
 
 ### 17.4 Seguridad
 
@@ -2234,22 +2276,22 @@ Los scripts deben apuntar a devDependencies fijadas en `package-lock.json` (o us
 
 ### 18.0 Trazabilidad
 
-| Escenario | Fase/WP que lo cierra | Prioridad | Precondición/fixture |
-|---|---|---:|---|
-| A01 | F01-WP03–WP05 | P0 | instalación 1.4.4 actual + fake runner |
-| A02 | F03-WP02 + F05-WP02 | P0 | `minimal-rect.svg`; no depende de F06 |
-| A03–A04 | F03-WP03 | P0 | fixtures resize numéricos |
-| A05 | F03-WP03 + F04-WP03 | P0 | `negative-coordinates.svg` |
-| A06 | F03-WP04 + F05-WP03 | P0 | `multipage-1.4.svg` |
-| A07 | F05-WP04 | P0 | `layers-groups.svg` |
-| A08 | F05-WP05 | P0 | icono fixture versionado |
-| A09 | F06-WP01–WP07 | P1 | documento vacío creado en F03 |
-| A10 | F07-WP01–WP03 | P1 | `paths-complex.svg`, imagen fixture |
-| A11 | F04-WP02 + F07-WP04 | P1 | `text-fonts.svg` |
-| A12 | F08-WP01–WP02 | P1 | PDF multipágina con licencia/origen |
-| A13 | F02-WP01 + F05-WP01 | P0 | corpus de paths/metacarácteres |
-| A14 | F02-WP02 + F06-WP07 | P0/P1 | dos clientes/revisiones |
-| A15 | F05-WP05 + F09-WP03 | P1 | fake lento + batch real acotado |
+| Escenario | Fase/WP que lo cierra | Prioridad | Precondición/fixture                   |
+| --------- | --------------------- | --------: | -------------------------------------- |
+| A01       | F01-WP03–WP05         |        P0 | instalación 1.4.4 actual + fake runner |
+| A02       | F03-WP02 + F05-WP02   |        P0 | `minimal-rect.svg`; no depende de F06  |
+| A03–A04   | F03-WP03              |        P0 | fixtures resize numéricos              |
+| A05       | F03-WP03 + F04-WP03   |        P0 | `negative-coordinates.svg`             |
+| A06       | F03-WP04 + F05-WP03   |        P0 | `multipage-1.4.svg`                    |
+| A07       | F05-WP04              |        P0 | `layers-groups.svg`                    |
+| A08       | F05-WP05              |        P0 | icono fixture versionado               |
+| A09       | F06-WP01–WP07         |        P1 | documento vacío creado en F03          |
+| A10       | F07-WP01–WP03         |        P1 | `paths-complex.svg`, imagen fixture    |
+| A11       | F04-WP02 + F07-WP04   |        P1 | `text-fonts.svg`                       |
+| A12       | F08-WP01–WP02         |        P1 | PDF multipágina con licencia/origen    |
+| A13       | F02-WP01 + F05-WP01   |        P0 | corpus de paths/metacarácteres         |
+| A14       | F02-WP02 + F06-WP07   |     P0/P1 | dos clientes/revisiones                |
+| A15       | F05-WP05 + F09-WP03   |        P1 | fake lento + batch real acotado        |
 
 ### A01 — Doctor sobre la instalación actual
 
@@ -2379,45 +2421,45 @@ Los scripts deben apuntar a devDependencies fijadas en `package-lock.json` (o us
 
 ## 19. Registro de riesgos
 
-| ID | Riesgo | Sev. | Mitigación / prueba | Fase |
-|---|---|---:|---|---:|
-| R01 | MSIX sin alias o CLI capturable de forma estable | Alta | discovery real, validar candidato, ruta explícita/distribución alternativa | F01 |
-| R02 | Drift multipágina 1.4→1.5 (`inkscape:page`→`svg:view`) | Alta | pin 1.4.4, adapters separados, fixtures migración | F03/F10 |
-| R03 | 1075 acciones incluyen GUI/extensiones/no fiables | Alta | registry allowlisted + smoke por acción/version | F01/F07 |
-| R04 | Exportación con pérdida visual/semántica | Alta | maestro SVG inmutable, preflight, visual regression, manifest | F05/F08 |
-| R05 | Sobrescritura/vacuum/conversión irreversible | Alta | overwrite false, snapshot, expectedRevision, copy-on-write | F02+ |
-| R06 | Inyección por actions/CLI/shell | Alta | argv array, unions tipadas, sin raw escape público | F01/F07 |
-| R07 | Traversal/symlink/UNC/TOCTOU | Alta | roots/recheck/tests + ACL assumption; riesgo local concurrente declarado | F02/F12 |
-| R08 | Bombas de memoria SVG/PDF/PNG | Alta | límites separados de input, streams, artefacto, chunk, raster decodificado, MP, tiempo y concurrencia | F02/F05 |
-| R09 | Fuentes ausentes/sustituidas | Alta | preflight, profile reproducible, text strategy manifest | F04/F07 |
-| R10 | Recursos externos/SSRF/data exfiltration | Alta | red deny, local roots, sanitize/redact refs | F02/F07 |
-| R11 | Extensiones/dependencias variables | Alta | capabilities por instalación, adaptadores opt-in | F01/F08 |
-| R12 | Extensiones CLI rotas en macOS 1.4.4 | Alta | platform smoke, deshabilitar capability/alternativa | F10 |
-| R13 | El man sugiere multipágina pero código 1.4.4 separa `--export-page` a `_pN` | Alta | sonda real; prune para subset único; page validation | F05 |
-| R14 | Perfil compartido cambia preferencias/resultados | Alta | `INKSCAPE_PROFILE_DIR` aislado por worker | F01 |
-| R15 | Acción requiere GUI/active window | Media-alta | excluir núcleo; capability no-headless; F12 bridge | F07/F12 |
-| R16 | Exit 0 sin output válido | Alta | verificador de firma/estructura/metadata/hash | F05 |
-| R17 | Confusión página/dibujo/viewBox/unidades | Alta | tipos distintos, explicit modes, fixtures físicos | F03 |
-| R18 | Width+height PNG deforma | Media-alta | preserve ratio default; opt-in distortion | F05 |
-| R19 | Margin difiere por formato y `--export-margin` no es fiable en 1.4.4 | Alta | sonda de boxes; temporal/area/page expansion; tests | F05 |
-| R20 | Parser XML rompe namespaces/refs | Alta | spike/corpus/round-trip/visual regression | F02 |
-| R21 | Locks/rename difieren en Windows | Alta | tests reales, retry acotado, crash consistency | F02 |
-| R22 | SDK/spec MCP cambian | Media-alta | pin v2/spec era, contract/conformance, changelog review | F09/F11 |
-| R23 | HTTP permite DNS rebinding/acceso cruzado | Alta | loopback, Host/Origin/auth/ownership tests | F10 |
-| R24 | Dependencia nativa no soporta Node/plataforma | Media-alta | spike y preferencia JS pura; CI/package smoke | F00/F11 |
-| R25 | Licencia de fuentes/assets/dependencias | Alta | inventario/licencia; no package automático | F00/F08 |
-| R26 | Tool catalog demasiado grande/confuso | Media | ~30 semánticas, agrupación por dominio, transacción tipada y prompts | F09 |
-| R27 | Resultados gigantes saturan contexto/stdio | Media-alta | resúmenes, paginación, resource links, chunks e inline cap | F04/F09 |
-| R28 | Caché devuelve preview/capabilities obsoletos | Media | revisión + huella de ejecutable/perfil/data dirs/INX/helpers, TTL/invalidation | F01/F04 |
-| R29 | Plain/optimized SVG elimina semántica necesaria | Alta | siempre derivado, reporte de pérdidas, reopen/visual | F05/F08 |
-| R30 | CMYK/PDF-X se promete sin cadena real | Alta | warning/no garantía; adaptador externo solo F12 | F04/F12 |
-| R31 | Crash durante publicación multilarchivo deja subset físico | Alta | directory rename o manifest commit; staging recovery; no prometer transacción | F05 |
-| R32 | Exploit desconocido en parser nativo | Crítica | trusted-local-only en 1.0, limitación visible; sandbox reforzado opcional F12 | F02/F11/F12 |
-| R33 | Source/dependencia cambia durante invocación | Alta | NativeInputBundle inmutable, hashes y recheck antes de commit | F02/F05 |
-| R34 | Cancelación mata solo al padre en Windows | Alta | Job Object/equivalente desde launch y tests de nietos resistentes | F01 |
-| R35 | Escalado cambia cascada CSS/refs | Alta | subconjunto/ADR, fidelity, fixtures difíciles, rechazo por default | F03/F06 |
-| R36 | Separadores dentro de IDs alteran query/select/export | Alta | remapeo reversible en actions y todos los flags/listas CLI; corpus adversarial | F01/F06/F07 |
-| R37 | Regresiones de `viewBox` en PDF/plain SVG | Alta | fixtures 6323/6317, sonda por build, workaround solo si se reproduce | F05 |
+| ID  | Riesgo                                                                      |       Sev. | Mitigación / prueba                                                                                   |        Fase |
+| --- | --------------------------------------------------------------------------- | ---------: | ----------------------------------------------------------------------------------------------------- | ----------: |
+| R01 | MSIX sin alias o CLI capturable de forma estable                            |       Alta | discovery real, validar candidato, ruta explícita/distribución alternativa                            |         F01 |
+| R02 | Drift multipágina 1.4→1.5 (`inkscape:page`→`svg:view`)                      |       Alta | pin 1.4.4, adapters separados, fixtures migración                                                     |     F03/F10 |
+| R03 | 1075 acciones incluyen GUI/extensiones/no fiables                           |       Alta | registry allowlisted + smoke por acción/version                                                       |     F01/F07 |
+| R04 | Exportación con pérdida visual/semántica                                    |       Alta | maestro SVG inmutable, preflight, visual regression, manifest                                         |     F05/F08 |
+| R05 | Sobrescritura/vacuum/conversión irreversible                                |       Alta | overwrite false, snapshot, expectedRevision, copy-on-write                                            |        F02+ |
+| R06 | Inyección por actions/CLI/shell                                             |       Alta | argv array, unions tipadas, sin raw escape público                                                    |     F01/F07 |
+| R07 | Traversal/symlink/UNC/TOCTOU                                                |       Alta | roots/recheck/tests + ACL assumption; riesgo local concurrente declarado                              |     F02/F12 |
+| R08 | Bombas de memoria SVG/PDF/PNG                                               |       Alta | límites separados de input, streams, artefacto, chunk, raster decodificado, MP, tiempo y concurrencia |     F02/F05 |
+| R09 | Fuentes ausentes/sustituidas                                                |       Alta | preflight, profile reproducible, text strategy manifest                                               |     F04/F07 |
+| R10 | Recursos externos/SSRF/data exfiltration                                    |       Alta | red deny, local roots, sanitize/redact refs                                                           |     F02/F07 |
+| R11 | Extensiones/dependencias variables                                          |       Alta | capabilities por instalación, adaptadores opt-in                                                      |     F01/F08 |
+| R12 | Extensiones CLI rotas en macOS 1.4.4                                        |       Alta | platform smoke, deshabilitar capability/alternativa                                                   |         F10 |
+| R13 | El man sugiere multipágina pero código 1.4.4 separa `--export-page` a `_pN` |       Alta | sonda real; prune para subset único; page validation                                                  |         F05 |
+| R14 | Perfil compartido cambia preferencias/resultados                            |       Alta | `INKSCAPE_PROFILE_DIR` aislado por worker                                                             |         F01 |
+| R15 | Acción requiere GUI/active window                                           | Media-alta | excluir núcleo; capability no-headless; F12 bridge                                                    |     F07/F12 |
+| R16 | Exit 0 sin output válido                                                    |       Alta | verificador de firma/estructura/metadata/hash                                                         |         F05 |
+| R17 | Confusión página/dibujo/viewBox/unidades                                    |       Alta | tipos distintos, explicit modes, fixtures físicos                                                     |         F03 |
+| R18 | Width+height PNG deforma                                                    | Media-alta | preserve ratio default; opt-in distortion                                                             |         F05 |
+| R19 | Margin difiere por formato y `--export-margin` no es fiable en 1.4.4        |       Alta | sonda de boxes; temporal/area/page expansion; tests                                                   |         F05 |
+| R20 | Parser XML rompe namespaces/refs                                            |       Alta | spike/corpus/round-trip/visual regression                                                             |         F02 |
+| R21 | Locks/rename difieren en Windows                                            |       Alta | tests reales, retry acotado, crash consistency                                                        |         F02 |
+| R22 | SDK/spec MCP cambian                                                        | Media-alta | pin v2/spec era, contract/conformance, changelog review                                               |     F09/F11 |
+| R23 | HTTP permite DNS rebinding/acceso cruzado                                   |       Alta | loopback, Host/Origin/auth/ownership tests                                                            |         F10 |
+| R24 | Dependencia nativa no soporta Node/plataforma                               | Media-alta | spike y preferencia JS pura; CI/package smoke                                                         |     F00/F11 |
+| R25 | Licencia de fuentes/assets/dependencias                                     |       Alta | inventario/licencia; no package automático                                                            |     F00/F08 |
+| R26 | Tool catalog demasiado grande/confuso                                       |      Media | ~30 semánticas, agrupación por dominio, transacción tipada y prompts                                  |         F09 |
+| R27 | Resultados gigantes saturan contexto/stdio                                  | Media-alta | resúmenes, paginación, resource links, chunks e inline cap                                            |     F04/F09 |
+| R28 | Caché devuelve preview/capabilities obsoletos                               |      Media | revisión + huella de ejecutable/perfil/data dirs/INX/helpers, TTL/invalidation                        |     F01/F04 |
+| R29 | Plain/optimized SVG elimina semántica necesaria                             |       Alta | siempre derivado, reporte de pérdidas, reopen/visual                                                  |     F05/F08 |
+| R30 | CMYK/PDF-X se promete sin cadena real                                       |       Alta | warning/no garantía; adaptador externo solo F12                                                       |     F04/F12 |
+| R31 | Crash durante publicación multilarchivo deja subset físico                  |       Alta | directory rename o manifest commit; staging recovery; no prometer transacción                         |         F05 |
+| R32 | Exploit desconocido en parser nativo                                        |    Crítica | trusted-local-only en 1.0, limitación visible; sandbox reforzado opcional F12                         | F02/F11/F12 |
+| R33 | Source/dependencia cambia durante invocación                                |       Alta | NativeInputBundle inmutable, hashes y recheck antes de commit                                         |     F02/F05 |
+| R34 | Cancelación mata solo al padre en Windows                                   |       Alta | Job Object/equivalente desde launch y tests de nietos resistentes                                     |         F01 |
+| R35 | Escalado cambia cascada CSS/refs                                            |       Alta | subconjunto/ADR, fidelity, fixtures difíciles, rechazo por default                                    |     F03/F06 |
+| R36 | Separadores dentro de IDs alteran query/select/export                       |       Alta | remapeo reversible en actions y todos los flags/listas CLI; corpus adversarial                        | F01/F06/F07 |
+| R37 | Regresiones de `viewBox` en PDF/plain SVG                                   |       Alta | fixtures 6323/6317, sonda por build, workaround solo si se reproduce                                  |         F05 |
 
 Todo riesgo nuevo de severidad alta se añade a esta tabla antes de cerrar la fase donde se descubre.
 
@@ -2427,31 +2469,31 @@ Todo riesgo nuevo de severidad alta se añade a esta tabla antes de cerrar la fa
 
 Estados: `open`, `proposed`, `resolved` o `waived`. Toda resolución enlaza ADR/progress/test; cambiarla después exige nueva decisión compatible o versión mayor.
 
-| ID | Decisión | Estado inicial | Responsable | Plazo | Propuesta / evidencia esperada |
-|---|---|---|---|---:|---|
-| D001 | Nombre npm/MCP | open | usuario | F00-T01 | `inkscape-mcp` si está disponible; registrar elección |
-| D002 | Licencia | open | usuario | F00-T01 | MIT o Apache-2.0; archivo LICENSE |
-| D003 | Node/SDK/Zod/version policy | proposed | implementer + review | F00-WP02 | Node 24 + SDK v2 + Zod 4 fijados; ADR/lock/tests |
-| D004 | Parser DOM/XML | open | implementer + review | F02-T16 | elegir por corpus/fidelidad/seguridad/licencia; ADR |
-| D005 | Threat model TOCTOU/ACL | proposed | implementer + user | F02-T00 | cliente hostil, no atacante local concurrente; ADR |
-| D006 | Atomicidad batch | proposed | implementer + review | F05-WP01 | directory rename o manifest commit; crash tests |
-| D007 | Semántica page/viewBox/coordinates | proposed | implementer + review | F03-T00 | políticas/vectores de §10; ADR |
-| D008 | IDs de páginas sintéticos/persistentes | proposed | implementer + review | F03-T00 | mapping ligado a revisión; fixtures |
-| D009 | Librería path/geometry | open | implementer + review | F06-T10 | JS pura + Inkscape autoritativo para visual bounds |
-| D010 | Inspector PDF | open | implementer + review | F05-T14 | JS pura con page count/boxes; spike/ADR |
-| D011 | Subset PDF único | proposed | implementer + review | F05-T14 | prune SVG en 1.4.4; direct futuro; merge último recurso |
-| D012 | Artifact/job/resource ownership y TTL | open | implementer + security review | F02-T22/F09-T07 | IDs opacos ligados a auth/workspace; tests cruzados |
-| D013 | Overwrite concurrente de outputs | proposed | implementer + security review | F02-T09 | lock + expectedOutputRevision; race tests |
-| D014 | Instalación Inkscape adicional | proposed | usuario | F01-G01 | solo si MSIX falla desde Node runner |
-| D015 | Alcance P1/P2 de Windows 1.0 | proposed | usuario + maintainer | antes de F07 | tabla §16; optional marcado `[w]` |
-| D016 | Compatibilidad Inkscape 1.5 | proposed | maintainer | F10 | experimental hasta matriz completa |
-| D017 | HTTP | proposed | usuario + security review | F10 | opt-in, loopback, Host/Origin/auth |
-| D018 | Publicación npm/Registry | open | usuario | F11 | autorización separada y evidencia de package smoke |
-| D019 | Confianza de inputs nativos | proposed | usuario + security review | F02-T00 | 1.0 `trusted-local-only`; `securityLevel` visible; sandbox fuera del core |
-| D020 | Motor/subconjunto CSS y escalado | open | implementer + review | F03-T00 | ADR, fidelity y fixtures de cascada/wrappers |
-| D021 | Contratos de export por formato | proposed | implementer + review | F05-T01 | unión de §11, áreas/opciones inválidas rechazadas por schema/tests |
-| D022 | Lectura de artefactos grandes | proposed | implementer + security review | F02-T23/F09-T09 | resource chunks/offsets acotados y streaming HTTP autenticado |
-| D023 | Snapshot de inputs nativos | proposed | implementer + security review | F02-T24 | bundle inmutable + manifest/hash/recheck; prueba de writer externo |
+| ID   | Decisión                               | Estado inicial | Responsable                   |           Plazo | Propuesta / evidencia esperada                                            |
+| ---- | -------------------------------------- | -------------- | ----------------------------- | --------------: | ------------------------------------------------------------------------- |
+| D001 | Nombre npm/MCP                         | open           | usuario                       |         F00-T01 | `inkscape-mcp` si está disponible; registrar elección                     |
+| D002 | Licencia                               | open           | usuario                       |         F00-T01 | MIT o Apache-2.0; archivo LICENSE                                         |
+| D003 | Node/SDK/Zod/version policy            | proposed       | implementer + review          |        F00-WP02 | Node 24 + SDK v2 + Zod 4 fijados; ADR/lock/tests                          |
+| D004 | Parser DOM/XML                         | open           | implementer + review          |         F02-T16 | elegir por corpus/fidelidad/seguridad/licencia; ADR                       |
+| D005 | Threat model TOCTOU/ACL                | proposed       | implementer + user            |         F02-T00 | cliente hostil, no atacante local concurrente; ADR                        |
+| D006 | Atomicidad batch                       | proposed       | implementer + review          |        F05-WP01 | directory rename o manifest commit; crash tests                           |
+| D007 | Semántica page/viewBox/coordinates     | proposed       | implementer + review          |         F03-T00 | políticas/vectores de §10; ADR                                            |
+| D008 | IDs de páginas sintéticos/persistentes | proposed       | implementer + review          |         F03-T00 | mapping ligado a revisión; fixtures                                       |
+| D009 | Librería path/geometry                 | open           | implementer + review          |         F06-T10 | JS pura + Inkscape autoritativo para visual bounds                        |
+| D010 | Inspector PDF                          | open           | implementer + review          |         F05-T14 | JS pura con page count/boxes; spike/ADR                                   |
+| D011 | Subset PDF único                       | proposed       | implementer + review          |         F05-T14 | prune SVG en 1.4.4; direct futuro; merge último recurso                   |
+| D012 | Artifact/job/resource ownership y TTL  | open           | implementer + security review | F02-T22/F09-T07 | IDs opacos ligados a auth/workspace; tests cruzados                       |
+| D013 | Overwrite concurrente de outputs       | proposed       | implementer + security review |         F02-T09 | lock + expectedOutputRevision; race tests                                 |
+| D014 | Instalación Inkscape adicional         | proposed       | usuario                       |         F01-G01 | solo si MSIX falla desde Node runner                                      |
+| D015 | Alcance P1/P2 de Windows 1.0           | proposed       | usuario + maintainer          |    antes de F07 | tabla §16; optional marcado `[w]`                                         |
+| D016 | Compatibilidad Inkscape 1.5            | proposed       | maintainer                    |             F10 | experimental hasta matriz completa                                        |
+| D017 | HTTP                                   | proposed       | usuario + security review     |             F10 | opt-in, loopback, Host/Origin/auth                                        |
+| D018 | Publicación npm/Registry               | open           | usuario                       |             F11 | autorización separada y evidencia de package smoke                        |
+| D019 | Confianza de inputs nativos            | proposed       | usuario + security review     |         F02-T00 | 1.0 `trusted-local-only`; `securityLevel` visible; sandbox fuera del core |
+| D020 | Motor/subconjunto CSS y escalado       | open           | implementer + review          |         F03-T00 | ADR, fidelity y fixtures de cascada/wrappers                              |
+| D021 | Contratos de export por formato        | proposed       | implementer + review          |         F05-T01 | unión de §11, áreas/opciones inválidas rechazadas por schema/tests        |
+| D022 | Lectura de artefactos grandes          | proposed       | implementer + security review | F02-T23/F09-T09 | resource chunks/offsets acotados y streaming HTTP autenticado             |
+| D023 | Snapshot de inputs nativos             | proposed       | implementer + security review |         F02-T24 | bundle inmutable + manifest/hash/recheck; prueba de writer externo        |
 
 El modelo ejecutor no decide solo sobre licencia, publicación o ampliación de acceso.
 
@@ -2459,14 +2501,14 @@ El modelo ejecutor no decide solo sobre licencia, publicación o ampliación de 
 
 ## 21. Orden crítico y puntos de parada útiles
 
-| Corte | Fases | Resultado utilizable |
-|---|---|---|
-| Bootstrap | F00–F02 | proyecto seguro, doctor/runner/workspace/DOM |
-| MVP tamaños/export | F03–F05 | crear/redimensionar/inspeccionar/exportar PNG/PDF/SVG |
-| Diseño 1.0 | F06–F09 | edición amplia + MCP completo stdio |
-| Release Windows 1.0 | F11 después de F09 | paquete stdio 1.0 con baseline Inkscape 1.4.4 |
-| Expansión 1.x | F10 antes o después de F11 | HTTP opcional, Inkscape 1.5 y matriz cross-platform |
-| Investigación | F12 | optimizaciones/GUI/preprensa opcionales |
+| Corte               | Fases                      | Resultado utilizable                                  |
+| ------------------- | -------------------------- | ----------------------------------------------------- |
+| Bootstrap           | F00–F02                    | proyecto seguro, doctor/runner/workspace/DOM          |
+| MVP tamaños/export  | F03–F05                    | crear/redimensionar/inspeccionar/exportar PNG/PDF/SVG |
+| Diseño 1.0          | F06–F09                    | edición amplia + MCP completo stdio                   |
+| Release Windows 1.0 | F11 después de F09         | paquete stdio 1.0 con baseline Inkscape 1.4.4         |
+| Expansión 1.x       | F10 antes o después de F11 | HTTP opcional, Inkscape 1.5 y matriz cross-platform   |
+| Investigación       | F12                        | optimizaciones/GUI/preprensa opcionales               |
 
 El primer punto recomendado para probar con usuarios es después de F05. No esperar a implementar todas las operaciones avanzadas para validar contratos de tamaños/exportación.
 
@@ -2597,7 +2639,7 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 
 ### Implementación
 
-- [~] F00 Bootstrap (`F00-WP01` completado; pendientes `WP02` y `WP03`).
+- [~] F00 Bootstrap (`F00-WP01` y `F00-WP02` completados; pendiente `WP03`).
 - [ ] F01 Discovery/runner.
 - [ ] F02 Workspace/XML/transacciones.
 - [ ] F03 Tamaños/páginas.

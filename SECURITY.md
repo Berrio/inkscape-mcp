@@ -6,7 +6,7 @@ El proyecto está en pre-alpha y aún no ofrece un servidor MCP ejecutable. No d
 
 ## Reportar una vulnerabilidad
 
-No publiques detalles explotables en una issue pública. Cuando el repositorio esté disponible en GitHub, usa la función de *private vulnerability reporting* si está habilitada. Si no lo está, contacta al mantenedor mediante su perfil de GitHub y proporciona una descripción mínima, versión afectada y pasos de reproducción seguros.
+No publiques detalles explotables en una issue pública. Cuando el repositorio esté disponible en GitHub, usa la función de _private vulnerability reporting_ si está habilitada. Si no lo está, contacta al mantenedor mediante su perfil de GitHub y proporciona una descripción mínima, versión afectada y pasos de reproducción seguros.
 
 ## Límites previstos de la versión 1.0
 

@@ -2,7 +2,7 @@
 
 Servidor MCP local para controlar Inkscape de forma headless y segura. La prioridad inicial es controlar tamaños de documento, unidades, `viewBox`, páginas y exportaciones fiables a PNG, PDF y SVG; después se ampliará a edición vectorial de alto nivel.
 
-> Estado: pre-alpha. Todavía no hay servidor ejecutable ni paquete publicado.
+> Estado: pre-alpha. El binario solo muestra ayuda y versión; todavía no hay un servidor MCP funcional ni paquete publicado.
 
 ## Alcance previsto
 

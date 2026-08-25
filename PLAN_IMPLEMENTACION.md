@@ -1558,10 +1558,10 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Modelo geométrico
 
-- [ ] `F03-T00` Cerrar ADR de `viewBoxPolicy`, escala/origen, coordinate spaces, IDs sintéticos/persistentes, motor/subconjunto CSS, fidelidad `exact|partial|approximate` y vectores normativos de la sección 10 antes de implementar resize.
-- [ ] `F03-T01` Implementar `PhysicalLength`, `CssPixelLength`, `PageSize`, `UserPoint/UserRect`, matrices entre espacios y conversiones de viewport a 96 dpi.
-- [ ] `F03-T02` Definir precisión/redondeo y pruebas de ida/vuelta.
-- [ ] `F03-T03` Separar viewport físico, `viewBox`, user units y bounds del contenido.
+- [x] `F03-T00` Cerrar ADR de `viewBoxPolicy`, escala/origen, coordinate spaces, IDs sintéticos/persistentes, motor/subconjunto CSS, fidelidad `exact|partial|approximate` y vectores normativos de la sección 10 antes de implementar resize.
+- [x] `F03-T01` Implementar `PhysicalLength`, `CssPixelLength`, `PageSize`, `UserPoint/UserRect`, matrices entre espacios y conversiones de viewport a 96 dpi.
+- [x] `F03-T02` Definir precisión/redondeo y pruebas de ida/vuelta.
+- [x] `F03-T03` Separar viewport físico, `viewBox`, user units y bounds del contenido.
 - [ ] `F03-T04` Implementar anchors y transform matrices para resize.
 - [ ] `F03-T05` Definir bounds `geometric|visual|approximate`: las queries CLI de Inkscape se tratan como visuales; bounds geométricos requieren motor compatible probado o se declaran aproximados.
 - [ ] `F03-T06` Probar coordenadas negativas, transforms anidados, stroke, markers, filters, specificity, `!important`, `currentColor`, variables, porcentajes, `objectBoundingBox` y non-scaling stroke.

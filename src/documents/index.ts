@@ -8,6 +8,12 @@ export {
 } from "./basic.js";
 export { preflightSvg, type PreflightIssue } from "./preflight.js";
 export {
+  inspectDocumentDisplaySettings,
+  updateDocumentDisplaySettings,
+  type DocumentDisplaySettings,
+  type DocumentDisplaySettingsPatch,
+} from "./settings.js";
+export {
   addSvgPage,
   deleteSvgPage,
   listSvgPages,

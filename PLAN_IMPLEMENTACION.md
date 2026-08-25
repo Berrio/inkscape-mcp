@@ -1587,7 +1587,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F03-T20` Implementar list/add/update/delete/reorder de páginas por ID estable.
 - [ ] `F03-T21` Validar solapamiento, páginas vacías y objetos fuera de páginas.
 - [x] `F03-T22` Registrar tools `document_resize` y `document_pages`.
-- [ ] `F03-T23` Implementar/registrar `document_settings` para inspeccionar/editar de forma tipada `pagecolor`, `pageopacity`, desk y border, con defaults por versión y round-trip.
+- [x] `F03-T23` Implementar/registrar `document_settings` para inspeccionar/editar de forma tipada `pagecolor`, `pageopacity`, desk y border, con defaults por versión y round-trip.
 
 #### Puerta F03
 

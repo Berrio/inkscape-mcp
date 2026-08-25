@@ -9,6 +9,7 @@ import {
   addSvgPage,
   createSvgDocument,
   deleteSvgPage,
+  inspectDocumentDisplaySettings,
   inspectSvgSettings,
   listSvgPages,
   parseViewportLength,
@@ -16,6 +17,7 @@ import {
   reorderSvgPages,
   resizePageOnlySvg,
   updateSvgPage,
+  updateDocumentDisplaySettings,
 } from "../documents/index.js";
 import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
@@ -55,6 +57,13 @@ const pageSchema = z.object({
   width: z.number().finite().positive(),
   x: z.number().finite(),
   y: z.number().finite(),
+});
+const displaySettingsSchema = z.object({
+  borderColor: z.string().regex(/^#[a-f0-9]{6}$/u),
+  borderOpacity: z.number().min(0).max(1),
+  deskColor: z.string().regex(/^#[a-f0-9]{6}$/u),
+  pageColor: z.string().regex(/^#[a-f0-9]{6}$/u),
+  pageOpacity: z.number().min(0).max(1),
 });
 
 export function buildServer(config: ServerConfig): McpServer {
@@ -459,6 +468,90 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         pages: listSvgPages(changed),
         revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_settings",
+    {
+      description:
+        "Reads or updates typed Inkscape page, desk and border display settings. Updates require the current document revision.",
+      inputSchema: z.object({
+        expectedRevision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/u)
+          .optional(),
+        path: z.string().min(1).max(1024),
+        settings: z
+          .object({
+            borderColor: z
+              .string()
+              .regex(/^#[a-fA-F0-9]{6}$/u)
+              .optional(),
+            borderOpacity: z.number().finite().min(0).max(1).optional(),
+            deskColor: z
+              .string()
+              .regex(/^#[a-fA-F0-9]{6}$/u)
+              .optional(),
+            pageColor: z
+              .string()
+              .regex(/^#[a-fA-F0-9]{6}$/u)
+              .optional(),
+            pageOpacity: z.number().finite().min(0).max(1).optional(),
+          })
+          .optional(),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        settings: displaySettingsSchema,
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, path, settings, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const currentRevision = await sha256File(document.absolutePath);
+      if (settings === undefined) {
+        if (
+          expectedRevision !== undefined &&
+          expectedRevision !== currentRevision
+        )
+          throw new Error("Document revision no longer matches");
+        const output = {
+          revision: currentRevision,
+          settings: inspectDocumentDisplaySettings(source),
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(output) }],
+          structuredContent: output,
+        };
+      }
+      if (!expectedRevision)
+        throw new Error("Changing document settings requires expectedRevision");
+      if (Object.keys(settings).length === 0)
+        throw new Error(
+          "Changing document settings requires at least one value",
+        );
+      const changed = updateDocumentDisplaySettings(source, settings);
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        revision: committed.revision,
+        settings: changed.settings,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],

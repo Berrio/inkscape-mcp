@@ -4,10 +4,12 @@ import {
   createSvgDocument,
   deleteSvgPage,
   inspectSvgSettings,
+  inspectDocumentDisplaySettings,
   listSvgPages,
   reorderSvgPages,
   resizePageOnlySvg,
   updateSvgPage,
+  updateDocumentDisplaySettings,
 } from "../../src/documents/index.js";
 import { preflightSvg } from "../../src/documents/index.js";
 const mm = (value: number) => ({ unit: "mm" as const, value });
@@ -80,5 +82,25 @@ describe("basic SVG documents", () => {
     expect(
       listSvgPages(deleteSvgPage(updated.svg, "page-a")).map((page) => page.id),
     ).toEqual(["page-b"]);
+  });
+  it("reads defaults and persists typed Inkscape document display settings", () => {
+    const source = createSvgDocument({
+      page: { width: mm(210), height: mm(297) },
+    });
+    expect(inspectDocumentDisplaySettings(source).pageColor).toBe("#ffffff");
+    const changed = updateDocumentDisplaySettings(source, {
+      borderColor: "#112233",
+      borderOpacity: 0.25,
+      deskColor: "#445566",
+      pageColor: "#abcdef",
+      pageOpacity: 0.5,
+    });
+    expect(changed.settings).toEqual({
+      borderColor: "#112233",
+      borderOpacity: 0.25,
+      deskColor: "#445566",
+      pageColor: "#abcdef",
+      pageOpacity: 0.5,
+    });
   });
 });

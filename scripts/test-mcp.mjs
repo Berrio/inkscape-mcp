@@ -150,9 +150,28 @@ try {
   ) {
     throw new Error("document_pages did not list its stable page ID");
   }
-  const exported = await workspaceClient.callTool({
+  const settings = await workspaceClient.callTool({
     arguments: {
       expectedRevision: pagesRevision,
+      path: "a4.svg",
+      settings: { pageColor: "#abcdef", pageOpacity: 0.5 },
+      workspaceId: workspace.id,
+    },
+    name: "document_settings",
+  });
+  if (
+    settings.isError ||
+    settings.structuredContent?.settings?.pageOpacity !== 0.5
+  ) {
+    throw new Error("document_settings did not persist a typed page opacity");
+  }
+  const settingsRevision = settings.structuredContent?.revision;
+  if (typeof settingsRevision !== "string") {
+    throw new Error("document_settings did not return a revision");
+  }
+  const exported = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: settingsRevision,
       outputPath: "a4.png",
       path: "a4.svg",
       width: 400,
@@ -165,7 +184,7 @@ try {
   }
   const pdf = await workspaceClient.callTool({
     arguments: {
-      expectedRevision: pagesRevision,
+      expectedRevision: settingsRevision,
       outputPath: "a4.pdf",
       path: "a4.svg",
       pdfVersion: "1.5",
@@ -178,7 +197,7 @@ try {
   }
   const plainSvg = await workspaceClient.callTool({
     arguments: {
-      expectedRevision: pagesRevision,
+      expectedRevision: settingsRevision,
       flavor: "plain",
       outputPath: "a4-plain.svg",
       path: "a4.svg",

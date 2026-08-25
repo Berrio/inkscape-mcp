@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   AtomicFileStore,
+  ArtifactStore,
   CanonicalPathLocks,
   RevisionConflictError,
   ScratchManager,
@@ -116,5 +117,22 @@ describe("file revisions and atomic store", () => {
       ),
     ).resolves.toBe(snapshot.revision);
     expect(await readFile(target, "utf8")).toBe("before");
+  });
+  it("serves bounded artifact chunks to only their owner", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "export.png");
+    await writeFile(source, "abcdefghij");
+    const artifacts = new ArtifactStore(join(root, "artifacts"), 100);
+    const artifact = await artifacts.publish(source, "owner-a", 60_000);
+    expect(artifact.uri).toBe(`inkscape://artifact/${artifact.id}`);
+    await expect(
+      artifacts.readChunk(artifact.id, "owner-b", 0, 3, 4),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+    await expect(
+      artifacts.readChunk(artifact.id, "owner-a", 2, 3, 4),
+    ).resolves.toMatchObject({ bytes: Buffer.from("cde"), size: 10 });
+    await expect(
+      artifacts.readChunk(artifact.id, "owner-a", 0, 5, 4),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
   });
 });

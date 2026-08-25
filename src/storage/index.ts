@@ -10,3 +10,4 @@ export {
 } from "./revisions.js";
 export { ScratchManager } from "./scratch.js";
 export { SnapshotStore, type Snapshot } from "./snapshots.js";
+export { ArtifactStore, type Artifact } from "./artifacts.js";

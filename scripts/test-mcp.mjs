@@ -98,6 +98,23 @@ try {
   ) {
     throw new Error("document_resize did not apply page_only semantics");
   }
+  const resizedRevision = resized.structuredContent?.revision;
+  if (typeof resizedRevision !== "string") {
+    throw new Error("document_resize did not return a revision");
+  }
+  const exported = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: resizedRevision,
+      outputPath: "a4.png",
+      path: "a4.svg",
+      width: 400,
+      workspaceId: workspace.id,
+    },
+    name: "export_png",
+  });
+  if (exported.isError || exported.structuredContent?.width !== 400) {
+    throw new Error("export_png did not publish the expected PNG");
+  }
 } finally {
   await workspaceClient.close();
   await rm(workspaceRoot, { force: true, recursive: true });

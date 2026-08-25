@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { realpath, stat } from "node:fs/promises";
+import { opendir, readFile, realpath, stat } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -17,6 +17,10 @@ export type ResolvedWorkspacePath = {
   absolutePath: string;
   relativePath: string;
   workspaceId: string;
+};
+export type DocumentPage = {
+  documents: readonly string[];
+  nextCursor?: string;
 };
 
 export class WorkspaceService {
@@ -90,6 +94,35 @@ export class WorkspaceService {
     return resolved(workspace, resolve(canonicalParent, basename(candidate)));
   }
 
+  public async listDocuments(
+    workspaceId: string,
+    options: { cursor?: string; pageSize: number },
+  ): Promise<DocumentPage> {
+    const workspace = this.workspace(workspaceId);
+    if (
+      !Number.isInteger(options.pageSize) ||
+      options.pageSize < 1 ||
+      options.pageSize > 100
+    )
+      throw new WorkspacePathError(
+        "PATH_INVALID",
+        "pageSize must be between 1 and 100",
+      );
+    const after = decodeCursor(options.cursor, workspace.id);
+    const documents = (await walkSvgDocuments(workspace.root)).sort();
+    const start =
+      after === undefined ? 0 : documents.findIndex((item) => item > after);
+    const offset = start < 0 ? documents.length : start;
+    const page = documents.slice(offset, offset + options.pageSize);
+    const last = page.at(-1);
+    return {
+      documents: page,
+      ...(last === undefined || page.length < options.pageSize
+        ? {}
+        : { nextCursor: encodeCursor(workspace.id, last) }),
+    };
+  }
+
   private workspace(id: string): Workspace {
     const workspace = this.workspaces.find((item) => item.id === id);
     if (!workspace)
@@ -128,6 +161,24 @@ export function assertSafeRelativePath(value: string): void {
     );
 }
 
+export async function sniffSvgDocument(path: string): Promise<"svg" | "svgz"> {
+  const extension = path.toLowerCase().split(".").at(-1);
+  if (extension !== "svg" && extension !== "svgz")
+    throw new WorkspacePathError(
+      "PATH_INVALID",
+      "Only .svg and .svgz documents are allowed",
+    );
+  const prefix = (await readFile(path)).subarray(0, 8192);
+  if (extension === "svgz" && prefix[0] === 0x1f && prefix[1] === 0x8b)
+    return "svgz";
+  if (extension === "svg" && /<svg(?:\s|>)/iu.test(prefix.toString("utf8")))
+    return "svg";
+  throw new WorkspacePathError(
+    "PATH_INVALID",
+    "Document content does not match its SVG extension",
+  );
+}
+
 function isInside(root: string, candidate: string): boolean {
   const difference = relative(root, candidate);
   return (
@@ -151,4 +202,50 @@ function resolved(
 
 function workspaceId(root: string, index: number): string {
   return `ws_${createHash("sha256").update(`${index}\0${root}`).digest("hex").slice(0, 16)}`;
+}
+
+async function walkSvgDocuments(
+  root: string,
+  current = root,
+): Promise<string[]> {
+  const directory = await opendir(current);
+  const documents: string[] = [];
+  for await (const entry of directory) {
+    const path = resolve(current, entry.name);
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory())
+      documents.push(...(await walkSvgDocuments(root, path)));
+    else if (entry.isFile() && /\.svgz?$/iu.test(entry.name))
+      documents.push(relative(root, path).split(sep).join("/"));
+  }
+  return documents;
+}
+
+function encodeCursor(workspaceId: string, after: string): string {
+  return Buffer.from(JSON.stringify({ after, workspaceId })).toString(
+    "base64url",
+  );
+}
+function decodeCursor(
+  cursor: string | undefined,
+  workspaceId: string,
+): string | undefined {
+  if (cursor === undefined) return undefined;
+  try {
+    const value: unknown = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8"),
+    );
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "workspaceId" in value &&
+      "after" in value &&
+      value.workspaceId === workspaceId &&
+      typeof value.after === "string"
+    )
+      return value.after;
+  } catch {
+    /* malformed below */
+  }
+  throw new WorkspacePathError("PATH_INVALID", "Invalid workspace cursor");
 }

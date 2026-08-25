@@ -1508,8 +1508,8 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F02-T03` Implementar resolver de output inexistente mediante parent canónico.
 - [x] `F02-T04` Rechazar absolute/UNC/drive-relative/NUL/ADS/`..` y escapes de case/separadores.
 - [ ] `F02-T05` Probar symlink/junction/reparse point y carrera antes del commit.
-- [ ] `F02-T06` Implementar allowlist de extensiones y sniffing inicial.
-- [ ] `F02-T07` Implementar paginación segura en `workspace_list_documents`.
+- [x] `F02-T06` Implementar allowlist de extensiones y sniffing inicial.
+- [x] `F02-T07` Implementar paginación segura en `workspace_list_documents`.
 
 #### Temporales, revisión y locks
 

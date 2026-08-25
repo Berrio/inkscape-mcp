@@ -7,6 +7,7 @@ import {
   assertSafeRelativePath,
   WorkspacePathError,
   WorkspaceService,
+  sniffSvgDocument,
 } from "../../src/workspace/index.js";
 
 const temporaryDirectories: string[] = [];
@@ -66,5 +67,28 @@ describe("workspace boundary", () => {
         "linked-directory/secret.svg",
       ),
     ).rejects.toMatchObject({ code: "PATH_OUTSIDE_WORKSPACE" });
+  });
+  it("sniffs SVG and paginates only allowed document names", async () => {
+    const root = await temporaryDirectory();
+    await writeFile(
+      join(root, "a.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg"/>',
+    );
+    await writeFile(join(root, "b.svg"), "<svg/>");
+    await writeFile(join(root, "not-svg.png"), "<svg/>");
+    const service = await WorkspaceService.create([root]);
+    const workspace = service.list()[0]!;
+    await expect(sniffSvgDocument(join(root, "a.svg"))).resolves.toBe("svg");
+    await expect(
+      sniffSvgDocument(join(root, "not-svg.png")),
+    ).rejects.toMatchObject({ code: "PATH_INVALID" });
+    const first = await service.listDocuments(workspace.id, { pageSize: 1 });
+    expect(first.documents).toEqual(["a.svg"]);
+    await expect(
+      service.listDocuments(workspace.id, {
+        cursor: first.nextCursor,
+        pageSize: 1,
+      }),
+    ).resolves.toMatchObject({ documents: ["b.svg"] });
   });
 });

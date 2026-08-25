@@ -2597,7 +2597,7 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 
 ### Implementación
 
-- [ ] F00 Bootstrap.
+- [~] F00 Bootstrap (`F00-WP01` completado; pendientes `WP02` y `WP03`).
 - [ ] F01 Discovery/runner.
 - [ ] F02 Workspace/XML/transacciones.
 - [ ] F03 Tamaños/páginas.

@@ -1,0 +1,5 @@
+{
+  "maxConcurrency": 3,
+  "transport": "stdio",
+  "workspaceRoots": ["C:/fixture-workspace"]
+}

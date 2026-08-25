@@ -1443,10 +1443,10 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Configuración
 
-- [ ] `F01-T01` Implementar schema de config estricto y precedencia flags/env/file/defaults.
-- [ ] `F01-T02` Requerir al menos un workspace root para iniciar document tools; permitir `doctor` sin workspace y devolver `workspaceReady: false` sin acceder a documentos.
-- [ ] `F01-T03` Implementar redacción de config para logs/resultados.
-- [ ] `F01-T04` Probar valores inválidos, desconocidos, límites y combinación stdio/HTTP.
+- [x] `F01-T01` Implementar schema de config estricto y precedencia flags/env/file/defaults.
+- [x] `F01-T02` Requerir al menos un workspace root para iniciar document tools; permitir `doctor` sin workspace y devolver `workspaceReady: false` sin acceder a documentos.
+- [x] `F01-T03` Implementar redacción de config para logs/resultados.
+- [x] `F01-T04` Probar valores inválidos, desconocidos, límites y combinación stdio/HTTP.
 
 #### Runner
 
@@ -2640,7 +2640,7 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 ### Implementación
 
 - [x] F00 Bootstrap.
-- [ ] F01 Discovery/runner.
+- [~] F01 Discovery/runner (`F01-WP01` completado; pendientes `WP02`–`WP05`).
 - [ ] F02 Workspace/XML/transacciones.
 - [ ] F03 Tamaños/páginas.
 - [ ] F04 Inspección/preflight/preview.

@@ -1568,7 +1568,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Crear/inspeccionar documento
 
-- [ ] `F03-T07` Implementar SVG mínimo válido con namespaces Inkscape opcionales.
+- [x] `F03-T07` Implementar SVG mínimo válido con namespaces Inkscape opcionales.
 - [ ] `F03-T08` Implementar presets de página versionados y schema custom.
 - [ ] `F03-T09` Implementar `document_create` con una o múltiples páginas.
 - [ ] `F03-T10` Implementar inspección base: dimensiones, viewBox, unidades, páginas, revisión.

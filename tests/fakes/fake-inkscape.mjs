@@ -18,6 +18,9 @@ if (mode === "success") {
   }
   process.stdout.write("success\n");
   process.exit(0);
+} else if (mode === "version") {
+  process.stdout.write("Inkscape 1.4.4 (dcaf3e7, 2026-05-05)\n");
+  process.exit(0);
 } else if (mode === "error") {
   process.stderr.write("intentional failure\n");
   process.exit(17);

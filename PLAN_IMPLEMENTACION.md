@@ -1460,13 +1460,13 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Discovery
 
-- [ ] `F01-T12` Implementar locator cross-platform con proveedores independientes.
-- [ ] `F01-T13` Implementar proveedor Windows PATH/App Paths/registro/rutas estándar.
-- [ ] `F01-T14` Implementar proveedor AppX/MSIX sin hardcodear versión/ruta.
-- [ ] `F01-T15` Implementar proveedores macOS/Linux, aunque CI real pueda llegar después.
-- [ ] `F01-T16` Validar cada candidato mediante el runner y parsear versión robustamente.
-- [ ] `F01-T17` Probar candidatos inexistentes, acceso denegado, ejecutable falso, versión no parseable y múltiples instalaciones.
-- [ ] `F01-T18` Añadir fixture/integ test para la instalación MSIX 1.4.4 observada.
+- [x] `F01-T12` Implementar locator cross-platform con proveedores independientes.
+- [x] `F01-T13` Implementar proveedor Windows PATH/App Paths/registro/rutas estándar.
+- [x] `F01-T14` Implementar proveedor AppX/MSIX sin hardcodear versión/ruta.
+- [x] `F01-T15` Implementar proveedores macOS/Linux, aunque CI real pueda llegar después.
+- [x] `F01-T16` Validar cada candidato mediante el runner y parsear versión robustamente.
+- [x] `F01-T17` Probar candidatos inexistentes, acceso denegado, ejecutable falso, versión no parseable y múltiples instalaciones.
+- [x] `F01-T18` Añadir fixture/integ test para la instalación MSIX 1.4.4 observada.
 
 #### Capabilities y doctor
 

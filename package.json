@@ -26,6 +26,7 @@
     "format:check": "prettier --check .",
     "test": "npm run build --silent && vitest run",
     "test:unit": "npm test",
+    "test:integration": "vitest run tests/integration",
     "test:mcp": "node scripts/test-mcp.mjs",
     "inspect": "npx --no-install @modelcontextprotocol/inspector node dist/cli.js",
     "test:conformance": "npx --no-install @modelcontextprotocol/conformance",

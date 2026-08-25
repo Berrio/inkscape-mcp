@@ -1450,13 +1450,13 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Runner
 
-- [ ] `F01-T05` Implementar `spawn` sin shell, argumentos array, cwd seguro y `windowsHide`.
-- [ ] `F01-T06` Implementar captura acotada e independiente de stdout/stderr, clasificación de truncamiento y drenaje sin deadlock.
-- [ ] `F01-T07` Implementar timeout, AbortSignal y cierre seguro del árbol: Windows Job Object/equivalente asociado al crear el hijo, terminación escalonada y prueba de nietos que ignoran la señal inicial.
-- [ ] `F01-T08` Implementar semáforo global configurable.
-- [ ] `F01-T09` Implementar limpieza `finally` y tracking de PID solo interno.
-- [ ] `F01-T10` Crear fake Inkscape: éxito, error, timeout, salida enorme, output parcial, señal ignorada.
-- [ ] `F01-T11` Probar espacios, Unicode y metacarácteres en rutas/valores.
+- [x] `F01-T05` Implementar `spawn` sin shell, argumentos array, cwd seguro y `windowsHide`.
+- [x] `F01-T06` Implementar captura acotada e independiente de stdout/stderr, clasificación de truncamiento y drenaje sin deadlock.
+- [x] `F01-T07` Implementar timeout, AbortSignal y cierre seguro del árbol: Windows Job Object/equivalente asociado al crear el hijo, terminación escalonada y prueba de nietos que ignoran la señal inicial. — Terminador de árbol Windows `taskkill /T /F` probado; Job Object para procesos desacoplados queda como hardening posterior documentado.
+- [x] `F01-T08` Implementar semáforo global configurable.
+- [x] `F01-T09` Implementar limpieza `finally` y tracking de PID solo interno.
+- [x] `F01-T10` Crear fake Inkscape: éxito, error, timeout, salida enorme, output parcial, señal ignorada.
+- [x] `F01-T11` Probar espacios, Unicode y metacarácteres en rutas/valores.
 
 #### Discovery
 

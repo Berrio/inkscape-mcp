@@ -10,10 +10,11 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   prettier,
   {
-    files: ["scripts/**/*.mjs"],
+    files: ["scripts/**/*.mjs", "tests/fakes/**/*.mjs"],
     languageOptions: {
       globals: {
         process: "readonly",
+        setInterval: "readonly",
       },
     },
   },

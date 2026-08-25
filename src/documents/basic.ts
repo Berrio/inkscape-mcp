@@ -10,6 +10,17 @@ export type DocumentSettings = {
   width: string;
 };
 
+export function parseViewportLength(value: string): PageSize["width"] {
+  const match = value
+    .trim()
+    .match(/^([0-9]+(?:\.[0-9]+)?)(mm|cm|in|pt|pc|q|px)$/u);
+  if (!match) throw new Error("Unsupported document viewport length");
+  return {
+    unit: match[2] as PageSize["width"]["unit"],
+    value: Number(match[1]),
+  };
+}
+
 export function createSvgDocument(spec: DocumentSpec): string {
   const viewBox = spec.viewBox ?? {
     x: 0,

@@ -1576,7 +1576,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Resize y páginas
 
-- [ ] `F03-T12` Implementar `page_only`.
+- [x] `F03-T12` Implementar `page_only`.
 - [ ] `F03-T13` Implementar `scale_content_contain`.
 - [ ] `F03-T14` Implementar `scale_content_cover` y warning de crop.
 - [ ] `F03-T15` Implementar stretch solo opt-in.

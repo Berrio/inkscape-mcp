@@ -75,6 +75,29 @@ try {
   ) {
     throw new Error("document_create did not publish the expected A4 SVG");
   }
+  const revision = created.structuredContent?.revision;
+  if (typeof revision !== "string") {
+    throw new Error("document_create did not return a revision");
+  }
+  const resized = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: revision,
+      height: 210,
+      path: "a4.svg",
+      unit: "mm",
+      width: 148,
+      workspaceId: workspace.id,
+    },
+    name: "document_resize",
+  });
+  if (
+    resized.isError ||
+    !(await readFile(join(workspaceRoot, "a4.svg"), "utf8")).includes(
+      'viewBox="0 0 148 210"',
+    )
+  ) {
+    throw new Error("document_resize did not apply page_only semantics");
+  }
 } finally {
   await workspaceClient.close();
   await rm(workspaceRoot, { force: true, recursive: true });

@@ -1,9 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/server";
+import { readFile } from "node:fs/promises";
 import { z } from "zod";
 
 import packageMetadata from "../../package.json" with { type: "json" };
 import { assertDocumentWorkspace, type ServerConfig } from "../config/index.js";
-import { createSvgDocument } from "../documents/index.js";
+import {
+  createSvgDocument,
+  inspectSvgSettings,
+  parseViewportLength,
+  resizePageOnlySvg,
+} from "../documents/index.js";
 import { runDoctor } from "../doctor/index.js";
 import { AtomicFileStore } from "../storage/index.js";
 import { WorkspaceService } from "../workspace/index.js";
@@ -166,6 +172,59 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         documentPath: target.relativePath,
         revision: result.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_resize",
+    {
+      description:
+        "Changes the SVG page size with page_only semantics while preserving element geometry. Requires the current document revision.",
+      inputSchema: z.object({
+        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        height: z.number().finite().positive(),
+        path: z.string().min(1).max(1024),
+        unit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
+        width: z.number().finite().positive(),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        warnings: z.array(z.string()),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, height, path, unit, width, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const document = await workspace.resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const settings = inspectSvgSettings(source);
+      const currentPage = {
+        width: parseViewportLength(settings.width),
+        height: parseViewportLength(settings.height),
+      };
+      const resized = resizePageOnlySvg(source, currentPage, {
+        width: { unit, value: width },
+        height: { unit, value: height },
+      });
+      const result = await fileStore.commit({
+        contents: Buffer.from(resized.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: result.backupPath !== undefined,
+        revision: result.revision,
+        warnings: resized.warnings,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],

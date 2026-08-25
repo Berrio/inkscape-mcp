@@ -116,6 +116,13 @@ try {
   ) {
     throw new Error("document_inspect did not report the resized viewBox");
   }
+  const preflight = await workspaceClient.callTool({
+    arguments: { path: "a4.svg", workspaceId: workspace.id },
+    name: "document_preflight",
+  });
+  if (preflight.isError || preflight.structuredContent?.valid !== true) {
+    throw new Error("document_preflight did not validate the generated SVG");
+  }
   const exported = await workspaceClient.callTool({
     arguments: {
       expectedRevision: resizedRevision,

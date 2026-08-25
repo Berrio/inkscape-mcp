@@ -9,6 +9,7 @@ import {
   createSvgDocument,
   inspectSvgSettings,
   parseViewportLength,
+  preflightSvg,
   resizePageOnlySvg,
 } from "../documents/index.js";
 import { runDoctor } from "../doctor/index.js";
@@ -229,6 +230,46 @@ export function buildServer(config: ServerConfig): McpServer {
         await readFile(document.absolutePath, "utf8"),
       );
       const output = { ...settings, revision };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_preflight",
+    {
+      description:
+        "Checks an SVG for active content, external references and invalid document settings without modifying it.",
+      inputSchema: z.object({
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        issues: z.array(
+          z.object({
+            code: z.string(),
+            message: z.string(),
+            severity: z.enum(["error", "warning"]),
+          }),
+        ),
+        valid: z.boolean(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const preflight = preflightSvg(
+        await readFile(document.absolutePath, "utf8"),
+      );
+      const output = {
+        issues: preflight.issues,
+        valid: !preflight.issues.some((issue) => issue.severity === "error"),
+      };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

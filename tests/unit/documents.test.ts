@@ -4,6 +4,7 @@ import {
   inspectSvgSettings,
   resizePageOnlySvg,
 } from "../../src/documents/index.js";
+import { preflightSvg } from "../../src/documents/index.js";
 const mm = (value: number) => ({ unit: "mm" as const, value });
 describe("basic SVG documents", () => {
   it("creates an A4 SVG with a coherent viewBox", () => {
@@ -32,5 +33,14 @@ describe("basic SVG documents", () => {
       width: 148,
       height: 210,
     });
+  });
+  it("reports active content and external resources without mutating SVG", () => {
+    const result = preflightSvg(
+      '<svg width="1mm" height="1mm" viewBox="0 0 1 1"><script/><image href="https://example.test/a.png"/></svg>',
+    );
+    expect(result.issues.map((issue) => issue.code)).toEqual([
+      "SVG_ACTIVE_CONTENT",
+      "SVG_EXTERNAL_RESOURCE",
+    ]);
   });
 });

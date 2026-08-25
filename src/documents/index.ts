@@ -6,3 +6,4 @@ export {
   type DocumentSettings,
   type DocumentSpec,
 } from "./basic.js";
+export { preflightSvg, type PreflightIssue } from "./preflight.js";

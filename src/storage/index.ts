@@ -9,3 +9,4 @@ export {
   type MutationDocumentRef,
 } from "./revisions.js";
 export { ScratchManager } from "./scratch.js";
+export { SnapshotStore, type Snapshot } from "./snapshots.js";

@@ -8,6 +8,7 @@ import {
   CanonicalPathLocks,
   RevisionConflictError,
   ScratchManager,
+  SnapshotStore,
   sha256File,
 } from "../../src/storage/index.js";
 
@@ -86,5 +87,34 @@ describe("file revisions and atomic store", () => {
       async (directory) => directory,
     );
     await expect(readFile(path)).rejects.toBeDefined();
+  });
+  it("restores an opaque owner-bound snapshot only against the expected revision", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const target = join(root, "target.svg");
+    await writeFile(source, "before");
+    await writeFile(target, "after");
+    const snapshots = new SnapshotStore(join(root, "snapshots"));
+    const snapshot = await snapshots.create(source, "owner-a", 60_000);
+    await expect(
+      snapshots.restore(
+        snapshot.id,
+        "owner-b",
+        target,
+        await sha256File(target),
+      ),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+    await expect(
+      snapshots.restore(snapshot.id, "owner-a", target, "stale"),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+    await expect(
+      snapshots.restore(
+        snapshot.id,
+        "owner-a",
+        target,
+        await sha256File(target),
+      ),
+    ).resolves.toBe(snapshot.revision);
+    expect(await readFile(target, "utf8")).toBe("before");
   });
 });

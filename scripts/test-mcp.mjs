@@ -128,6 +128,19 @@ try {
   if (pdf.isError || pdf.structuredContent?.version !== "1.5") {
     throw new Error("export_pdf did not publish the expected PDF");
   }
+  const plainSvg = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: resizedRevision,
+      flavor: "plain",
+      outputPath: "a4-plain.svg",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_svg",
+  });
+  if (plainSvg.isError || plainSvg.structuredContent?.flavor !== "plain") {
+    throw new Error("export_svg did not publish the expected plain SVG");
+  }
 } finally {
   await workspaceClient.close();
   await rm(workspaceRoot, { force: true, recursive: true });

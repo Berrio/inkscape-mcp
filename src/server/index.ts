@@ -13,7 +13,7 @@ import {
 } from "../documents/index.js";
 import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
-import { verifyPdf, verifyPng } from "../export/index.js";
+import { verifyPdf, verifyPng, verifySvg } from "../export/index.js";
 import { ProcessRunner } from "../runner/index.js";
 import { AtomicFileStore, ScratchManager } from "../storage/index.js";
 import { WorkspaceService } from "../workspace/index.js";
@@ -420,6 +420,92 @@ export function buildServer(config: ServerConfig): McpServer {
         revision: committed.revision,
         version: pdf.metadata.version,
       };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
+
+  server.registerTool(
+    "export_svg",
+    {
+      description:
+        "Exports an SVG as Inkscape SVG or plain SVG through the bounded Inkscape pipeline.",
+      inputSchema: z.object({
+        expectedOutputRevision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/u)
+          .optional(),
+        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        flavor: z.enum(["inkscape", "plain"]),
+        outputPath: z.string().min(1).max(1024),
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        flavor: z.enum(["inkscape", "plain"]),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({
+      expectedOutputRevision,
+      expectedRevision,
+      flavor,
+      outputPath,
+      path,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const input = await workspace.resolveExisting(workspaceId, path);
+      const output = await workspace.resolveNewOutput(workspaceId, outputPath);
+      if (!/\.svg$/iu.test(output.relativePath))
+        throw new Error("export_svg requires a .svg output path");
+      const discovery = await locateInkscape({
+        config,
+        cwd: process.cwd(),
+        runner,
+      });
+      const candidate = discovery.candidates[0];
+      if (!candidate) throw new Error("Inkscape executable is unavailable");
+      const probe = await probeInkscapeCandidate(
+        runner,
+        candidate,
+        process.cwd(),
+      );
+      if (!("version" in probe))
+        throw new Error("Inkscape executable could not be validated");
+      const svg = await scratch.withDirectory("staging", async (directory) => {
+        const temporaryOutput = join(directory, "export.svg");
+        const run = await runner.run(candidate.executablePath, {
+          args: [
+            input.absolutePath,
+            "--export-type=svg",
+            `--export-filename=${temporaryOutput}`,
+            ...(flavor === "plain" ? ["--export-plain-svg"] : []),
+          ],
+          cwd: directory,
+          maxStderrBytes: config.maxStderrBytes,
+          maxStdoutBytes: config.maxStdoutBytes,
+          timeoutMs: config.processTimeoutMs,
+        });
+        if (run.exitCode !== 0 || run.terminationReason !== "completed")
+          throw new Error("Inkscape SVG export failed");
+        await verifySvg(temporaryOutput);
+        return readFile(temporaryOutput);
+      });
+      const committed = await fileStore.commit({
+        contents: svg,
+        ...(expectedOutputRevision === undefined
+          ? {}
+          : { expectedOutputRevision }),
+        expectedRevision,
+        sourcePath: input.absolutePath,
+        targetPath: output.absolutePath,
+      });
+      const result = { flavor, revision: committed.revision };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
         structuredContent: result,

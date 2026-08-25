@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,6 +7,7 @@ import {
   AtomicFileStore,
   CanonicalPathLocks,
   RevisionConflictError,
+  ScratchManager,
   sha256File,
 } from "../../src/storage/index.js";
 
@@ -69,5 +70,21 @@ describe("file revisions and atomic store", () => {
       }),
     ]);
     expect(events).toEqual(["first", "second"]);
+  });
+  it("cleans only its own stale scratch directories", async () => {
+    const root = await temporaryDirectory();
+    const scratch = new ScratchManager(root);
+    const stale = await scratch.create("job");
+    const retained = join(root, "unrelated");
+    await writeFile(join(stale, "file"), "x");
+    await writeFile(retained, "keep");
+    await utimes(stale, new Date(0), new Date(0));
+    await expect(scratch.cleanupStale(1)).resolves.toBe(1);
+    await expect(readFile(retained, "utf8")).resolves.toBe("keep");
+    const path = await scratch.withDirectory(
+      "probe",
+      async (directory) => directory,
+    );
+    await expect(readFile(path)).rejects.toBeDefined();
   });
 });

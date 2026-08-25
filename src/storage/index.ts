@@ -8,3 +8,4 @@ export {
   type CommitFileResult,
   type MutationDocumentRef,
 } from "./revisions.js";
+export { ScratchManager } from "./scratch.js";

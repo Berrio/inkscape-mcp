@@ -4,6 +4,7 @@ export type SanitizeMode = "preserve-local" | "strict" | "trusted";
 export type SafeSvgOptions = {
   maxElements: number;
   maxInputBytes: number;
+  maximumMode?: SanitizeMode;
   mode: SanitizeMode;
 };
 export type SafeSvgResult = { removed: readonly string[]; svg: string };
@@ -19,6 +20,11 @@ export function sanitizeSvg(
   source: string,
   options: SafeSvgOptions,
 ): SafeSvgResult {
+  if (!isAllowedMode(options.mode, options.maximumMode ?? options.mode)) {
+    throw new SvgSecurityError(
+      "Requested sanitize mode exceeds configured maximum",
+    );
+  }
   if (Buffer.byteLength(source, "utf8") > options.maxInputBytes)
     throw new SvgSecurityError("SVG exceeds input size limit");
   if (/<!DOCTYPE|<!ENTITY|<!\[CDATA\[/iu.test(source))
@@ -95,4 +101,13 @@ function isForbiddenReference(value: string, mode: SanitizeMode): boolean {
   if (mode === "trusted") return false;
   if (mode === "strict") return !value.startsWith("#");
   return /^(?:https?:|file:|data:|javascript:|\/\/)/iu.test(value);
+}
+function isAllowedMode(
+  requested: SanitizeMode,
+  maximum: SanitizeMode,
+): boolean {
+  return (
+    ["strict", "preserve-local", "trusted"].indexOf(requested) <=
+    ["strict", "preserve-local", "trusted"].indexOf(maximum)
+  );
 }

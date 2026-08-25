@@ -25,4 +25,13 @@ describe("safe SVG", () => {
       ).svg,
     ).not.toContain("relative.png");
   });
+  it("does not let a client elevate the configured sanitize ceiling", () => {
+    expect(() =>
+      sanitizeSvg("<svg><foreignObject/></svg>", {
+        ...limits,
+        maximumMode: "preserve-local",
+        mode: "trusted",
+      }),
+    ).toThrow("exceeds configured maximum");
+  });
 });

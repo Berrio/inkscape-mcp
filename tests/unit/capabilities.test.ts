@@ -69,6 +69,19 @@ describe("Inkscape capabilities", () => {
     );
 
     expect(first.actionCount).toBe(2);
+    expect(first.actionEvidence).toEqual([
+      { name: "export-do", origin: "unknown" },
+      { name: "zoom-in", origin: "unknown" },
+    ]);
+    expect(first.flags).toContainEqual({
+      availability: "available",
+      name: "--export-type",
+    });
+    expect(first.flags).toContainEqual({
+      availability: "absent",
+      name: "--export-page",
+    });
+    expect(first.experimentalCapabilities).toEqual([]);
     expect(second).toBe(first);
     expect(calls).toBe(3);
   });

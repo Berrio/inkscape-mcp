@@ -1471,10 +1471,10 @@ Evidencia específica adicional para WP de alto riesgo:
 #### Capabilities y doctor
 
 - [x] `F01-T19` Parsear `--version`, `--help-all`, `--list-input-types` y `--action-list`.
-- [ ] `F01-T20` Crear snapshot/cache invalidable por ejecutable/hash/mtime, perfil, data dirs, INX/extensiones, helpers y TTL.
+- [x] `F01-T20` Crear snapshot/cache invalidable por ejecutable/hash/mtime, perfil, data dirs, INX/extensiones, helpers y TTL.
 - [x] `F01-T21` Añadir sondas mínimas de exportación en scratch sin tocar workspace del usuario.
 - [x] `F01-T22` Implementar `inkscape-mcp --doctor` con salida humana y `--json`.
-- [ ] `F01-T23` Diferenciar core action, extension action, origen `unknown`, flag ausente y capability experimental; `--action-list` solo produce evidencia observada, no clasificación fiable de origen.
+- [x] `F01-T23` Diferenciar core action, extension action, origen `unknown`, flag ausente y capability experimental; `--action-list` solo produce evidencia observada, no clasificación fiable de origen.
 - [x] `F01-T24` Documentar warnings GTK conocidos sin silenciar stderr desconocido.
 
 #### Esqueleto MCP incremental y status

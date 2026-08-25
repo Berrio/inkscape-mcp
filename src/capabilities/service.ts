@@ -1,14 +1,26 @@
 import { createHash } from "node:crypto";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 
 import type { InkscapeCandidate } from "../discovery/index.js";
 import type { ProcessExecutor } from "../discovery/probe.js";
 
 import { parseActionList, parseHelpOptions, parseInputTypes } from "./parse.js";
-import type { CapabilityObservation, InkscapeCapabilities } from "./types.js";
+import type {
+  CapabilityCacheContext,
+  CapabilityObservation,
+  InkscapeCapabilities,
+} from "./types.js";
 
 const CACHE_TTL_MS = 5 * 60_000;
 const OUTPUT_LIMIT_BYTES = 2 * 1024 * 1024;
+const TRACKED_FLAGS = [
+  "--export-margin",
+  "--export-page",
+  "--export-pdf-version",
+  "--export-plain-svg",
+  "--export-type",
+] as const;
 
 type CachedCapabilities = { expiresAt: number; value: InkscapeCapabilities };
 
@@ -20,10 +32,14 @@ export class CapabilityService {
     candidate: InkscapeCandidate,
     version: string,
     cwd: string,
+    cacheContext: CapabilityCacheContext = defaultCacheContext(
+      candidate.executablePath,
+    ),
   ): Promise<InkscapeCapabilities> {
     const fingerprint = await capabilityFingerprint(
       candidate.executablePath,
       version,
+      cacheContext,
     );
     const cached = this.cache.get(fingerprint);
     if (cached && cached.expiresAt > Date.now()) {
@@ -35,13 +51,23 @@ export class CapabilityService {
       collect(runner, candidate.executablePath, ["--list-input-types"], cwd),
       collect(runner, candidate.executablePath, ["--action-list"], cwd),
     ]);
+    const actions = actionList.available
+      ? parseActionList(actionList.output)
+      : [];
+    const helpOptions = helpAll.available
+      ? parseHelpOptions(helpAll.output)
+      : [];
     const value: InkscapeCapabilities = {
-      actionCount: actionList.available
-        ? parseActionList(actionList.output).length
-        : 0,
-      actions: actionList.available ? parseActionList(actionList.output) : [],
+      actionCount: actions.length,
+      actionEvidence: actions.map((name) => ({ name, origin: "unknown" })),
+      actions,
+      experimentalCapabilities: [],
+      flags: TRACKED_FLAGS.map((name) => ({
+        availability: helpOptions.includes(name) ? "available" : "absent",
+        name,
+      })),
       fingerprint,
-      helpOptions: helpAll.available ? parseHelpOptions(helpAll.output) : [],
+      helpOptions,
       inputTypes: inputTypes.available
         ? parseInputTypes(inputTypes.output)
         : [],
@@ -106,11 +132,64 @@ function observation(result: CollectedCommand): CapabilityObservation {
 async function capabilityFingerprint(
   executablePath: string,
   version: string,
+  context: CapabilityCacheContext,
 ): Promise<string> {
   const metadata = await stat(executablePath);
+  const executableHash = createHash("sha256")
+    .update(await readFile(executablePath))
+    .digest("hex");
+  const contextPaths = [
+    context.profileDirectory,
+    ...(context.dataDirectories ?? []),
+    ...(context.extensionDirectories ?? []),
+    ...(context.helperPaths ?? []),
+  ].filter((value): value is string => value !== undefined);
+  const contextState = await Promise.all(
+    [...new Set(contextPaths.map((path) => resolve(path)))]
+      .sort()
+      .map(pathState),
+  );
   return createHash("sha256")
     .update(
-      `${executablePath}\0${metadata.size}\0${metadata.mtimeMs}\0${version}`,
+      `${executablePath}\0${executableHash}\0${metadata.size}\0${metadata.mtimeMs}\0${version}\0${contextState.join("\0")}`,
     )
     .digest("hex");
+}
+
+function defaultCacheContext(executablePath: string): CapabilityCacheContext {
+  const profileDirectory =
+    process.env.INKSCAPE_PROFILE_DIR ?? defaultProfileDirectory();
+  return {
+    dataDirectories: [dirname(executablePath)],
+    extensionDirectories: profileDirectory
+      ? [resolve(profileDirectory, "extensions")]
+      : [],
+    helperPaths: [process.execPath],
+    ...(profileDirectory === undefined ? {} : { profileDirectory }),
+  };
+}
+
+function defaultProfileDirectory(): string | undefined {
+  if (process.platform === "win32") {
+    return process.env.APPDATA
+      ? resolve(process.env.APPDATA, "inkscape")
+      : undefined;
+  }
+  const root = process.env.XDG_CONFIG_HOME ?? process.env.HOME;
+  return root
+    ? resolve(
+        root,
+        process.env.XDG_CONFIG_HOME ? "inkscape" : ".config",
+        "inkscape",
+      )
+    : undefined;
+}
+
+async function pathState(path: string): Promise<string> {
+  try {
+    const metadata = await stat(path);
+    return `${path}:${metadata.isDirectory() ? "directory" : "file"}:${metadata.size}:${metadata.mtimeMs}`;
+  } catch {
+    return `${path}:missing`;
+  }
 }

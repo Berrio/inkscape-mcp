@@ -1502,11 +1502,11 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Workspace
 
-- [ ] `F02-T00` Cerrar threat-model ADR: cliente/documento hostil, supuestos sobre actor local, ACL de roots y riesgo residual TOCTOU.
-- [ ] `F02-T01` Implementar roots canónicos y IDs de workspace opacos.
-- [ ] `F02-T02` Implementar resolver de input existente con pertenencia robusta.
-- [ ] `F02-T03` Implementar resolver de output inexistente mediante parent canónico.
-- [ ] `F02-T04` Rechazar absolute/UNC/drive-relative/NUL/ADS/`..` y escapes de case/separadores.
+- [x] `F02-T00` Cerrar threat-model ADR: cliente/documento hostil, supuestos sobre actor local, ACL de roots y riesgo residual TOCTOU.
+- [x] `F02-T01` Implementar roots canónicos y IDs de workspace opacos.
+- [x] `F02-T02` Implementar resolver de input existente con pertenencia robusta.
+- [x] `F02-T03` Implementar resolver de output inexistente mediante parent canónico.
+- [x] `F02-T04` Rechazar absolute/UNC/drive-relative/NUL/ADS/`..` y escapes de case/separadores.
 - [ ] `F02-T05` Probar symlink/junction/reparse point y carrera antes del commit.
 - [ ] `F02-T06` Implementar allowlist de extensiones y sniffing inicial.
 - [ ] `F02-T07` Implementar paginación segura en `workspace_list_documents`.

@@ -1514,10 +1514,10 @@ Evidencia específica adicional para WP de alto riesgo:
 #### Temporales, revisión y locks
 
 - [ ] `F02-T08` Implementar scratch/job dirs únicos y limpieza por éxito/fallo/arranque.
-- [ ] `F02-T09` Implementar SHA-256 streaming, `MutationDocumentRef` obligatorio y `expectedOutputRevision` para overwrite.
-- [ ] `F02-T10` Implementar lock por ruta canónica para documentos y destinos de output, con orden para evitar deadlocks.
-- [ ] `F02-T11` Implementar backup configurable y nombres sin colisión.
-- [ ] `F02-T12` Implementar commit atómico en Windows; documentar fallback y crash consistency.
+- [x] `F02-T09` Implementar SHA-256 streaming, `MutationDocumentRef` obligatorio y `expectedOutputRevision` para overwrite.
+- [x] `F02-T10` Implementar lock por ruta canónica para documentos y destinos de output, con orden para evitar deadlocks.
+- [x] `F02-T11` Implementar backup configurable y nombres sin colisión.
+- [x] `F02-T12` Implementar commit atómico en Windows; documentar fallback y crash consistency.
 - [ ] `F02-T13` Implementar snapshots opacos, TTL/retención y tools snapshot/restore.
 - [ ] `F02-T14` Probar dos writers concurrentes, revisión de documento/output obsoleta, cancelación y espacio insuficiente simulado.
 

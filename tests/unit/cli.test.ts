@@ -12,7 +12,7 @@ describe("inkscape-mcp CLI bootstrap", () => {
     });
 
     expect(stdout).toContain("Usage:");
-    expect(stdout).toContain("no running MCP server yet");
+    expect(stdout).toContain("serves MCP through stdio");
   });
 
   it("prints the package version", () => {

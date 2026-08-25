@@ -1479,10 +1479,10 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Esqueleto MCP incremental y status
 
-- [ ] `F01-T25` Crear `buildServer()` y entrypoint `serveStdio(() => buildServer())` mínimos con SDK v2; el paquete v2 por sí solo no demuestra negociación MCP 2026.
-- [ ] `F01-T26` Establecer el patrón para que cada fase añada sus tools al catálogo estable y determinista.
-- [ ] `F01-T27` Implementar/registrar tool `inkscape_status` con output schema, `SecurityPosture`, capabilities y paths redactados.
-- [ ] `F01-T28` Probar stdio real con `versionNegotiation` fijado a `2026-07-28`, una pasada legacy soportada y stdout exclusivamente MCP.
+- [x] `F01-T25` Crear `buildServer()` y entrypoint `serveStdio(() => buildServer())` mínimos con SDK v2; el paquete v2 por sí solo no demuestra negociación MCP 2026.
+- [x] `F01-T26` Establecer el patrón para que cada fase añada sus tools al catálogo estable y determinista.
+- [x] `F01-T27` Implementar/registrar tool `inkscape_status` con output schema, `SecurityPosture`, capabilities y paths redactados.
+- [x] `F01-T28` Probar stdio real con `versionNegotiation` fijado a `2026-07-28`, una pasada legacy soportada y stdout exclusivamente MCP.
 
 #### Puerta F01
 

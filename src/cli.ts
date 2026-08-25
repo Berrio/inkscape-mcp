@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 import packageMetadata from "../package.json" with { type: "json" };
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
 import { loadConfigFromCli } from "./config/index.js";
 import { formatDoctor, runDoctor } from "./doctor/index.js";
+import { buildServer } from "./server/index.js";
 
 const usage = `inkscape-mcp ${packageMetadata.version}
 
@@ -12,7 +14,7 @@ Usage:
   inkscape-mcp --version
   inkscape-mcp --doctor [--json] [configuración]
 
-This pre-alpha binary has no running MCP server yet.`;
+With no command, it serves MCP through stdio.`;
 
 const argumentsList = process.argv.slice(2);
 const [argument] = argumentsList;
@@ -39,8 +41,20 @@ if (argument === "--help" || argument === "-h") {
     process.exitCode = 1;
   }
 } else {
-  process.stderr.write(
-    "inkscape-mcp is not implemented yet. Run with --help.\n",
-  );
-  process.exitCode = 1;
+  try {
+    const config = await loadConfigFromCli(argumentsList);
+    if (config.transport !== "stdio") {
+      throw new Error("HTTP transport is not implemented yet");
+    }
+    serveStdio(() => buildServer(config), {
+      legacy: "serve",
+      onerror: (error) =>
+        process.stderr.write(`MCP stdio error: ${error.message}\n`),
+    });
+  } catch (error: unknown) {
+    process.stderr.write(
+      `${error instanceof Error ? error.message : "Unable to start MCP server"}\n`,
+    );
+    process.exitCode = 1;
+  }
 }

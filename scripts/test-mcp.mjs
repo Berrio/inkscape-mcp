@@ -123,9 +123,36 @@ try {
   if (preflight.isError || preflight.structuredContent?.valid !== true) {
     throw new Error("document_preflight did not validate the generated SVG");
   }
+  const pageAdded = await workspaceClient.callTool({
+    arguments: {
+      action: "add",
+      expectedRevision: resizedRevision,
+      page: { height: 210, id: "page_back", width: 148, x: 160, y: 0 },
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_pages",
+  });
+  if (pageAdded.isError || pageAdded.structuredContent?.pages?.length !== 1) {
+    throw new Error("document_pages did not add an explicit Inkscape page");
+  }
+  const pagesRevision = pageAdded.structuredContent?.revision;
+  if (typeof pagesRevision !== "string") {
+    throw new Error("document_pages did not return a revision");
+  }
+  const pages = await workspaceClient.callTool({
+    arguments: { action: "list", path: "a4.svg", workspaceId: workspace.id },
+    name: "document_pages",
+  });
+  if (
+    pages.isError ||
+    pages.structuredContent?.pages?.[0]?.id !== "page_back"
+  ) {
+    throw new Error("document_pages did not list its stable page ID");
+  }
   const exported = await workspaceClient.callTool({
     arguments: {
-      expectedRevision: resizedRevision,
+      expectedRevision: pagesRevision,
       outputPath: "a4.png",
       path: "a4.svg",
       width: 400,
@@ -138,7 +165,7 @@ try {
   }
   const pdf = await workspaceClient.callTool({
     arguments: {
-      expectedRevision: resizedRevision,
+      expectedRevision: pagesRevision,
       outputPath: "a4.pdf",
       path: "a4.svg",
       pdfVersion: "1.5",
@@ -151,7 +178,7 @@ try {
   }
   const plainSvg = await workspaceClient.callTool({
     arguments: {
-      expectedRevision: resizedRevision,
+      expectedRevision: pagesRevision,
       flavor: "plain",
       outputPath: "a4-plain.svg",
       path: "a4.svg",

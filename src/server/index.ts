@@ -6,11 +6,16 @@ import { z } from "zod";
 import packageMetadata from "../../package.json" with { type: "json" };
 import { assertDocumentWorkspace, type ServerConfig } from "../config/index.js";
 import {
+  addSvgPage,
   createSvgDocument,
+  deleteSvgPage,
   inspectSvgSettings,
+  listSvgPages,
   parseViewportLength,
   preflightSvg,
+  reorderSvgPages,
   resizePageOnlySvg,
+  updateSvgPage,
 } from "../documents/index.js";
 import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
@@ -42,6 +47,14 @@ const statusSchema = z.object({
     workspaceReady: z.boolean(),
   }),
   workspaceReady: z.boolean(),
+});
+const pageSchema = z.object({
+  height: z.number().finite().positive(),
+  id: z.string().regex(/^page_[A-Za-z0-9_-]{1,120}$/u),
+  label: z.string().min(1).max(256).optional(),
+  width: z.number().finite().positive(),
+  x: z.number().finite(),
+  y: z.number().finite(),
 });
 
 export function buildServer(config: ServerConfig): McpServer {
@@ -323,6 +336,129 @@ export function buildServer(config: ServerConfig): McpServer {
         backupCreated: result.backupPath !== undefined,
         revision: result.revision,
         warnings: resized.warnings,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_pages",
+    {
+      description:
+        "Lists or safely changes explicit Inkscape 1.4 pages by stable page ID. Mutations require the current document revision.",
+      inputSchema: z.object({
+        action: z.enum(["list", "add", "update", "delete", "reorder"]),
+        expectedRevision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/u)
+          .optional(),
+        page: z
+          .object({
+            height: z.number().finite().positive(),
+            id: z
+              .string()
+              .regex(/^page_[A-Za-z0-9_-]{1,120}$/u)
+              .optional(),
+            label: z.string().min(1).max(256).optional(),
+            width: z.number().finite().positive(),
+            x: z.number().finite(),
+            y: z.number().finite(),
+          })
+          .optional(),
+        pageId: z
+          .string()
+          .regex(/^page_[A-Za-z0-9_-]{1,120}$/u)
+          .optional(),
+        pageIds: z
+          .array(z.string().regex(/^page_[A-Za-z0-9_-]{1,120}$/u))
+          .max(1_000)
+          .optional(),
+        patch: z
+          .object({
+            height: z.number().finite().positive().optional(),
+            label: z.string().min(1).max(256).optional(),
+            width: z.number().finite().positive().optional(),
+            x: z.number().finite().optional(),
+            y: z.number().finite().optional(),
+          })
+          .optional(),
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        pages: z.array(pageSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({
+      action,
+      expectedRevision,
+      page,
+      pageId,
+      pageIds,
+      patch,
+      path,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const currentRevision = await sha256File(document.absolutePath);
+      if (action === "list") {
+        if (
+          expectedRevision !== undefined &&
+          expectedRevision !== currentRevision
+        )
+          throw new Error("Document revision no longer matches");
+        const output = {
+          pages: listSvgPages(source),
+          revision: currentRevision,
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(output) }],
+          structuredContent: output,
+        };
+      }
+      if (!expectedRevision)
+        throw new Error("Page mutations require expectedRevision");
+      let changed: string;
+      switch (action) {
+        case "add":
+          if (!page) throw new Error("Adding a page requires page");
+          changed = addSvgPage(source, page).svg;
+          break;
+        case "update":
+          if (!pageId || !patch)
+            throw new Error("Updating a page requires pageId and patch");
+          changed = updateSvgPage(source, pageId, patch).svg;
+          break;
+        case "delete":
+          if (!pageId) throw new Error("Deleting a page requires pageId");
+          changed = deleteSvgPage(source, pageId);
+          break;
+        case "reorder":
+          if (!pageIds) throw new Error("Reordering pages requires pageIds");
+          changed = reorderSvgPages(source, pageIds);
+          break;
+        default:
+          throw new Error("Unsupported page action");
+      }
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        pages: listSvgPages(changed),
+        revision: committed.revision,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],

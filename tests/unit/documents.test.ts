@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  addSvgPage,
   createSvgDocument,
+  deleteSvgPage,
   inspectSvgSettings,
+  listSvgPages,
+  reorderSvgPages,
   resizePageOnlySvg,
+  updateSvgPage,
 } from "../../src/documents/index.js";
 import { preflightSvg } from "../../src/documents/index.js";
 const mm = (value: number) => ({ unit: "mm" as const, value });
@@ -42,5 +47,38 @@ describe("basic SVG documents", () => {
       "SVG_ACTIVE_CONTENT",
       "SVG_EXTERNAL_RESOURCE",
     ]);
+  });
+  it("round-trips explicit Inkscape pages by stable ID", () => {
+    const source = createSvgDocument({
+      page: { width: mm(210), height: mm(297) },
+    });
+    const first = addSvgPage(source, {
+      height: 297,
+      id: "page-a",
+      width: 210,
+      x: 0,
+      y: 0,
+    });
+    const second = addSvgPage(first.svg, {
+      height: 210,
+      id: "page-b",
+      label: "Back",
+      width: 148,
+      x: 220,
+      y: 0,
+    });
+    const updated = updateSvgPage(second.svg, "page-b", { x: 230 });
+    expect(listSvgPages(updated.svg)).toEqual([
+      { height: 297, id: "page-a", width: 210, x: 0, y: 0 },
+      { height: 210, id: "page-b", label: "Back", width: 148, x: 230, y: 0 },
+    ]);
+    expect(
+      listSvgPages(reorderSvgPages(updated.svg, ["page-b", "page-a"])).map(
+        (page) => page.id,
+      ),
+    ).toEqual(["page-b", "page-a"]);
+    expect(
+      listSvgPages(deleteSvgPage(updated.svg, "page-a")).map((page) => page.id),
+    ).toEqual(["page-b"]);
   });
 });

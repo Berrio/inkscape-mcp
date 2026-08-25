@@ -7,3 +7,13 @@ export {
   type DocumentSpec,
 } from "./basic.js";
 export { preflightSvg, type PreflightIssue } from "./preflight.js";
+export {
+  addSvgPage,
+  deleteSvgPage,
+  listSvgPages,
+  reorderSvgPages,
+  updateSvgPage,
+  type NewSvgPage,
+  type SvgPage,
+  type SvgPagePatch,
+} from "./pages.js";

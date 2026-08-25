@@ -1,6 +1,6 @@
 # Plan maestro de implementación — Inkscape MCP
 
-> Estado: **plan listo para revisión/ejecución futura; implementación aún no iniciada**
+> Estado: **F00-WP01 completado; el servidor MCP aún no tiene implementación funcional**
 > Fecha de la auditoría: **2026-08-25**
 > Carpeta: `C:\Users\LENOVO\Documents\Repos\InKscape-MCP`
 > Prioridad del producto: tamaños de documento/página y exportación fiable a PNG, PDF y SVG; después, la mayor cobertura práctica posible de diseño vectorial.
@@ -1360,7 +1360,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F00-T04` Crear README mínimo que apunte a este plan y declare estado pre-alpha.
 - [x] `F00-T05` Crear `LICENSE`, `SECURITY.md`, `CHANGELOG.md` y `CONTRIBUTING.md` según decisiones autorizadas.
 - [x] `F00-T06` Crear `docs/progress/F00.md`.
-- [ ] `F00-T07` Hacer commit baseline solo si el usuario autorizó commits.
+- [x] `F00-T07` Hacer commit baseline solo si el usuario autorizó commits. — Commit inicial `f95a925`, autorizado por el usuario el 2026-08-25.
 
 #### Toolchain
 

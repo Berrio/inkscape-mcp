@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
+    "@xmldom/xmldom": "^0.9.12",
     "zod": "4.4.3"
   },
   "devDependencies": {

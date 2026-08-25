@@ -1523,9 +1523,9 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### XML/SVG
 
-- [ ] `F02-T15` Evaluar al menos dos parsers/DOM por fidelidad, seguridad, namespaces y licencia.
-- [ ] `F02-T16` Elegir parser mediante ADR y corpus de round-trip.
-- [ ] `F02-T17` Rechazar DTD/XXE/entity expansion y límites estructurales.
+- [x] `F02-T15` Evaluar al menos dos parsers/DOM por fidelidad, seguridad, namespaces y licencia.
+- [x] `F02-T16` Elegir parser mediante ADR y corpus de round-trip.
+- [x] `F02-T17` Rechazar DTD/XXE/entity expansion y límites estructurales.
 - [ ] `F02-T18` Implementar inspección/sanitización de script/events/foreignObject/URLs externas y orden de confianza `strict < preserve-local < trusted`; el ceiling es solo config de arranque y ninguna tool puede elevarlo.
 - [ ] `F02-T19` Preservar namespaces, `defs`, metadata, comentarios relevantes y referencias.
 - [ ] `F02-T20` Implementar asignación/normalización de IDs sin romper `href`, CSS, clip/mask/filter/markers.

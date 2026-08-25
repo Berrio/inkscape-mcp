@@ -102,6 +102,20 @@ try {
   if (typeof resizedRevision !== "string") {
     throw new Error("document_resize did not return a revision");
   }
+  const inspected = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: resizedRevision,
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_inspect",
+  });
+  if (
+    inspected.isError ||
+    inspected.structuredContent?.viewBox?.width !== 148
+  ) {
+    throw new Error("document_inspect did not report the resized viewBox");
+  }
   const exported = await workspaceClient.callTool({
     arguments: {
       expectedRevision: resizedRevision,

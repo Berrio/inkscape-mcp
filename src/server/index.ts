@@ -15,7 +15,11 @@ import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import { verifyPdf, verifyPng, verifySvg } from "../export/index.js";
 import { ProcessRunner } from "../runner/index.js";
-import { AtomicFileStore, ScratchManager } from "../storage/index.js";
+import {
+  AtomicFileStore,
+  ScratchManager,
+  sha256File,
+} from "../storage/index.js";
 import { WorkspaceService } from "../workspace/index.js";
 
 const statusSchema = z.object({
@@ -181,6 +185,50 @@ export function buildServer(config: ServerConfig): McpServer {
         documentPath: target.relativePath,
         revision: result.revision,
       };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_inspect",
+    {
+      description:
+        "Reads SVG viewport dimensions, viewBox and revision from an authorized document without mutating it.",
+      inputSchema: z.object({
+        expectedRevision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/u)
+          .optional(),
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        height: z.string(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        viewBox: z.object({
+          height: z.number(),
+          width: z.number(),
+          x: z.number(),
+          y: z.number(),
+        }),
+        width: z.string(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ expectedRevision, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const document = await workspace.resolveExisting(workspaceId, path);
+      const revision = await sha256File(document.absolutePath);
+      if (expectedRevision !== undefined && expectedRevision !== revision)
+        throw new Error("Document revision no longer matches");
+      const settings = inspectSvgSettings(
+        await readFile(document.absolutePath, "utf8"),
+      );
+      const output = { ...settings, revision };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

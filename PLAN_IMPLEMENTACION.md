@@ -1683,7 +1683,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F05-T22` Implementar selection-only como documento autónomo mediante cierre transitivo de `defs`, `href`, CSS heredado/calculado, fuentes e imágenes; detectar ciclos, remapear IDs/refs y declarar pérdidas si se opta por aplanar estilos.
 - [x] `F05-T23` Implementar text-to-path opcional con warning.
 - [x] `F05-T24` Verificar XML, namespaces, refs, IDs y política externa. — `verifySvg` exige namespace SVG explícito, `viewBox` válido, IDs públicos únicos y cierre de `href`, ARIA y `url(#id)` tanto en atributos como CSS; la sanitización preserve-local rechaza recursos externos antes de publicar.
-- [ ] `F05-T25` Evaluar SVGZ real; gatear si no existe soporte validado.
+- [x] `F05-T25` Evaluar SVGZ real; gatear si no existe soporte validado. — Sonda directa de Inkscape 1.4.4 (`--help`) lista `svg,png,ps,eps,pdf,emf,wmf,xaml` y no `svgz`; ninguna tool pública ofrece SVGZ ni se presenta la extensión como soporte disponible.
 
 #### Batch
 

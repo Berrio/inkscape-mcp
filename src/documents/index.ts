@@ -54,7 +54,10 @@ export {
   listSvgPages,
   reorderSvgPages,
   updateSvgPage,
+  validateSvgPageLayout,
   type NewSvgPage,
+  type PageObjectBounds,
   type SvgPage,
+  type SvgPageLayoutValidation,
   type SvgPagePatch,
 } from "./pages.js";

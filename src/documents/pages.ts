@@ -33,9 +33,52 @@ export type SvgPagePatch = {
   x?: number | undefined;
   y?: number | undefined;
 };
+export type PageObjectBounds = {
+  height: number;
+  id: string;
+  width: number;
+  x: number;
+  y: number;
+};
+export type SvgPageLayoutValidation = {
+  emptyPageIds: readonly string[];
+  outsideObjectIds: readonly string[];
+  overlaps: readonly {
+    area: { height: number; width: number; x: number; y: number };
+    pageIds: readonly [string, string];
+  }[];
+};
 
 export function listSvgPages(source: string): readonly SvgPage[] {
   return pageElements(parseDocument(source)).map(readPage);
+}
+
+/** Validates explicit page rectangles against visual object bounds supplied by a trusted adapter. */
+export function validateSvgPageLayout(
+  pages: readonly SvgPage[],
+  objects: readonly PageObjectBounds[],
+): SvgPageLayoutValidation {
+  const overlaps: {
+    area: { height: number; width: number; x: number; y: number };
+    pageIds: [string, string];
+  }[] = [];
+  for (let left = 0; left < pages.length; left += 1)
+    for (let right = left + 1; right < pages.length; right += 1) {
+      const first = pages[left]!;
+      const second = pages[right]!;
+      const area = intersection(first, second);
+      if (area) overlaps.push({ area, pageIds: [first.id, second.id] });
+    }
+  return {
+    emptyPageIds: pages
+      .filter((page) => !objects.some((object) => intersection(page, object)))
+      .map((page) => page.id),
+    outsideObjectIds: objects
+      .filter((object) => !pages.some((page) => intersection(page, object)))
+      .map((object) => object.id)
+      .sort(),
+    overlaps,
+  };
 }
 
 export function addSvgPage(
@@ -184,4 +227,17 @@ function requireRoot(document: XmlDocument): XmlElement {
 }
 function serialize(document: XmlDocument): string {
   return new XMLSerializer().serializeToString(document);
+}
+
+function intersection(
+  first: { height: number; width: number; x: number; y: number },
+  second: { height: number; width: number; x: number; y: number },
+): { height: number; width: number; x: number; y: number } | undefined {
+  const left = Math.max(first.x, second.x);
+  const top = Math.max(first.y, second.y);
+  const right = Math.min(first.x + first.width, second.x + second.width);
+  const bottom = Math.min(first.y + first.height, second.y + second.height);
+  return right > left && bottom > top
+    ? { height: bottom - top, width: right - left, x: left, y: top }
+    : undefined;
 }

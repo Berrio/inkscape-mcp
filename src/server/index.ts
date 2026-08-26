@@ -32,8 +32,10 @@ import {
   resizePageOnlySvg,
   updateSvgPage,
   updateDocumentDisplaySettings,
+  validateSvgPageLayout,
 } from "../documents/index.js";
 import { nativeVisualBoundsDescriptor } from "../geometry/index.js";
+import { summarizeSvgDiff } from "../svg/index.js";
 import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import { verifyPdf, verifyPng, verifySvg } from "../export/index.js";
@@ -1349,6 +1351,7 @@ export function buildServer(config: ServerConfig): McpServer {
           ])
           .optional(),
         expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        dryRun: z.boolean().default(false),
         height: z.number().finite().positive(),
         mode: z
           .enum([
@@ -1365,6 +1368,40 @@ export function buildServer(config: ServerConfig): McpServer {
       }),
       outputSchema: z.object({
         backupCreated: z.boolean(),
+        dryRun: z.boolean(),
+        predicted: z
+          .object({
+            diff: z.object({
+              addedIds: z.array(z.string()),
+              afterElementCount: z.number().int().nonnegative(),
+              ambiguousIds: z.array(z.string()),
+              beforeElementCount: z.number().int().nonnegative(),
+              changedIds: z.array(z.string()),
+              removedIds: z.array(z.string()),
+            }),
+            page: z.object({
+              height: viewportLengthSchema,
+              viewBox: z.object({
+                height: z.number().positive(),
+                width: z.number().positive(),
+                x: z.number().finite(),
+                y: z.number().finite(),
+              }),
+              width: viewportLengthSchema,
+            }),
+            transform: z
+              .tuple([
+                z.number().finite(),
+                z.number().finite(),
+                z.number().finite(),
+                z.number().finite(),
+                z.number().finite(),
+                z.number().finite(),
+              ])
+              .optional(),
+            warnings: z.array(z.string()),
+          })
+          .optional(),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
         warnings: z.array(z.string()),
       }),
@@ -1373,6 +1410,7 @@ export function buildServer(config: ServerConfig): McpServer {
     async ({
       anchor,
       expectedRevision,
+      dryRun,
       height,
       mode,
       path,
@@ -1384,6 +1422,9 @@ export function buildServer(config: ServerConfig): McpServer {
       const workspace = await workspaces();
       const document = await workspace.resolveExisting(workspaceId, path);
       const source = await readFile(document.absolutePath, "utf8");
+      const currentRevision = await sha256File(document.absolutePath);
+      if (currentRevision !== expectedRevision)
+        throw new Error("Document revision no longer matches");
       const settings = inspectSvgSettings(source);
       const currentPage = {
         width: parseViewportLength(settings.width),
@@ -1397,6 +1438,31 @@ export function buildServer(config: ServerConfig): McpServer {
         mode === "page_only"
           ? resizePageOnlySvg(source, currentPage, targetPage, anchor)
           : resizeContentSvg(source, currentPage, targetPage, mode, anchor);
+      if (dryRun) {
+        const predictedSettings = inspectSvgSettings(resized.svg);
+        const output = {
+          backupCreated: false,
+          dryRun: true,
+          predicted: {
+            diff: summarizeSvgDiff(source, resized.svg),
+            page: {
+              height: parseViewportLength(predictedSettings.height),
+              viewBox: predictedSettings.viewBox,
+              width: parseViewportLength(predictedSettings.width),
+            },
+            ...(resized.transform === undefined
+              ? {}
+              : { transform: resized.transform }),
+            warnings: resized.warnings,
+          },
+          revision: currentRevision,
+          warnings: resized.warnings,
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(output) }],
+          structuredContent: output,
+        };
+      }
       const result = await fileStore.commit({
         contents: Buffer.from(resized.svg),
         expectedOutputRevision: expectedRevision,
@@ -1406,6 +1472,7 @@ export function buildServer(config: ServerConfig): McpServer {
       });
       const output = {
         backupCreated: result.backupPath !== undefined,
+        dryRun: false,
         revision: result.revision,
         warnings: resized.warnings,
       };
@@ -1738,6 +1805,80 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         pages: listSvgPages(changed),
         revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_page_validate",
+    {
+      description:
+        "Validates explicit Inkscape page overlap, empty pages and objects outside every page using native visual bounds.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        boundsFidelity: z.literal("partial"),
+        pages: z.array(pageSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        validation: z.object({
+          emptyPageIds: z.array(z.string()),
+          outsideObjectIds: z.array(z.string()),
+          overlaps: z.array(
+            z.object({
+              area: z.object({
+                height: z.number().positive(),
+                width: z.number().positive(),
+                x: z.number().finite(),
+                y: z.number().finite(),
+              }),
+              pageIds: z.tuple([z.string(), z.string()]),
+            }),
+          ),
+        }),
+        warnings: z.array(z.string()),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ expectedRevision, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const currentRevision = await sha256File(document.absolutePath);
+      if (currentRevision !== expectedRevision)
+        throw new Error("Document revision no longer matches");
+      const pages = listSvgPages(source);
+      const nativeBounds = await queryNativeBounds({
+        config,
+        documentPath: document.absolutePath,
+        expectedRevision,
+        runner,
+        scratch,
+        workspaceRoot: document.workspaceRoot,
+      });
+      const validation = validateSvgPageLayout(
+        pages,
+        [...nativeBounds.entries()].map(([id, bounds]) => ({ id, ...bounds })),
+      );
+      const output = {
+        boundsFidelity: "partial" as const,
+        pages,
+        revision: currentRevision,
+        validation,
+        warnings:
+          pages.length === 0
+            ? ["NO_EXPLICIT_INKSCAPE_PAGES"]
+            : ["OBJECT_VALIDATION_USES_VISUAL_BOUNDS"],
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],

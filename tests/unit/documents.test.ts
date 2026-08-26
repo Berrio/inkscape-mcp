@@ -24,6 +24,7 @@ import {
   updateDocumentDisplaySettings,
   transformSvgShapes,
   updateSvgShapes,
+  validateSvgPageLayout,
 } from "../../src/documents/index.js";
 import { preflightSvg } from "../../src/documents/index.js";
 const mm = (value: number) => ({ unit: "mm" as const, value });
@@ -341,6 +342,30 @@ describe("basic SVG documents", () => {
     expect(
       listSvgPages(deleteSvgPage(updated.svg, "page-a")).map((page) => page.id),
     ).toEqual(["page-b"]);
+  });
+  it("reports overlapping and empty pages plus objects outside every page", () => {
+    expect(
+      validateSvgPageLayout(
+        [
+          { height: 20, id: "page-a", width: 20, x: 0, y: 0 },
+          { height: 20, id: "page-b", width: 20, x: 10, y: 0 },
+          { height: 10, id: "page-empty", width: 10, x: 40, y: 0 },
+        ],
+        [
+          { height: 5, id: "inside", width: 5, x: 1, y: 1 },
+          { height: 5, id: "outside", width: 5, x: 70, y: 1 },
+        ],
+      ),
+    ).toEqual({
+      emptyPageIds: ["page-b", "page-empty"],
+      outsideObjectIds: ["outside"],
+      overlaps: [
+        {
+          area: { height: 20, width: 10, x: 10, y: 0 },
+          pageIds: ["page-a", "page-b"],
+        },
+      ],
+    });
   });
   it("reads defaults and persists typed Inkscape document display settings", () => {
     const source = createSvgDocument({

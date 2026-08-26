@@ -257,6 +257,30 @@ try {
   if (resizedAgain.isError || typeof resizedAgainRevision !== "string") {
     throw new Error("document_resize did not resize a restored document");
   }
+  const resizeDryRun = await workspaceClient.callTool({
+    arguments: {
+      dryRun: true,
+      expectedRevision: resizedAgainRevision,
+      height: 100,
+      mode: "scale_content_contain",
+      path: "a4.svg",
+      unit: "mm",
+      width: 100,
+      workspaceId: workspace.id,
+    },
+    name: "document_resize",
+  });
+  if (
+    resizeDryRun.isError ||
+    resizeDryRun.structuredContent?.dryRun !== true ||
+    !resizeDryRun.structuredContent?.predicted?.transform ||
+    resizeDryRun.structuredContent?.revision !== resizedAgainRevision ||
+    !(await readFile(join(workspaceRoot, "a4.svg"), "utf8")).includes(
+      'viewBox="0 0 148 210"',
+    )
+  ) {
+    throw new Error("document_resize dryRun did not predict without mutation");
+  }
   const elements = await workspaceClient.callTool({
     arguments: {
       elements: [
@@ -492,6 +516,24 @@ try {
   const pagesRevision = pageAdded.structuredContent?.revision;
   if (typeof pagesRevision !== "string") {
     throw new Error("document_pages did not return a revision");
+  }
+  const pageValidation = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: pagesRevision,
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_page_validate",
+  });
+  if (
+    pageValidation.isError ||
+    pageValidation.structuredContent?.boundsFidelity !== "partial" ||
+    !pageValidation.structuredContent?.validation?.outsideObjectIds?.includes(
+      "demo_path",
+    ) ||
+    (pageValidation.structuredContent?.validation?.overlaps?.length ?? 0) < 1
+  ) {
+    throw new Error("document_page_validate did not report page layout risks");
   }
   const pages = await workspaceClient.callTool({
     arguments: { action: "list", path: "a4.svg", workspaceId: workspace.id },

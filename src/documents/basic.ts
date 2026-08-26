@@ -139,7 +139,11 @@ export function resizePageOnlySvg(
   currentPage: PageSize,
   targetPage: PageSize,
   anchor: ResizeAnchor = "top_left",
-): { svg: string; warnings: readonly string[] } {
+): {
+  svg: string;
+  transform?: readonly [number, number, number, number, number, number];
+  warnings: readonly string[];
+} {
   assertMutationSafe(source);
   const settings = inspectSvgSettings(source);
   assertResizableViewport(settings);
@@ -174,7 +178,11 @@ export function resizeContentSvg(
     "scale_content_contain" | "scale_content_cover" | "scale_content_stretch"
   >,
   anchor?: ResizeAnchor,
-): { svg: string; warnings: readonly string[] } {
+): {
+  svg: string;
+  transform: readonly [number, number, number, number, number, number];
+  warnings: readonly string[];
+} {
   assertMutationSafe(source);
   const settings = inspectSvgSettings(source);
   assertResizableViewport(settings);
@@ -227,6 +235,7 @@ export function resizeContentSvg(
   );
   return {
     svg: new XMLSerializer().serializeToString(document),
+    transform,
     warnings:
       renderable.length === 0
         ? [...settings.warnings, ...plan.warnings, "NO_RENDERABLE_CONTENT"]

@@ -32,12 +32,14 @@ export {
 } from "./elements.js";
 export {
   createSvgShapes,
+  duplicateSvgShape,
   arrangeSvgShapes,
   groupSvgShapes,
   deleteSvgShapes,
   transformSvgShapes,
   updateSvgShapes,
   type ElementGeometryPatch,
+  type ElementDuplicateRequest,
   type ElementArrangeAction,
   type ElementGroupAction,
   type ElementTransform,

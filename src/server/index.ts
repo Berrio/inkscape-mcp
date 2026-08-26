@@ -17,6 +17,7 @@ import {
   arrangeSvgShapes,
   groupSvgShapes,
   deleteSvgShapes,
+  duplicateSvgShape,
   transformSvgShapes,
   updateSvgShapes,
   deleteSvgPage,
@@ -1004,6 +1005,67 @@ export function buildServer(config: ServerConfig): McpServer {
         action: request.action,
         backupCreated: committed.backupPath !== undefined,
         ids: grouped.ids,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_duplicate",
+    {
+      description:
+        "Duplicates one simple SVG element independently or creates an explicit SVG use clone. Descendant IDs are rejected for independent copies until a remapping operation is requested.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          mode: z.enum(["copy", "use"]),
+          newId: shapeIdSchema,
+          parentId: shapeIdSchema.optional(),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        id: shapeIdSchema,
+        mode: z.enum(["copy", "use"]),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({
+      expectedRevision,
+      id,
+      mode,
+      newId,
+      parentId,
+      path,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const duplicated = duplicateSvgShape(
+        await readFile(document.absolutePath, "utf8"),
+        { id, mode, newId, ...(parentId === undefined ? {} : { parentId }) },
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(duplicated.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        id: duplicated.id,
+        mode,
         revision: committed.revision,
       };
       return {

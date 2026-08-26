@@ -7,6 +7,7 @@ import {
   createSvgDocument,
   changePageOrientationSvg,
   createSvgShapes,
+  duplicateSvgShape,
   groupSvgShapes,
   fitPageToBoundsSvg,
   deleteSvgPage,
@@ -682,6 +683,25 @@ describe("basic SVG documents", () => {
       groupSvgShapes(grouped.svg, { action: "ungroup", groupId: "shape_group" })
         .svg,
     ).not.toContain('id="shape_group"');
+    const copied = duplicateSvgShape(created.svg, {
+      id: "rect_1",
+      mode: "copy",
+      newId: "rect_copy",
+    });
+    expect(copied.svg).toContain('id="rect_copy"');
+    const cloned = duplicateSvgShape(copied.svg, {
+      id: "rect_1",
+      mode: "use",
+      newId: "rect_use",
+    });
+    expect(cloned.svg).toContain('<use id="rect_use" href="#rect_1"/>');
+    expect(() =>
+      duplicateSvgShape(created.svg, {
+        id: "layer_main",
+        mode: "copy",
+        newId: "layer_copy",
+      }),
+    ).toThrow("descendant IDs");
   });
 
   it("creates a bounded standard SVG spiral path", () => {

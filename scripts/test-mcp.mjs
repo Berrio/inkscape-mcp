@@ -707,9 +707,45 @@ try {
   if (grouped.isError || typeof groupedRevision !== "string") {
     throw new Error("elements_group did not create a typed SVG group");
   }
-  const inspected = await workspaceClient.callTool({
+  const copied = await workspaceClient.callTool({
     arguments: {
       expectedRevision: groupedRevision,
+      id: "demo_rect",
+      mode: "copy",
+      newId: "demo_rect_copy",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_duplicate",
+  });
+  const copiedRevision = copied.structuredContent?.revision;
+  if (
+    copied.isError ||
+    copied.structuredContent?.id !== "demo_rect_copy" ||
+    typeof copiedRevision !== "string"
+  )
+    throw new Error("elements_duplicate did not create an independent copy");
+  const cloned = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: copiedRevision,
+      id: "demo_rect",
+      mode: "use",
+      newId: "demo_rect_use",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_duplicate",
+  });
+  const duplicatedRevision = cloned.structuredContent?.revision;
+  if (
+    cloned.isError ||
+    cloned.structuredContent?.id !== "demo_rect_use" ||
+    typeof duplicatedRevision !== "string"
+  )
+    throw new Error("elements_duplicate did not create a use clone");
+  const inspected = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: duplicatedRevision,
       includeVisualBounds: true,
       path: "a4.svg",
       workspaceId: workspace.id,
@@ -767,7 +803,7 @@ try {
   const pageAdded = await workspaceClient.callTool({
     arguments: {
       action: "add",
-      expectedRevision: groupedRevision,
+      expectedRevision: duplicatedRevision,
       page: { height: 210, id: "page_back", width: 148, x: 160, y: 0 },
       path: "a4.svg",
       workspaceId: workspace.id,

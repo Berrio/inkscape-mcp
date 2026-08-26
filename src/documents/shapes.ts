@@ -81,6 +81,12 @@ export type ElementUpdate = {
 };
 export type ElementArrangeAction = "back" | "front" | "lower" | "raise";
 export type ElementGroupAction = "group" | "ungroup";
+export type ElementDuplicateRequest = {
+  id: string;
+  mode: "copy" | "use";
+  newId: string;
+  parentId?: string | undefined;
+};
 type ShapeBase = {
   id?: string | undefined;
   parentId?: string | undefined;
@@ -325,6 +331,57 @@ export function updateSvgShapes(
   }
   return {
     ids: updates.map((update) => update.id),
+    svg: new XMLSerializer().serializeToString(document),
+  };
+}
+
+/** Duplicates one simple element or creates an explicit SVG <use> clone. */
+export function duplicateSvgShape(
+  source: string,
+  request: ElementDuplicateRequest,
+): { id: string; svg: string } {
+  if (!SAFE_ID.test(request.id) || !SAFE_ID.test(request.newId))
+    throw new Error("Shape ID is invalid");
+  if (request.parentId !== undefined && !SAFE_ID.test(request.parentId))
+    throw new Error("Shape parent ID is invalid");
+  const document = parseSafeDocument(source);
+  const root = document.documentElement;
+  if (!root) throw new Error("SVG root is missing");
+  const elements = Array.from(document.getElementsByTagName("*"));
+  const original = elements.find(
+    (element) => element.getAttribute("id") === request.id,
+  );
+  if (!original) throw new Error("Shape ID does not exist");
+  if (elements.some((element) => element.getAttribute("id") === request.newId))
+    throw new Error("Shape ID already exists");
+  const parent =
+    request.parentId === undefined
+      ? parentElement(original)
+      : resolveParent(document, root, request.parentId);
+  if (!parent) throw new Error("Shape parent is missing");
+  if (request.mode === "copy") {
+    const descendantIds = Array.from(original.getElementsByTagName("*")).some(
+      (element) => element.hasAttribute("id"),
+    );
+    if (descendantIds)
+      throw new Error(
+        "Copying an element subtree with descendant IDs requires ID remapping",
+      );
+    const copy = original.cloneNode(true) as XmlElement;
+    copy.setAttribute("id", request.newId);
+    if (parent === parentElement(original))
+      parent.insertBefore(copy, original.nextSibling);
+    else parent.appendChild(copy);
+  } else {
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("id", request.newId);
+    use.setAttribute("href", `#${request.id}`);
+    if (parent === parentElement(original))
+      parent.insertBefore(use, original.nextSibling);
+    else parent.appendChild(use);
+  }
+  return {
+    id: request.newId,
     svg: new XMLSerializer().serializeToString(document),
   };
 }

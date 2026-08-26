@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" width="100mm" height="50mm" viewBox="0 0 100 50">
   <sodipodi:namedview id="namedview1">
     <inkscape:page id="page_back" x="100" y="0" width="100" height="50" inkscape:label="Back" />
-    <inkscape:page id="page_extra" x="200" y="0" width="100" height="50" inkscape:label="Extra" />
+    <inkscape:page id="page_extra" x="200" y="0" width="50" height="50" inkscape:label="Extra" />
   </sodipodi:namedview>
   <rect x="0" y="0" width="100" height="50" fill="#ff0000" />
   <rect x="100" y="0" width="100" height="50" fill="#0000ff" />
-  <rect x="200" y="0" width="100" height="50" fill="#00aa00" />
+  <rect x="200" y="0" width="50" height="50" fill="#00aa00" />
 </svg>

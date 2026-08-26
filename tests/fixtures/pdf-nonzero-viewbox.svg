@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" width="100mm" height="50mm" viewBox="20 30 100 50">
   <sodipodi:namedview id="namedview1">
-    <inkscape:page id="page-offset" x="20" y="30" width="100" height="50" inkscape:label="Offset" />
+    <inkscape:page id="page_offset" x="20" y="30" width="100" height="50" inkscape:label="Offset" />
   </sodipodi:namedview>
   <rect x="20" y="30" width="100" height="50" fill="#00aa00" />
 </svg>

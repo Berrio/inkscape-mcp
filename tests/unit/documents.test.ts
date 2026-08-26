@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addSvgPage,
   adjustPageMarginsSvg,
+  expandPdfMarginsSvg,
   arrangeSvgShapes,
   createSvgDocument,
   changePageOrientationSvg,
@@ -210,6 +211,23 @@ describe("basic SVG documents", () => {
     });
     expect(oriented.svg).toContain('id="keep"');
     expect(oriented.warnings).toContain("PAGE_ORIENTATION_CHANGED");
+  });
+  it("expands PDF margins only in an export copy", () => {
+    const source =
+      '<svg width="100mm" height="50mm" viewBox="0 0 100 50"><rect id="keep" x="10" y="10" width="20" height="20"/></svg>';
+    const result = expandPdfMarginsSvg(source, {
+      bottom: mm(4),
+      left: mm(5),
+      right: mm(6),
+      top: mm(3),
+    });
+    const viewBox = inspectSvgSettings(result.svg).viewBox;
+    expect(viewBox.width).toBeCloseTo(111);
+    expect(viewBox.height).toBeCloseTo(57);
+    expect(viewBox.x).toBeCloseTo(-5);
+    expect(viewBox.y).toBeCloseTo(-3);
+    expect(result.svg).toContain('id="keep" x="10" y="10"');
+    expect(result.warnings).toEqual(["PDF_MARGIN_EXPANDED_TEMPORARY"]);
   });
   it("refuses to resize SVG that needs sanitization", () => {
     expect(() =>

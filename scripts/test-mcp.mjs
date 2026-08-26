@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { Buffer } from "node:buffer";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,6 +11,8 @@ const server = {
   cwd: process.cwd(),
   stderr: "pipe",
 };
+const isWithin = (actual, expected, tolerance = 0.6) =>
+  Math.abs(actual - expected) <= tolerance;
 
 for (const versionNegotiation of [
   { mode: { pin: "2026-07-28" } },
@@ -818,6 +820,33 @@ try {
   ) {
     throw new Error("export_pdf did not publish an inspectable PDF");
   }
+  const marginPdf = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: settingsRevision,
+      margin: {
+        bottom: { unit: "mm", value: 5 },
+        left: { unit: "mm", value: 5 },
+        right: { unit: "mm", value: 5 },
+        top: { unit: "mm", value: 5 },
+      },
+      outputPath: "a4-margin.pdf",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_pdf",
+  });
+  if (
+    marginPdf.isError ||
+    !isWithin(marginPdf.structuredContent?.mediaBoxes?.[0]?.width ?? 0, 624) ||
+    !isWithin(marginPdf.structuredContent?.mediaBoxes?.[0]?.height ?? 0, 871) ||
+    !marginPdf.structuredContent?.warnings?.includes(
+      "PDF_MARGIN_EXPANDED_TEMPORARY",
+    )
+  ) {
+    throw new Error(
+      "export_pdf did not verify its temporary PDF margin expansion",
+    );
+  }
   const latexPdf = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,
@@ -871,7 +900,12 @@ try {
   if (
     multipagePdf.isError ||
     multipagePdf.structuredContent?.pageCount !== 2 ||
-    multipagePdf.structuredContent?.strategy !== "full_document"
+    multipagePdf.structuredContent?.strategy !== "full_document" ||
+    !isWithin(
+      multipagePdf.structuredContent.mediaBoxes?.[0]?.width ?? 0,
+      284,
+    ) ||
+    !isWithin(multipagePdf.structuredContent.mediaBoxes?.[1]?.width ?? 0, 142)
   ) {
     throw new Error("export_pdf did not preserve a multipage PDF document");
   }
@@ -893,6 +927,107 @@ try {
     !subsetPdf.structuredContent?.warnings?.includes("PDF_SUBSET_PRUNED")
   ) {
     throw new Error("export_pdf did not create a pruned PDF subset");
+  }
+  const orderedSubsetPdf = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: multipageRevision,
+      outputPath: "multipage-reordered.pdf",
+      pageIds: ["page_extra", "page_back"],
+      path: "multipage.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_pdf",
+  });
+  if (
+    orderedSubsetPdf.isError ||
+    orderedSubsetPdf.structuredContent?.pageCount !== 2 ||
+    orderedSubsetPdf.structuredContent?.pageIds?.join(",") !==
+      "page_extra,page_back" ||
+    !isWithin(
+      orderedSubsetPdf.structuredContent.mediaBoxes?.[0]?.width ?? 0,
+      142,
+    ) ||
+    !isWithin(
+      orderedSubsetPdf.structuredContent.mediaBoxes?.[1]?.width ?? 0,
+      284,
+    )
+  ) {
+    throw new Error("export_pdf did not preserve the requested subset order");
+  }
+  await mkdir(join(workspaceRoot, "separate-pages"));
+  const separatePages = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: multipageRevision,
+      outputDirectory: "separate-pages",
+      pageIds: ["page_extra", "page_back"],
+      path: "multipage.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_pdf_pages",
+  });
+  if (
+    separatePages.isError ||
+    separatePages.structuredContent?.strategy !== "prune_each_page" ||
+    separatePages.structuredContent?.pages?.length !== 2 ||
+    separatePages.structuredContent.pages[0]?.outputPath !==
+      "separate-pages/page-002.pdf" ||
+    separatePages.structuredContent.pages[1]?.outputPath !==
+      "separate-pages/page-001.pdf" ||
+    separatePages.structuredContent.pages.some(
+      (page) =>
+        page.cropBox.width <= 0 ||
+        page.mediaBox.height <= 0 ||
+        page.mediaBox.width <= 0,
+    )
+  ) {
+    throw new Error("export_pdf_pages did not create deterministic PDFs");
+  }
+  await Promise.all(
+    ["page-001.pdf", "page-002.pdf"].map(async (name) => {
+      const bytes = await readFile(join(workspaceRoot, "separate-pages", name));
+      if (!bytes.subarray(0, 5).equals(Buffer.from("%PDF-")))
+        throw new Error("export_pdf_pages did not write a PDF output");
+    }),
+  );
+  await writeFile(
+    join(workspaceRoot, "nonzero-viewbox.svg"),
+    await readFile(
+      join(process.cwd(), "tests", "fixtures", "pdf-nonzero-viewbox.svg"),
+    ),
+  );
+  const nonzeroInspection = await workspaceClient.callTool({
+    arguments: {
+      level: "summary",
+      path: "nonzero-viewbox.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_inspect",
+  });
+  const nonzeroRevision = nonzeroInspection.structuredContent?.revision;
+  if (nonzeroInspection.isError || typeof nonzeroRevision !== "string")
+    throw new Error(
+      "document_inspect did not prepare the nonzero viewBox fixture",
+    );
+  const nonzeroPdf = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: nonzeroRevision,
+      outputPath: "nonzero-viewbox.pdf",
+      path: "nonzero-viewbox.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_pdf",
+  });
+  if (
+    nonzeroPdf.isError ||
+    nonzeroPdf.structuredContent?.pageCount !== 1 ||
+    !isWithin(nonzeroPdf.structuredContent.mediaBoxes?.[0]?.width ?? 0, 284) ||
+    !isWithin(nonzeroPdf.structuredContent.mediaBoxes?.[0]?.height ?? 0, 142) ||
+    !isWithin(nonzeroPdf.structuredContent.cropBoxes?.[0]?.width ?? 0, 284) ||
+    !isWithin(nonzeroPdf.structuredContent.cropBoxes?.[0]?.height ?? 0, 142)
+  ) {
+    throw new Error(
+      "export_pdf did not preserve the nonzero viewBox PDF boxes",
+    );
   }
   const plainSvg = await workspaceClient.callTool({
     arguments: {

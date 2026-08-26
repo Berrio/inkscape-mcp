@@ -69,3 +69,4 @@ export {
   type SvgPageLayoutValidation,
   type SvgPagePatch,
 } from "./pages.js";
+export { expandPdfMarginsSvg } from "./pdf-export.js";

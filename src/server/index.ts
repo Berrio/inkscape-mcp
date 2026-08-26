@@ -20,6 +20,7 @@ import {
   transformSvgShapes,
   updateSvgShapes,
   deleteSvgPage,
+  expandPdfMarginsSvg,
   fitPageToBoundsSvg,
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
@@ -108,6 +109,14 @@ const physicalLengthSchema = z.object({
   unit: z.enum(["mm", "cm", "in", "pt", "pc", "q"]),
   value: z.number().finite().nonnegative(),
 });
+const pdfMarginSchema = z
+  .object({
+    bottom: physicalLengthSchema,
+    left: physicalLengthSchema,
+    right: physicalLengthSchema,
+    top: physicalLengthSchema,
+  })
+  .strict();
 const bleedSpecSchema = z
   .object({
     behavior: z.enum(["metadata-only", "expand-temporary-page"]),
@@ -2784,6 +2793,7 @@ export function buildServer(config: ServerConfig): McpServer {
           filterDpi: z.number().finite().positive().max(10_000).optional(),
           filters: z.enum(["ignore", "preserve"]).default("preserve"),
           latex: z.boolean().default(false),
+          margin: pdfMarginSchema.optional(),
           outputPath: z.string().min(1).max(1024),
           pageIds: z
             .array(shapeIdSchema)
@@ -2849,6 +2859,7 @@ export function buildServer(config: ServerConfig): McpServer {
       filterDpi,
       filters,
       latex,
+      margin,
       outputPath,
       pageIds,
       path,
@@ -2886,6 +2897,7 @@ export function buildServer(config: ServerConfig): McpServer {
         filters: filters === "ignore" ? "ignore-with-warning" : "preserve",
         format: "pdf",
         latex,
+        ...(margin === undefined ? {} : { margin }),
         source: { expectedRevision, path },
         target: {
           ...(expectedOutputRevision === undefined
@@ -2944,18 +2956,19 @@ export function buildServer(config: ServerConfig): McpServer {
             maximumSanitizeMode: config.maximumSanitizeMode,
           },
         );
-        const runnerInputPath =
-          pageIds === undefined
-            ? nativeInput.path
-            : join(directory, "pdf-subset.svg");
+        const nativeSource = await readFile(nativeInput.path, "utf8");
+        let runnerSource =
+          margin === undefined
+            ? nativeSource
+            : expandPdfMarginsSvg(nativeSource, margin, pageIds).svg;
         if (pageIds !== undefined)
-          await writeFile(
-            runnerInputPath,
-            pruneSvgPagesForPdf(
-              await readFile(nativeInput.path, "utf8"),
-              pageIds,
-            ).svg,
-          );
+          runnerSource = pruneSvgPagesForPdf(runnerSource, pageIds).svg;
+        const runnerInputPath =
+          runnerSource === nativeSource
+            ? nativeInput.path
+            : join(directory, "pdf-derived.svg");
+        if (runnerInputPath !== nativeInput.path)
+          await writeFile(runnerInputPath, runnerSource);
         const temporaryOutput = join(directory, "export.pdf");
         const result = await runner.run(candidate.executablePath, {
           args: buildExportArgv({
@@ -3052,8 +3065,238 @@ export function buildServer(config: ServerConfig): McpServer {
           ...(pageIds === undefined ? [] : ["PDF_SUBSET_PRUNED"]),
           ...(filters === "ignore" ? ["FILTERS_IGNORED_VISUAL_CHANGE"] : []),
           ...(latex ? ["LATEX_SIDECAR_EMITTED"] : []),
+          ...(margin === undefined ? [] : ["PDF_MARGIN_EXPANDED_TEMPORARY"]),
           ...(textToPath ? ["TEXT_CONVERTED_TO_PATHS"] : []),
         ],
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
+
+  server.registerTool(
+    "export_pdf_pages",
+    {
+      description:
+        "Exports explicit Inkscape pages as individually validated PDFs with stable page-NNN.pdf names.",
+      inputSchema: z
+        .object({
+          expectedOutputRevisions: z
+            .array(
+              z
+                .object({
+                  expectedOutputRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+                  pageId: shapeIdSchema,
+                })
+                .strict(),
+            )
+            .max(100)
+            .default([])
+            .refine(
+              (values) =>
+                new Set(values.map((value) => value.pageId)).size ===
+                values.length,
+              "Output page revisions must be distinct",
+            ),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          outputDirectory: z.string().min(1).max(1_000),
+          pageIds: z
+            .array(shapeIdSchema)
+            .min(1)
+            .max(100)
+            .refine(
+              (ids) => new Set(ids).size === ids.length,
+              "PDF page IDs must be distinct",
+            )
+            .optional(),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        pages: z.array(
+          z.object({
+            byteLength: z.number().int().positive(),
+            cropBox: z.object({
+              height: z.number().positive(),
+              width: z.number().positive(),
+              x: z.number(),
+              y: z.number(),
+            }),
+            hash: z.string().regex(/^[a-f0-9]{64}$/u),
+            mediaBox: z.object({
+              height: z.number().positive(),
+              width: z.number().positive(),
+              x: z.number(),
+              y: z.number(),
+            }),
+            outputPath: z.string().min(1).max(1_024),
+            pageId: shapeIdSchema,
+            pageIndex: z.number().int().positive(),
+            revision: z.string().regex(/^[a-f0-9]{64}$/u),
+            version: z.string().regex(/^1\.[0-9]$/u),
+          }),
+        ),
+        strategy: z.literal("prune_each_page"),
+        warnings: z.array(z.string()),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({
+      expectedOutputRevisions,
+      expectedRevision,
+      outputDirectory,
+      pageIds,
+      path,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const input = await workspace.resolveExisting(workspaceId, path);
+      const source = await readFile(input.absolutePath, "utf8");
+      const pages = listSvgPages(source);
+      if (pages.length === 0)
+        throw new Error("PDF page export requires explicit Inkscape pages");
+      const requestedIds = pageIds ?? pages.map((page) => page.id);
+      const indexedPages = requestedIds.map((pageId) => {
+        const pageIndex = pages.findIndex((page) => page.id === pageId);
+        if (pageIndex < 0) throw new Error("Requested PDF page does not exist");
+        return { pageId, pageIndex: pageIndex + 1 };
+      });
+      const requestedSet = new Set(requestedIds);
+      if (
+        expectedOutputRevisions.some(({ pageId }) => !requestedSet.has(pageId))
+      )
+        throw new Error("Output page revision references an unrequested page");
+      const revisions = new Map(
+        expectedOutputRevisions.map(({ expectedOutputRevision, pageId }) => [
+          pageId,
+          expectedOutputRevision,
+        ]),
+      );
+      const outputs = await Promise.all(
+        indexedPages.map(async ({ pageId, pageIndex }) => ({
+          pageId,
+          pageIndex,
+          output: await workspace.resolveNewOutput(
+            workspaceId,
+            `${outputDirectory}/page-${String(pageIndex).padStart(3, "0")}.pdf`,
+          ),
+        })),
+      );
+      const discovery = await locateInkscape({
+        config,
+        cwd: process.cwd(),
+        runner,
+      });
+      const candidate = discovery.candidates[0];
+      if (!candidate) throw new Error("Inkscape executable is unavailable");
+      const probe = await probeInkscapeCandidate(
+        runner,
+        candidate,
+        process.cwd(),
+      );
+      if (!("version" in probe))
+        throw new Error("Inkscape executable could not be validated");
+      const pdfSpec = parseExportSpec({
+        area: { kind: "document" },
+        filters: "preserve",
+        format: "pdf",
+        source: { expectedRevision, path },
+        target: {
+          kind: "file",
+          overwrite: false,
+          path: outputs[0]!.output.relativePath,
+        },
+        text: "preserve",
+      });
+      const rendered = await scratch.withDirectory(
+        "staging",
+        async (directory) => {
+          const nativeInput = await createNativeInputBundle(
+            input.absolutePath,
+            expectedRevision,
+            directory,
+            {
+              allowedRoot: input.workspaceRoot,
+              maxDependencyBytes: config.maxInputBytes,
+              maximumSanitizeMode: config.maximumSanitizeMode,
+            },
+          );
+          const nativeSource = await readFile(nativeInput.path, "utf8");
+          const variants = [] as {
+            bytes: Buffer;
+            metadata: Awaited<ReturnType<typeof verifyPdf>>;
+            pageId: string;
+            pageIndex: number;
+          }[];
+          for (const { pageId, pageIndex } of outputs) {
+            const variantInput = join(directory, `page-${pageIndex}.svg`);
+            const temporaryOutput = join(directory, `page-${pageIndex}.pdf`);
+            await writeFile(
+              variantInput,
+              pruneSvgPagesForPdf(nativeSource, [pageId]).svg,
+            );
+            const result = await runner.run(candidate.executablePath, {
+              args: buildExportArgv({
+                area: normalizeExportArea({ kind: "document" }, []),
+                inputPath: variantInput,
+                outputPath: temporaryOutput,
+                spec: pdfSpec,
+              }),
+              cwd: directory,
+              maxStderrBytes: config.maxStderrBytes,
+              maxStdoutBytes: config.maxStdoutBytes,
+              timeoutMs: config.processTimeoutMs,
+            });
+            if (
+              result.exitCode !== 0 ||
+              result.terminationReason !== "completed"
+            )
+              throw new Error("Inkscape separate PDF page export failed");
+            const metadata = await verifyPdf(temporaryOutput);
+            if (metadata.pageCount !== 1)
+              throw new Error(
+                "Separate PDF page export did not produce one page",
+              );
+            variants.push({
+              bytes: await readFile(temporaryOutput),
+              metadata,
+              pageId,
+              pageIndex,
+            });
+          }
+          await nativeInput.assertCurrent();
+          return variants;
+        },
+      );
+      const committed = await fileStore.commitBatch({
+        expectedRevision,
+        files: rendered.map((variant, index) => ({
+          contents: variant.bytes,
+          ...(revisions.has(variant.pageId)
+            ? { expectedOutputRevision: revisions.get(variant.pageId)! }
+            : {}),
+          targetPath: outputs[index]!.output.absolutePath,
+        })),
+        sourcePath: input.absolutePath,
+      });
+      const result = {
+        pages: rendered.map((variant, index) => ({
+          byteLength: variant.metadata.byteLength,
+          cropBox: variant.metadata.cropBoxes[0]!,
+          hash: variant.metadata.hash,
+          mediaBox: variant.metadata.mediaBoxes[0]!,
+          outputPath: outputs[index]!.output.relativePath,
+          pageId: variant.pageId,
+          pageIndex: variant.pageIndex,
+          revision: committed.files[index]!.revision,
+          version: variant.metadata.version,
+        })),
+        strategy: "prune_each_page" as const,
+        warnings: ["PDF_PAGES_PRUNED_SEPARATELY"],
       };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],

@@ -1111,6 +1111,17 @@ export function buildServer(config: ServerConfig): McpServer {
       inputSchema: z
         .object({
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          assetLicenses: z
+            .array(
+              z
+                .object({
+                  license: z.string().min(1).max(256),
+                  sourceUri: z.string().min(1).max(1024),
+                })
+                .strict(),
+            )
+            .max(98)
+            .default([]),
           outputDirectory: z.string().min(1).max(1024),
           path: z.string().min(1).max(1024),
           workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
@@ -1129,7 +1140,13 @@ export function buildServer(config: ServerConfig): McpServer {
       }),
       annotations: { destructiveHint: false },
     },
-    async ({ expectedRevision, outputDirectory, path, workspaceId }) => {
+    async ({
+      assetLicenses,
+      expectedRevision,
+      outputDirectory,
+      path,
+      workspaceId,
+    }) => {
       assertDocumentWorkspace(config);
       const workspace = await workspaces();
       const input = await workspace.resolveExisting(workspaceId, path);
@@ -1158,9 +1175,27 @@ export function buildServer(config: ServerConfig): McpServer {
             throw new Error(
               "assets_package supports at most 98 local dependencies",
             );
+          const licensesByUri = new Map<string, string>();
+          for (const item of assetLicenses) {
+            if (licensesByUri.has(item.sourceUri))
+              throw new Error(
+                "assets_package received duplicate asset licenses",
+              );
+            licensesByUri.set(item.sourceUri, item.license);
+          }
+          for (const dependency of nativeInput.manifest.dependencies)
+            if (!licensesByUri.has(dependency.uri))
+              throw new Error(
+                `assets_package requires an explicit license for dependency: ${dependency.uri}`,
+              );
+          if (licensesByUri.size !== nativeInput.manifest.dependencies.length)
+            throw new Error(
+              "assets_package received a license for an unreferenced dependency",
+            );
           const dependencies = await Promise.all(
             nativeInput.manifest.dependencies.map(async (dependency) => ({
               contents: await readFile(join(directory, dependency.path)),
+              license: licensesByUri.get(dependency.uri)!,
               path: dependency.path,
               revision: dependency.revision,
             })),
@@ -1168,6 +1203,7 @@ export function buildServer(config: ServerConfig): McpServer {
           const manifest = {
             dependencies: nativeInput.manifest.dependencies.map(
               ({ path: dependencyPath, revision, uri }) => ({
+                license: licensesByUri.get(uri),
                 path: dependencyPath,
                 revision,
                 sourceUri: uri,

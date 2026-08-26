@@ -131,16 +131,34 @@ try {
     /<script|onclick=/iu.test(importedText)
   )
     throw new Error("document_import_svg published unsafe SVG content");
-  await writeFile(join(workspaceRoot, "package-texture.bin"), "texture-data");
+  const packageTexture = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await writeFile(join(workspaceRoot, "package-texture.png"), packageTexture);
   await writeFile(
     join(workspaceRoot, "package-source.svg"),
-    '<svg xmlns="http://www.w3.org/2000/svg"><image id="texture" href="package-texture.bin" width="1" height="1"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><image id="texture" href="package-texture.png" width="1" height="1"/></svg>',
   );
   const packageRevision = createHash("sha256")
     .update(await readFile(join(workspaceRoot, "package-source.svg")))
     .digest("hex");
+  const unlicensedPackage = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: packageRevision,
+      outputDirectory: "unlicensed-package",
+      path: "package-source.svg",
+      workspaceId: workspace.id,
+    },
+    name: "assets_package",
+  });
+  if (!unlicensedPackage.isError)
+    throw new Error("assets_package accepted an unlicensed dependency");
   const packagedAssets = await workspaceClient.callTool({
     arguments: {
+      assetLicenses: [
+        { license: "test fixture only", sourceUri: "package-texture.png" },
+      ],
       expectedRevision: packageRevision,
       outputDirectory: "portable-package",
       path: "package-source.svg",
@@ -154,7 +172,7 @@ try {
     packagedAssets.structuredContent?.documentPath !==
       "portable-package/document.svg" ||
     !packagedAssets.structuredContent?.files?.some(
-      (file) => file.path === "assets/0000-package-texture.bin",
+      (file) => file.path === "assets/0000-package-texture.png",
     )
   )
     throw new Error("assets_package did not return the portable package");
@@ -169,22 +187,39 @@ try {
     ),
   );
   if (
-    !packagedDocument.includes("assets/0000-package-texture.bin") ||
-    (await readFile(
-      join(
-        workspaceRoot,
-        "portable-package",
-        "assets",
-        "0000-package-texture.bin",
-      ),
-      "utf8",
-    )) !== "texture-data" ||
+    !packagedDocument.includes("assets/0000-package-texture.png") ||
+    !(
+      await readFile(
+        join(
+          workspaceRoot,
+          "portable-package",
+          "assets",
+          "0000-package-texture.png",
+        ),
+      )
+    ).equals(packageTexture) ||
     packagedManifest.schema !== "inkscape-mcp-assets-package/v1" ||
-    packagedManifest.source.path !== "package-source.svg"
+    packagedManifest.source.path !== "package-source.svg" ||
+    packagedManifest.dependencies?.[0]?.license !== "test fixture only"
   )
     throw new Error(
       "assets_package did not publish a portable dependency tree",
     );
+  const packagedDocumentRevision = packagedAssets.structuredContent.files.find(
+    (file) => file.path === "document.svg",
+  )?.revision;
+  const reopenedPackage = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: packagedDocumentRevision,
+      outputPath: "portable-package-preview.png",
+      path: "portable-package/document.svg",
+      width: 16,
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  if (reopenedPackage.isError)
+    throw new Error("assets_package did not reopen through Inkscape");
   await writeFile(
     join(workspaceRoot, "fit.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 50"><rect id="fit_rect" x="10" y="5" width="30" height="20"/></svg>',

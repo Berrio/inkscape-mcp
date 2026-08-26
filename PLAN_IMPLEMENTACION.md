@@ -1895,12 +1895,12 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Packaging de assets
 
-- [ ] `F08-T25` Analizar dependencias locales de imágenes/CSS/fuentes/perfiles.
-- [ ] `F08-T26` Copiar/embed según política sin escapar roots.
-- [ ] `F08-T27` Reescribir referencias relativas y comprobar reapertura.
-- [ ] `F08-T28` Crear package + manifest + hashes en staging.
-- [ ] `F08-T29` No redistribuir fuentes/assets sin comprobación/licencia explícita.
-- [ ] `F08-T30` Implementar `assets_package`.
+- [x] `F08-T25` Analizar dependencias locales de imágenes/CSS/fuentes/perfiles. — El bundle nativo recorre referencias `href`, `src`, CSS `url()` y `@import`, resuelve sólo archivos locales bajo el workspace y conserva su revisión.
+- [x] `F08-T26` Copiar/embed según política sin escapar roots. — La política publicada es copiar únicamente: cada dependencia se cuarentena, limita y copia bajo `assets/`; no hay modo de embed que oculte la procedencia.
+- [x] `F08-T27` Reescribir referencias relativas y comprobar reapertura. — Las referencias pasan a `assets/...`; la prueba MCP abre el documento empaquetado y lo renderiza mediante Inkscape real.
+- [x] `F08-T28` Crear package + manifest + hashes en staging. — `document.svg`, assets y `manifest.json` se generan en staging, se revalidan y se publican con commit por lote; el manifiesto contiene revisiones SHA-256.
+- [x] `F08-T29` No redistribuir fuentes/assets sin comprobación/licencia explícita. — Cada URI requiere una licencia no vacía, única y exacta; faltantes, duplicadas o sobrantes fallan antes de publicar.
+- [x] `F08-T30` Implementar `assets_package`. — Tool MCP con schema estricto, roots canónicos, revisión esperada, manifest y prueba positiva/negativa real.
 
 #### Ecosistema de extensiones y optimización
 
@@ -1914,8 +1914,8 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F08-G01` Cada formato anunciado pasa export/import smoke real en la plataforma.
 - [ ] `F08-G02` Capabilities ausentes producen error recuperable y no cambian el catálogo MCP.
 - [ ] `F08-G03` Los tres presets principales generan artefactos/manifests correctos.
-- [ ] `F08-G04` Package reabre sin referencias rotas dentro de entorno limpio.
-- [ ] `F08-G05` Evidencia en `docs/progress/F08.md`.
+- [x] `F08-G04` Package reabre sin referencias rotas dentro de entorno limpio. — `test:mcp` renderiza el SVG empaquetado por Inkscape con un PNG local copiado.
+- [x] `F08-G05` Evidencia en `docs/progress/F08.md`.
 - [ ] `F08-G06` Preset execution rechaza planToken expirado, de otro workspace o ligado a sourceRevision/capabilities distintos.
 
 ---

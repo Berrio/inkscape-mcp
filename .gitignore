@@ -7,6 +7,9 @@ coverage/
 # Logs and local configuration
 *.log
 logs/
+.mcp-test-process.json
+mcp-test.err
+mcp-test.out
 .env
 .env.*
 !.env.example

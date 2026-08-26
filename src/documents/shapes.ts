@@ -6,6 +6,7 @@ import {
 } from "@xmldom/xmldom";
 
 import { sanitizeSvg } from "../svg/index.js";
+import { parseSvgPathData } from "./path-data.js";
 
 export type ShapeStyle = {
   classes?: readonly string[] | undefined;
@@ -1563,62 +1564,5 @@ function validateImageHref(value: string): void {
     throw new Error("Image href must be a local relative raster resource");
 }
 function validatePathData(value: string): void {
-  if (value.length < 1 || value.length > 100_000)
-    throw new Error("Path data is invalid or too long");
-  const tokens = value.match(
-    /[AaCcHhLlMmQqSsTtVvZz]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[Ee][-+]?\d+)?/gu,
-  );
-  if (!tokens || value.replace(/[\s,]/gu, "") !== tokens.join(""))
-    throw new Error("Path data has invalid syntax");
-  if (tokens[0]!.toUpperCase() !== "M")
-    throw new Error("Path data must start with a moveto command");
-  const arity: Readonly<Record<string, number>> = {
-    A: 7,
-    C: 6,
-    H: 1,
-    L: 2,
-    M: 2,
-    Q: 4,
-    S: 4,
-    T: 2,
-    V: 1,
-    Z: 0,
-  };
-  let command: string | undefined;
-  let index = 0;
-  let hasMove = false;
-  while (index < tokens.length) {
-    const token = tokens[index]!;
-    if (/^[A-Za-z]$/u.test(token)) {
-      command = token.toUpperCase();
-      index += 1;
-      if (!(command in arity)) throw new Error("Path command is unsupported");
-      if (command === "Z") {
-        command = undefined;
-        continue;
-      }
-    }
-    if (!command) throw new Error("Path data must start with a command");
-    const count = arity[command]!;
-    if (index + count > tokens.length)
-      throw new Error("Path command is incomplete");
-    if (command === "M" && !hasMove) hasMove = true;
-    for (let parameter = 0; parameter < count; parameter += 1) {
-      const number = Number(tokens[index + parameter]);
-      if (!Number.isFinite(number))
-        throw new Error("Path coordinate must be finite");
-      if (command === "A" && parameter < 2 && number < 0)
-        throw new Error("Path arc radii must be non-negative");
-      if (
-        command === "A" &&
-        (parameter === 3 || parameter === 4) &&
-        number !== 0 &&
-        number !== 1
-      )
-        throw new Error("Path arc flags must be zero or one");
-    }
-    index += count;
-    if (command === "M") command = "L";
-  }
-  if (!hasMove) throw new Error("Path data must contain a moveto command");
+  parseSvgPathData(value);
 }

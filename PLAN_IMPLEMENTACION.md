@@ -1789,7 +1789,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Paths
 
-- [ ] `F07-T01` Extender el parser de F06 a AST mutable preservando comandos relativos/absolutos, subpaths y precisión documentada.
+- [~] `F07-T01` Extender el parser de F06 a AST mutable preservando comandos relativos/absolutos, subpaths y precisión documentada. — `parseSvgPathData` produce un AST mutable y `serializeSvgPathData` lo serializa establemente para M/L/H/V/C/S/Q/T/A/Z, incluyendo comandos relativos, moveto implícito y subpaths. Falta documentar la precisión y exponer las mutaciones públicas de nodos.
 - [ ] `F07-T02` Añadir límites/tolerancias avanzados para edición, booleanas y serialización estable.
 - [ ] `F07-T03` Implementar combine/break-apart/reverse.
 - [ ] `F07-T04` Implementar union/difference/intersection/exclusion.

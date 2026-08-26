@@ -52,6 +52,11 @@ export {
   type ShapeStyle,
 } from "./shapes.js";
 export {
+  parseSvgPathData,
+  serializeSvgPathData,
+  type SvgPathSegment,
+} from "./path-data.js";
+export {
   PAGE_SIZE_PRESETS,
   pageSizeFromPreset,
   type PageSizePreset,

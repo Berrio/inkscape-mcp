@@ -13,6 +13,7 @@ import {
   listSvgPages,
   pageSizeFromPreset,
   querySvgElements,
+  querySvgElementTargets,
   reorderSvgPages,
   resizePageOnlySvg,
   resizeContentSvg,
@@ -396,6 +397,105 @@ describe("basic SVG documents", () => {
         },
       ],
       missingIds: ["missing"],
+      total: 1,
+    });
+  });
+
+  it("queries a strict CSS compound selector without accepting selector programs", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg"><g id="layer"><rect id="accent" class="card accent" x="1" y="2" width="3" height="4"/><rect id="plain" class="card"/></g></svg>';
+    expect(
+      querySvgElements(source, {
+        limit: 10,
+        offset: 0,
+        selector: "rect.card.accent",
+      }),
+    ).toEqual({
+      elements: [
+        {
+          attributes: {
+            class: "card accent",
+            height: "4",
+            width: "3",
+            x: "1",
+            y: "2",
+          },
+          id: "accent",
+          kind: "rect",
+          parentId: "layer",
+        },
+      ],
+      missingIds: [],
+      total: 1,
+    });
+    expect(
+      querySvgElements(source, {
+        limit: 10,
+        offset: 0,
+        selector: "#missing",
+      }),
+    ).toEqual({ elements: [], missingIds: ["missing"], total: 0 });
+    expect(() =>
+      querySvgElements(source, {
+        limit: 10,
+        offset: 0,
+        selector: "g .accent",
+      }),
+    ).toThrow("safe compound selector");
+    expect(() =>
+      querySvgElements(source, {
+        limit: 10,
+        offset: 0,
+        selector: ".a.b.c.d.e.f.g.h.i",
+      }),
+    ).toThrow("class limit");
+  });
+
+  it("bounds selector resource use before pagination", () => {
+    const many = Array.from(
+      { length: 10_001 },
+      (_, index) => `<rect id="r_${index}" class="card"/>`,
+    ).join("");
+    expect(() =>
+      querySvgElements(
+        `<svg xmlns="http://www.w3.org/2000/svg">${many}</svg>`,
+        {
+          limit: 1,
+          offset: 0,
+          selector: ".card",
+        },
+      ),
+    ).toThrow("match limit");
+
+    const nested = "<g>".repeat(128) + "<rect/>" + "</g>".repeat(128);
+    expect(() =>
+      querySvgElements(
+        `<svg xmlns="http://www.w3.org/2000/svg">${nested}</svg>`,
+        { limit: 1, offset: 0, selector: "rect" },
+      ),
+    ).toThrow("depth limit");
+  });
+
+  it("retains an unsafe source ID only for native correlation", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect id="unsafe id,ñ" width="1" height="2"/></svg>';
+    expect(
+      querySvgElementTargets(source, {
+        kinds: ["rect"],
+        limit: 1,
+        offset: 0,
+      }),
+    ).toEqual({
+      elements: [
+        {
+          nativeId: "unsafe id,ñ",
+          summary: {
+            attributes: { height: "2", width: "1" },
+            kind: "rect",
+          },
+        },
+      ],
+      missingIds: [],
       total: 1,
     });
   });

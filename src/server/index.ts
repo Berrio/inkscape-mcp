@@ -22,7 +22,7 @@ import {
   pageSizeFromPreset,
   parseViewportLength,
   preflightSvg,
-  querySvgElements,
+  querySvgElementTargets,
   reorderSvgPages,
   resizeContentSvg,
   resizePageOnlySvg,
@@ -32,6 +32,10 @@ import {
 import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import { verifyPdf, verifyPng, verifySvg } from "../export/index.js";
+import {
+  parseInkscapeQueryAll,
+  type InkscapeBounds,
+} from "../inkscape/index.js";
 import { ProcessRunner } from "../runner/index.js";
 import {
   AtomicFileStore,
@@ -413,6 +417,15 @@ const elementUpdateSchema = z
   );
 const elementSummarySchema = z.object({
   attributes: z.record(z.string(), z.string()),
+  bounds: z
+    .object({
+      height: z.number().finite().nonnegative(),
+      source: z.literal("inkscape-query-all"),
+      width: z.number().finite().nonnegative(),
+      x: z.number().finite(),
+      y: z.number().finite(),
+    })
+    .optional(),
   id: shapeIdSchema.optional(),
   kind: z.string(),
   layerId: shapeIdSchema.optional(),
@@ -810,30 +823,41 @@ export function buildServer(config: ServerConfig): McpServer {
     "elements_query",
     {
       description:
-        "Lists bounded SVG element summaries by IDs, type, or Inkscape layer without exposing arbitrary XML attributes.",
-      inputSchema: z.object({
-        ids: z.array(shapeIdSchema).max(100).optional(),
-        kinds: z
-          .array(
-            z.enum([
-              "circle",
-              "ellipse",
-              "g",
-              "line",
-              "polygon",
-              "polyline",
-              "rect",
-              "text",
-            ]),
-          )
-          .max(20)
-          .optional(),
-        layerId: shapeIdSchema.optional(),
-        limit: z.number().int().min(1).max(1_000).default(100),
-        offset: z.number().int().min(0).max(100_000).default(0),
-        path: z.string().min(1).max(1024),
-        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
-      }),
+        "Lists bounded SVG element summaries by IDs, type, layer, or one safe CSS compound selector without exposing arbitrary XML attributes.",
+      inputSchema: z
+        .object({
+          ids: z.array(shapeIdSchema).max(100).optional(),
+          expectedRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
+          includeBounds: z.boolean().default(false),
+          kinds: z
+            .array(
+              z.enum([
+                "circle",
+                "ellipse",
+                "g",
+                "image",
+                "line",
+                "path",
+                "polygon",
+                "polyline",
+                "rect",
+                "text",
+                "use",
+              ]),
+            )
+            .max(20)
+            .optional(),
+          layerId: shapeIdSchema.optional(),
+          limit: z.number().int().min(1).max(1_000).default(100),
+          offset: z.number().int().min(0).max(100_000).default(0),
+          path: z.string().min(1).max(1024),
+          selector: z.string().min(1).max(256).optional(),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
       outputSchema: z.object({
         elements: z.array(elementSummarySchema),
         missingIds: z.array(shapeIdSchema),
@@ -841,21 +865,69 @@ export function buildServer(config: ServerConfig): McpServer {
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ ids, kinds, layerId, limit, offset, path, workspaceId }) => {
+    async ({
+      expectedRevision,
+      ids,
+      includeBounds,
+      kinds,
+      layerId,
+      limit,
+      offset,
+      path,
+      selector,
+      workspaceId,
+    }) => {
       assertDocumentWorkspace(config);
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const output = querySvgElements(
+      const queried = querySvgElementTargets(
         await readFile(document.absolutePath, "utf8"),
         {
           ...(ids === undefined ? {} : { ids }),
           ...(kinds === undefined ? {} : { kinds }),
           ...(layerId === undefined ? {} : { layerId }),
+          ...(selector === undefined ? {} : { selector }),
           limit,
           offset,
         },
       );
+      if (includeBounds && expectedRevision === undefined)
+        throw new Error("Inkscape bounds require expectedRevision");
+      const bounds =
+        includeBounds && expectedRevision !== undefined
+          ? await queryNativeBounds({
+              config,
+              documentPath: document.absolutePath,
+              expectedRevision,
+              runner,
+              scratch,
+            })
+          : undefined;
+      const output =
+        bounds === undefined
+          ? {
+              ...queried,
+              elements: queried.elements.map((element) => element.summary),
+            }
+          : {
+              ...queried,
+              elements: queried.elements.map((element) => {
+                const bound =
+                  element.nativeId === undefined
+                    ? undefined
+                    : bounds.get(element.nativeId);
+                return bound === undefined
+                  ? element.summary
+                  : {
+                      ...element.summary,
+                      bounds: {
+                        ...bound,
+                        source: "inkscape-query-all" as const,
+                      },
+                    };
+              }),
+            };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,
@@ -1854,5 +1926,45 @@ function hasControlCharacters(value: string): boolean {
   return [...value].some((character) => {
     const code = character.codePointAt(0) ?? 0;
     return code < 32 || code === 127;
+  });
+}
+
+async function queryNativeBounds(request: {
+  config: ServerConfig;
+  documentPath: string;
+  expectedRevision: string;
+  runner: ProcessRunner;
+  scratch: ScratchManager;
+}): Promise<ReadonlyMap<string, InkscapeBounds>> {
+  const discovery = await locateInkscape({
+    config: request.config,
+    cwd: process.cwd(),
+    runner: request.runner,
+  });
+  const candidate = discovery.candidates[0];
+  if (!candidate) throw new Error("Inkscape executable is unavailable");
+  const probe = await probeInkscapeCandidate(
+    request.runner,
+    candidate,
+    process.cwd(),
+  );
+  if (!("version" in probe))
+    throw new Error("Inkscape executable could not be validated");
+  return request.scratch.withDirectory("staging", async (directory) => {
+    const nativeInput = await createNativeInputBundle(
+      request.documentPath,
+      request.expectedRevision,
+      directory,
+    );
+    const result = await request.runner.run(candidate.executablePath, {
+      args: [nativeInput.path, "--query-all"],
+      cwd: directory,
+      maxStderrBytes: request.config.maxStderrBytes,
+      maxStdoutBytes: request.config.maxStdoutBytes,
+      timeoutMs: request.config.processTimeoutMs,
+    });
+    if (result.exitCode !== 0 || result.terminationReason !== "completed")
+      throw new Error("Inkscape bounds query failed");
+    return parseInkscapeQueryAll(result.stdout.toString("utf8"));
   });
 }

@@ -199,11 +199,27 @@ try {
       "elements_transform did not apply an allowlisted transform",
     );
   }
+  const boundsWithoutRevision = await workspaceClient.callTool({
+    arguments: {
+      includeBounds: true,
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_query",
+  });
+  if (!boundsWithoutRevision.isError) {
+    throw new Error(
+      "elements_query accepted a native bounds request without revision",
+    );
+  }
   const queried = await workspaceClient.callTool({
     arguments: {
       ids: ["demo_rect", "temporary_circle"],
+      expectedRevision: transformedRevision,
+      includeBounds: true,
       layerId: "layer_main",
       path: "a4.svg",
+      selector: "#demo_rect",
       workspaceId: workspace.id,
     },
     name: "elements_query",
@@ -211,6 +227,8 @@ try {
   if (
     queried.isError ||
     queried.structuredContent?.elements?.[0]?.id !== "demo_rect" ||
+    typeof queried.structuredContent?.elements?.[0]?.bounds?.width !==
+      "number" ||
     queried.structuredContent?.missingIds?.[0] !== "temporary_circle"
   ) {
     throw new Error("elements_query did not return a bounded SVG summary");

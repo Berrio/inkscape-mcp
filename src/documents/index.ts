@@ -11,7 +11,9 @@ export { preflightSvg, type PreflightIssue } from "./preflight.js";
 export { inspectSvgInventory, type DocumentInventory } from "./inventory.js";
 export {
   querySvgElements,
+  querySvgElementTargets,
   type ElementQuery,
+  type ElementQueryTarget,
   type ElementSummary,
 } from "./elements.js";
 export {

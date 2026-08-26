@@ -21,6 +21,7 @@ import {
   updateSvgShapes,
   deleteSvgPage,
   expandPdfMarginsSvg,
+  extractSvgSelection,
   fitPageToBoundsSvg,
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
@@ -3319,6 +3320,15 @@ export function buildServer(config: ServerConfig): McpServer {
         flavor: z.enum(["inkscape", "plain"]),
         outputPath: z.string().min(1).max(1024),
         path: z.string().min(1).max(1024),
+        selectionIds: z
+          .array(shapeIdSchema)
+          .min(1)
+          .max(100)
+          .refine(
+            (ids) => new Set(ids).size === ids.length,
+            "SVG selection IDs must be distinct",
+          )
+          .optional(),
         textToPath: z.boolean().default(false),
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
@@ -3338,6 +3348,7 @@ export function buildServer(config: ServerConfig): McpServer {
       flavor,
       outputPath,
       path,
+      selectionIds,
       textToPath,
       workspaceId,
     }) => {
@@ -3387,11 +3398,24 @@ export function buildServer(config: ServerConfig): McpServer {
             maximumSanitizeMode: config.maximumSanitizeMode,
           },
         );
+        const selection =
+          selectionIds === undefined
+            ? undefined
+            : extractSvgSelection(
+                await readFile(nativeInput.path, "utf8"),
+                selectionIds,
+              );
+        const runnerInputPath =
+          selection === undefined
+            ? nativeInput.path
+            : join(directory, "selection.svg");
+        if (selection !== undefined)
+          await writeFile(runnerInputPath, selection.svg);
         const temporaryOutput = join(directory, "export.svg");
         const run = await runner.run(candidate.executablePath, {
           args: buildExportArgv({
             area: normalizeExportArea({ kind: "document" }, []),
-            inputPath: nativeInput.path,
+            inputPath: runnerInputPath,
             outputPath: temporaryOutput,
             spec: svgSpec,
           }),
@@ -3421,7 +3445,12 @@ export function buildServer(config: ServerConfig): McpServer {
         hash: svg.metadata.hash,
         revision: committed.revision,
         viewBox: svg.metadata.viewBox,
-        warnings: textToPath ? ["TEXT_CONVERTED_TO_PATHS"] : [],
+        warnings: [
+          ...(selectionIds === undefined
+            ? []
+            : ["SELECTION_EXTRACTED_AUTONOMOUSLY"]),
+          ...(textToPath ? ["TEXT_CONVERTED_TO_PATHS"] : []),
+        ],
       };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],

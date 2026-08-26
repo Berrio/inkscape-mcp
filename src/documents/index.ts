@@ -70,3 +70,4 @@ export {
   type SvgPagePatch,
 } from "./pages.js";
 export { expandPdfMarginsSvg } from "./pdf-export.js";
+export { extractSvgSelection } from "./selection-export.js";

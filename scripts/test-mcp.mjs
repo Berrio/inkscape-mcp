@@ -1049,6 +1049,28 @@ try {
       "export_svg did not publish the expected plain SVG warning",
     );
   }
+  const selectionSvg = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: settingsRevision,
+      flavor: "plain",
+      outputPath: "a4-selection.svg",
+      path: "a4.svg",
+      selectionIds: ["demo_rect"],
+      workspaceId: workspace.id,
+    },
+    name: "export_svg",
+  });
+  if (
+    selectionSvg.isError ||
+    !selectionSvg.structuredContent?.warnings?.includes(
+      "SELECTION_EXTRACTED_AUTONOMOUSLY",
+    ) ||
+    !(await readFile(join(workspaceRoot, "a4-selection.svg"), "utf8")).includes(
+      'id="demo_rect"',
+    )
+  ) {
+    throw new Error("export_svg did not publish an autonomous selection SVG");
+  }
   await writeFile(
     join(workspaceRoot, "viewbox-512.svg"),
     await readFile(

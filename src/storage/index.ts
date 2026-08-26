@@ -12,6 +12,7 @@ export { ScratchManager } from "./scratch.js";
 export {
   createNativeInputBundle,
   type NativeInputBundle,
+  type NativeInputBundleOptions,
 } from "./native-input.js";
 export {
   SnapshotStore,

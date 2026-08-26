@@ -1588,6 +1588,7 @@ export function buildServer(config: ServerConfig): McpServer {
             input.absolutePath,
             expectedRevision,
             directory,
+            { maximumSanitizeMode: config.maximumSanitizeMode },
           );
           const temporaryOutput = join(directory, "preview.png");
           const result = await runner.run(candidate.executablePath, {
@@ -1739,6 +1740,7 @@ export function buildServer(config: ServerConfig): McpServer {
           input.absolutePath,
           expectedRevision,
           directory,
+          { maximumSanitizeMode: config.maximumSanitizeMode },
         );
         const displaySettings = inspectDocumentDisplaySettings(
           await readFile(input.absolutePath, "utf8"),
@@ -1864,6 +1866,7 @@ export function buildServer(config: ServerConfig): McpServer {
           input.absolutePath,
           expectedRevision,
           directory,
+          { maximumSanitizeMode: config.maximumSanitizeMode },
         );
         const temporaryOutput = join(directory, "export.pdf");
         const result = await runner.run(candidate.executablePath, {
@@ -1967,6 +1970,7 @@ export function buildServer(config: ServerConfig): McpServer {
           input.absolutePath,
           expectedRevision,
           directory,
+          { maximumSanitizeMode: config.maximumSanitizeMode },
         );
         const temporaryOutput = join(directory, "export.svg");
         const run = await runner.run(candidate.executablePath, {
@@ -2044,6 +2048,7 @@ async function queryNativeBounds(request: {
       request.documentPath,
       request.expectedRevision,
       directory,
+      { maximumSanitizeMode: request.config.maximumSanitizeMode },
     );
     const result = await request.runner.run(candidate.executablePath, {
       args: [nativeInput.path, "--query-all"],

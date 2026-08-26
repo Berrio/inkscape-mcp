@@ -47,7 +47,9 @@ export function sanitizeSvg(
     const name = element.localName.toLowerCase();
     if (
       name === "script" ||
-      (options.mode === "strict" && name === "foreignobject")
+      (options.mode === "strict" && name === "foreignobject") ||
+      (name === "style" &&
+        hasForbiddenCssReference(element.textContent, options.mode))
     ) {
       remove(element, name, removed);
       continue;
@@ -63,8 +65,11 @@ export function sanitizeSvg(
         continue;
       }
       if (
-        (attributeName === "href" || attributeName === "xlink:href") &&
-        isForbiddenReference(value, options.mode)
+        (isDirectReferenceAttribute(attributeName) &&
+          isForbiddenReference(value, options.mode)) ||
+        (attributeName === "style" &&
+          hasForbiddenCssReference(value, options.mode)) ||
+        (/url\(/iu.test(value) && hasForbiddenCssReference(value, options.mode))
       ) {
         element.removeAttribute(attribute.name);
         removed.push(`reference:${attribute.name}`);
@@ -85,6 +90,7 @@ type XmlElement = {
   nodeType: number;
   parentNode: { removeChild(node: XmlElement): void } | null;
   removeAttribute(name: string): void;
+  textContent: string;
 };
 type XmlNode = XmlElement;
 
@@ -101,6 +107,17 @@ function isForbiddenReference(value: string, mode: SanitizeMode): boolean {
   if (mode === "trusted") return false;
   if (mode === "strict") return !value.startsWith("#");
   return /^(?:https?:|file:|data:|javascript:|\/\/)/iu.test(value);
+}
+function isDirectReferenceAttribute(name: string): boolean {
+  return name === "href" || name === "xlink:href" || name === "src";
+}
+function hasForbiddenCssReference(value: string, mode: SanitizeMode): boolean {
+  if (/javascript\s*:/iu.test(value)) return mode !== "trusted";
+  const references = [
+    ...value.matchAll(/url\(\s*(['"]?)([^'"\s)]+)\1\s*\)/giu),
+    ...value.matchAll(/@import\s+(?:url\(\s*)?(['"]?)([^'"\s);]+)\1\s*\)?/giu),
+  ];
+  return references.some((match) => isForbiddenReference(match[2] ?? "", mode));
 }
 function isAllowedMode(
   requested: SanitizeMode,

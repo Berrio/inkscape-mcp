@@ -1526,10 +1526,10 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F02-T15` Evaluar al menos dos parsers/DOM por fidelidad, seguridad, namespaces y licencia.
 - [x] `F02-T16` Elegir parser mediante ADR y corpus de round-trip.
 - [x] `F02-T17` Rechazar DTD/XXE/entity expansion y límites estructurales.
-- [ ] `F02-T18` Implementar inspección/sanitización de script/events/foreignObject/URLs externas y orden de confianza `strict < preserve-local < trusted`; el ceiling es solo config de arranque y ninguna tool puede elevarlo.
-- [ ] `F02-T19` Preservar namespaces, `defs`, metadata, comentarios relevantes y referencias.
-- [ ] `F02-T20` Implementar asignación/normalización de IDs sin romper `href`, CSS, clip/mask/filter/markers.
-- [ ] `F02-T21` Definir diff resumido semántico para mutaciones.
+- [x] `F02-T18` Implementar inspección/sanitización de script/events/foreignObject/URLs externas y orden de confianza `strict < preserve-local < trusted`; el ceiling es solo config de arranque y ninguna tool puede elevarlo. — El bundle nativo deriva su modo del ceiling; las tools no exponen `trusted` y se eliminan URLs prohibidas también desde CSS/atributos de pintura.
+- [x] `F02-T19` Preservar namespaces, `defs`, metadata, comentarios relevantes y referencias. — Corpus unitario cubre round-trip de namespaces, defs, metadata, comentarios y referencias locales.
+- [x] `F02-T20` Implementar asignación/normalización de IDs sin romper `href`, CSS, clip/mask/filter/markers. — Utilidad determinista normaliza IDs públicos y reescribe href, ARIA, `url(#...)` y selectores CSS literales/escapados conocidos; duplicados se conservan semánticamente en la primera ocurrencia.
+- [x] `F02-T21` Definir diff resumido semántico para mutaciones. — `summarizeSvgDiff` devuelve conteos y IDs añadidos/eliminados/cambiados/ambiguos sin incluir contenido SVG.
 
 #### Artifact store mínimo
 

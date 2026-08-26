@@ -34,4 +34,25 @@ describe("safe SVG", () => {
       }),
     ).toThrow("exceeds configured maximum");
   });
+  it("removes forbidden URLs from CSS and SVG paint/reference attributes", () => {
+    const source =
+      '<svg><defs><linearGradient id="local"/></defs><style>.remote { fill: url(https://bad.example/paint); }</style><rect style="fill:url(#local);filter:URL(https://bad.example/filter)" filter="url(https://bad.example/filter)" fill="url(#local)"/><image src="//bad.example/image.png"/></svg>';
+    const result = sanitizeSvg(source, { ...limits, mode: "preserve-local" });
+    expect(result.svg).not.toContain("bad.example");
+    expect(result.svg).not.toContain("<style");
+    expect(result.svg).toContain('fill="url(#local)"');
+    expect(result.removed).toContain("element:style");
+    expect(result.removed).toContain("reference:filter");
+    expect(result.removed).toContain("reference:src");
+  });
+  it("preserves metadata, comments, namespaces and local references", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><!--keep--><metadata><dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">Label</dc:title></metadata><defs><path id="shape"/></defs><use href="#shape" inkscape:label="Clone"/></svg>';
+    const result = sanitizeSvg(source, { ...limits, mode: "preserve-local" });
+    expect(result.removed).toEqual([]);
+    expect(result.svg).toContain("<!--keep-->");
+    expect(result.svg).toContain("<metadata>");
+    expect(result.svg).toContain('href="#shape"');
+    expect(result.svg).toContain("inkscape:label");
+  });
 });

@@ -688,6 +688,7 @@ export function buildServer(config: ServerConfig): McpServer {
           .regex(/^[a-f0-9]{64}$/u)
           .optional(),
         expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        dpi: z.number().finite().positive().max(9_600).optional(),
         height: z.number().int().positive().max(100_000).optional(),
         outputPath: z.string().min(1).max(1024),
         path: z.string().min(1).max(1024),
@@ -695,6 +696,8 @@ export function buildServer(config: ServerConfig): McpServer {
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
+        dpiX: z.number().positive().optional(),
+        dpiY: z.number().positive().optional(),
         height: z.number().int().positive(),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
         width: z.number().int().positive(),
@@ -704,6 +707,7 @@ export function buildServer(config: ServerConfig): McpServer {
     async ({
       expectedOutputRevision,
       expectedRevision,
+      dpi,
       height,
       outputPath,
       path,
@@ -716,6 +720,8 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = await workspace.resolveNewOutput(workspaceId, outputPath);
       if (!/\.png$/iu.test(output.relativePath))
         throw new Error("export_png requires a .png output path");
+      if (dpi !== undefined && (width !== undefined || height !== undefined))
+        throw new Error("PNG export accepts DPI or pixel dimensions, not both");
       const discovery = await locateInkscape({
         config,
         cwd: process.cwd(),
@@ -742,6 +748,7 @@ export function buildServer(config: ServerConfig): McpServer {
             nativeInput.path,
             "--export-type=png",
             `--export-filename=${temporaryOutput}`,
+            ...(dpi === undefined ? [] : [`--export-dpi=${dpi}`]),
             ...(width === undefined ? [] : [`--export-width=${width}`]),
             ...(height === undefined ? [] : [`--export-height=${height}`]),
           ],

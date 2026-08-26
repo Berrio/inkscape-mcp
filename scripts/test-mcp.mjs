@@ -184,6 +184,19 @@ try {
   if (exported.isError || exported.structuredContent?.width !== 400) {
     throw new Error("export_png did not publish the expected PNG");
   }
+  const dpiPng = await workspaceClient.callTool({
+    arguments: {
+      dpi: 144,
+      expectedRevision: settingsRevision,
+      outputPath: "a4-144dpi.png",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_png",
+  });
+  if (dpiPng.isError || (dpiPng.structuredContent?.width ?? 0) < 1) {
+    throw new Error("export_png did not accept a bounded DPI request");
+  }
   const pdf = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,

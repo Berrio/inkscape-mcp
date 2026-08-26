@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { comparePngVisual, decodePngRgba } from "../dist/export/index.js";
 import { Buffer } from "node:buffer";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1445,6 +1446,53 @@ try {
   ) {
     throw new Error("export_svg did not preserve selection stylesheet closure");
   }
+  const sourceSelectionPng = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: cssRevision,
+      outputPath: "css-selection-source.png",
+      path: "css-selection.svg",
+      width: 80,
+      workspaceId: workspace.id,
+    },
+    name: "export_png",
+  });
+  const derivedInspection = await workspaceClient.callTool({
+    arguments: {
+      level: "summary",
+      path: "css-selection-output.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_inspect",
+  });
+  const derivedRevision = derivedInspection.structuredContent?.revision;
+  const derivedSelectionPng = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: derivedRevision,
+      outputPath: "css-selection-derived.png",
+      path: "css-selection-output.svg",
+      width: 80,
+      workspaceId: workspace.id,
+    },
+    name: "export_png",
+  });
+  if (
+    sourceSelectionPng.isError ||
+    derivedSelectionPng.isError ||
+    typeof derivedRevision !== "string"
+  ) {
+    throw new Error("could not rasterize both sides of the SVG selection");
+  }
+  const cssVisualDiff = comparePngVisual(
+    decodePngRgba(
+      await readFile(join(workspaceRoot, "css-selection-source.png")),
+    ),
+    decodePngRgba(
+      await readFile(join(workspaceRoot, "css-selection-derived.png")),
+    ),
+    1,
+  );
+  if (cssVisualDiff.differingPixels !== 0)
+    throw new Error("autonomous SVG selection changed visual pixels");
   await mkdir(join(workspaceRoot, "selection-assets"));
   const pixel = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg==",

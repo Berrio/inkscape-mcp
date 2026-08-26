@@ -1,4 +1,10 @@
 export { verifyPng, type PngMetadata } from "./png.js";
+export {
+  comparePngVisual,
+  decodePngRgba,
+  type DecodedPng,
+  type PngVisualDifference,
+} from "./png-visual.js";
 export { verifyPdf, type PdfMetadata } from "./pdf.js";
 export { verifySvg, type SvgMetadata } from "./svg.js";
 export {

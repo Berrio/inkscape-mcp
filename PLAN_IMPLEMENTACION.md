@@ -1704,7 +1704,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F05-G08` Inspector MCP ejecuta status/create/resize/preview/export por stdio.
 - [ ] `F05-G09` Evidencia completa en `docs/progress/F05.md`; MVP demostrable de extremo a extremo.
 - [ ] `F05-G10` Un PDF subset (páginas 1 y 3 de un fixture de tres) produce un solo archivo con exactamente dos páginas, orden y boxes correctas; el manifest declara estrategia `direct|prune|merge`.
-- [ ] `F05-G11` SVG selection-only reabre sin refs rotas, conserva apariencia dentro de tolerancia y no incorpora objetos ajenos a su cierre transitivo.
+- [~] `F05-G11` SVG selection-only reabre sin refs rotas, conserva apariencia dentro de tolerancia y no incorpora objetos ajenos a su cierre transitivo. — Un fixture contextual `#card .selected` se rasteriza antes/después con Inkscape y obtiene cero píxeles distintos con tolerancia de un nivel; refs/IDs se verifican. Falta corpus de apariencia más amplio y casos CSS complejos.
 - [ ] `F05-G12` PDF con `viewBox` de origen no cero conserva MediaBox/CropBox y apariencia esperadas; el manifest registra si se normalizó una copia temporal.
 - [ ] `F05-G13` Plain SVG con dimensión/viewBox 512 conserva el valor correcto y reabre visualmente; ninguna workaround se aplica a builds no afectadas.
 

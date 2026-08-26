@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { comparePngVisual, decodePngRgba } from "../dist/export/index.js";
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -101,6 +102,35 @@ try {
       "document_resize accepted an ambiguous percentage viewport",
     );
   }
+  await writeFile(
+    join(workspaceRoot, "unsafe-import.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><script>throw new Error("x")</script><rect id="safe" onclick="alert(1)" width="5" height="5"/></svg>',
+  );
+  const unsafeRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "unsafe-import.svg")))
+    .digest("hex");
+  const importedSvg = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: unsafeRevision,
+      outputPath: "safe-import.svg",
+      path: "unsafe-import.svg",
+      sanitizeMode: "preserve-local",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_svg",
+  });
+  if (importedSvg.isError)
+    throw new Error("document_import_svg did not sanitize an imported SVG");
+  const importedText = await readFile(
+    join(workspaceRoot, "safe-import.svg"),
+    "utf8",
+  );
+  if (
+    !importedSvg.structuredContent?.removed?.includes("element:script") ||
+    !importedText.includes('id="safe"') ||
+    /<script|onclick=/iu.test(importedText)
+  )
+    throw new Error("document_import_svg published unsafe SVG content");
   await writeFile(
     join(workspaceRoot, "fit.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 50"><rect id="fit_rect" x="10" y="5" width="30" height="20"/></svg>',

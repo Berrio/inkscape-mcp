@@ -1864,7 +1864,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [ ] `F08-T01` Diseñar pipeline `externo -> SVG temporal -> inspección -> incorporación/publicación`.
 - [ ] `F08-T02` Usar `--list-input-types` runtime como fuente de verdad.
-- [ ] `F08-T03` Implementar SVG/SVGZ con sanitización/preserve modes.
+- [~] `F08-T03` Implementar SVG/SVGZ con sanitización/preserve modes. — `document_import_svg` importa SVG local con revisión SHA-256, commit atómico y modos strict/preserve-local/trusted limitados por configuración; la prueba MCP elimina script/event handler reales. SVGZ sigue pendiente.
 - [ ] `F08-T04` Implementar raster place/embed con sniffing y límites.
 - [ ] `F08-T05` Implementar PDF interno con `--pages` y estrategias de fuente allowlisted.
 - [ ] `F08-T06` Implementar PDF Poppler como modo distinto y advertir glyphs/rasterización.

@@ -40,7 +40,7 @@ import {
   validateSvgPageLayout,
 } from "../documents/index.js";
 import { nativeVisualBoundsDescriptor } from "../geometry/index.js";
-import { summarizeSvgDiff } from "../svg/index.js";
+import { sanitizeSvg, summarizeSvgDiff } from "../svg/index.js";
 import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import {
@@ -1038,6 +1038,67 @@ export function buildServer(config: ServerConfig): McpServer {
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_import_svg",
+    {
+      description:
+        "Imports one workspace-local SVG into a new sanitized SVG document. Scripts, event handlers and forbidden external references are removed according to the selected policy.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          outputPath: z.string().min(1).max(1024),
+          path: z.string().min(1).max(1024),
+          sanitizeMode: z
+            .enum(["strict", "preserve-local", "trusted"])
+            .default("preserve-local"),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        outputPath: z.string(),
+        removed: z.array(z.string()),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({
+      expectedRevision,
+      outputPath,
+      path,
+      sanitizeMode,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const input = await workspace.resolveExisting(workspaceId, path);
+      const output = await workspace.resolveNewOutput(workspaceId, outputPath);
+      if (!/\.svg$/iu.test(output.relativePath))
+        throw new Error("document_import_svg requires a .svg output path");
+      const source = await readFile(input.absolutePath, "utf8");
+      const sanitized = sanitizeSvg(source, {
+        maxElements: 100_000,
+        maxInputBytes: config.maxInputBytes,
+        maximumMode: config.maximumSanitizeMode,
+        mode: sanitizeMode,
+      });
+      const committed = await fileStore.commit({
+        contents: Buffer.from(sanitized.svg, "utf8"),
+        expectedRevision,
+        sourcePath: input.absolutePath,
+        targetPath: output.absolutePath,
+      });
+      const result = {
+        outputPath: output.relativePath,
+        removed: sanitized.removed,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
       };
     },
   );

@@ -1739,7 +1739,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [x] `F06-T16` Implementar patch de geometría/atributos allowlisted por tipo.
 - [x] `F06-T17` Implementar texto básico sin aceptar markup inseguro.
-- [ ] `F06-T18` Implementar delete explícito y cascade/ref policy; el primer corte rechaza refs `href` rotas, pero CSS/filters/otros refs siguen pendientes.
+- [x] `F06-T18` Implementar delete explícito y cascade/ref policy. — Antes de borrar, recorre el subárbol destino y rechaza referencias vivas a cualquiera de sus IDs mediante href/xlink, `url(#…)` en atributos y CSS, o ARIA; el commit no se alcanza en un rechazo.
 - [~] `F06-T19` Implementar duplicate independiente y clone `<use>` como operaciones distintas. — `elements_duplicate` copia elementos simples bajo nuevo ID o crea `<use href="#…">` explícito; la copia de subárboles con IDs hijos se rechaza hasta que el remapeo profundo preserve sus refs internas.
 - [ ] `F06-T20` Implementar group/ungroup/reparent con orden estable.
 - [ ] `F06-T21` Implementar z-order: front/back/raise/lower/index/relative-to.

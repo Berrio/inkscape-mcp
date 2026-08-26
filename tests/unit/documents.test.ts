@@ -623,6 +623,20 @@ describe("basic SVG documents", () => {
         ["shape"],
       ),
     ).toThrow("would break an SVG reference");
+    for (const sourceWithReference of [
+      '<svg xmlns="http://www.w3.org/2000/svg"><defs><filter id="effect"/></defs><rect filter="url(#effect)"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="clip"/></defs><style>.item { clip-path: url(#clip); }</style><rect class="item"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><title id="label"/><rect aria-labelledby="label"/></svg>',
+    ])
+      expect(() =>
+        deleteSvgShapes(sourceWithReference, [
+          sourceWithReference.includes('id="effect"')
+            ? "effect"
+            : sourceWithReference.includes('id="clip"')
+              ? "clip"
+              : "label",
+        ]),
+      ).toThrow("would break an SVG reference");
     const transformed = transformSvgShapes(created.svg, ["rect_1"], {
       kind: "translate",
       x: 4,

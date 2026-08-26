@@ -233,18 +233,19 @@ export function deleteSvgShapes(
     return target;
   });
   const targetSet = new Set(targets);
+  const deletedReferenceIds = new Set<string>();
+  for (const target of targets)
+    for (const element of [
+      target,
+      ...Array.from(target.getElementsByTagName("*")),
+    ]) {
+      const id = element.getAttribute("id");
+      if (id !== null) deletedReferenceIds.add(id);
+    }
   for (const element of elements) {
     if (isWithinDeletedTree(element, targetSet)) continue;
-    for (let index = 0; index < element.attributes.length; index += 1) {
-      const attribute = element.attributes.item(index);
-      if (!attribute) continue;
-      if (
-        (attribute.name === "href" || attribute.name === "xlink:href") &&
-        attribute.value.trim().startsWith("#") &&
-        ids.includes(attribute.value.trim().slice(1))
-      )
-        throw new Error("Deleting this shape would break an SVG reference");
-    }
+    if (referencesDeletedId(element, deletedReferenceIds))
+      throw new Error("Deleting this shape would break an SVG reference");
   }
   for (const target of targets) target.parentNode?.removeChild(target);
   return {
@@ -772,6 +773,45 @@ function isWithinDeletedTree(
       current.parentNode?.nodeType === 1
         ? (current.parentNode as XmlElement)
         : null;
+  }
+  return false;
+}
+function referencesDeletedId(
+  element: XmlElement,
+  deletedIds: ReadonlySet<string>,
+): boolean {
+  for (let index = 0; index < element.attributes.length; index += 1) {
+    const attribute = element.attributes.item(index);
+    if (!attribute) continue;
+    const name = attribute.name.toLowerCase();
+    const value = attribute.value.trim();
+    if (
+      (name === "href" || name === "xlink:href") &&
+      value.startsWith("#") &&
+      deletedIds.has(value.slice(1))
+    )
+      return true;
+    if (
+      (name === "aria-describedby" || name === "aria-labelledby") &&
+      value.split(/\s+/u).some((id) => deletedIds.has(id))
+    )
+      return true;
+    if (containsDeletedUrlFragment(attribute.value, deletedIds)) return true;
+  }
+  return (
+    element.localName === "style" &&
+    containsDeletedUrlFragment(element.textContent ?? "", deletedIds)
+  );
+}
+function containsDeletedUrlFragment(
+  value: string,
+  deletedIds: ReadonlySet<string>,
+): boolean {
+  for (const match of value.matchAll(
+    /url\(\s*(?:(['"])#([^'"]+)\1|#([^)]*?))\s*\)/giu,
+  )) {
+    const id = (match[2] ?? match[3] ?? "").trim();
+    if (deletedIds.has(id)) return true;
   }
   return false;
 }

@@ -170,6 +170,24 @@ try {
   )
     throw new Error("document_normalize_ids did not rewrite safe references");
   await writeFile(
+    join(workspaceRoot, "delete-reference.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><defs><filter id="protected_filter"/></defs><rect filter="url(#protected_filter)"/></svg>',
+  );
+  const deleteReferenceRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "delete-reference.svg")))
+    .digest("hex");
+  const protectedDelete = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: deleteReferenceRevision,
+      ids: ["protected_filter"],
+      path: "delete-reference.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_delete",
+  });
+  if (!protectedDelete.isError)
+    throw new Error("elements_delete broke a URL fragment reference");
+  await writeFile(
     join(workspaceRoot, "id-delimiters.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20"><rect id="with,comma" x="0" y="0" width="10" height="10"/><rect id="with;semicolon" x="20" y="0" width="10" height="10"/><rect id="with space" x="40" y="0" width="10" height="10"/><rect id="mañana" x="60" y="0" width="10" height="10"/><rect id="public_rect" x="80" y="0" width="10" height="10"/></svg>',
   );

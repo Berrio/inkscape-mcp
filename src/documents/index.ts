@@ -43,6 +43,7 @@ export {
   type ElementDuplicateRequest,
   type ElementReparentRequest,
   type ElementArrangeAction,
+  type ElementArrangeOptions,
   type ElementGroupAction,
   type ElementTransform,
   type ElementUpdate,

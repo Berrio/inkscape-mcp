@@ -688,6 +688,29 @@ describe("basic SVG documents", () => {
     expect(() =>
       arrangeSvgShapes(created.svg, ["rect_1", "circle_1"], "raise"),
     ).toThrow("exactly one ID");
+    const arrangedByIndex = arrangeSvgShapes(
+      created.svg,
+      ["rect_1", "circle_1"],
+      "index",
+      { index: 0 },
+    );
+    expect(arrangedByIndex.svg.indexOf('id="rect_1"')).toBeLessThan(
+      arrangedByIndex.svg.indexOf('id="circle_1"'),
+    );
+    const arrangedRelative = arrangeSvgShapes(
+      arrangedByIndex.svg,
+      ["rect_1"],
+      "after",
+      { relativeTo: "circle_1" },
+    );
+    expect(arrangedRelative.svg.indexOf('id="circle_1"')).toBeLessThan(
+      arrangedRelative.svg.indexOf('id="rect_1"'),
+    );
+    expect(() =>
+      arrangeSvgShapes(created.svg, ["rect_1"], "before", {
+        relativeTo: "rect_1",
+      }),
+    ).toThrow("cannot be selected");
     const grouped = groupSvgShapes(created.svg, {
       action: "group",
       groupId: "shape_group",

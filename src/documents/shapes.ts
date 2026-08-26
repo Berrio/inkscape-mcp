@@ -79,7 +79,12 @@ export type ElementUpdate = {
   style?: ShapeStyle | undefined;
   text?: string | undefined;
 };
-export type ElementArrangeAction = "back" | "front" | "lower" | "raise";
+export type ElementArrangeAction =
+  "back" | "front" | "lower" | "raise" | "index" | "before" | "after";
+export type ElementArrangeOptions = {
+  index?: number | undefined;
+  relativeTo?: string | undefined;
+};
 export type ElementGroupAction = "group" | "ungroup";
 export type ElementDuplicateRequest = {
   id: string;
@@ -434,6 +439,7 @@ export function arrangeSvgShapes(
   source: string,
   ids: readonly string[],
   action: ElementArrangeAction,
+  options: ElementArrangeOptions = {},
 ): { ids: readonly string[]; svg: string } {
   if (ids.length < 1 || ids.length > 100)
     throw new Error("Arrange batch must contain between one and 100 IDs");
@@ -441,6 +447,18 @@ export function arrangeSvgShapes(
     throw new Error("Arrange IDs must be unique");
   if ((action === "raise" || action === "lower") && ids.length !== 1)
     throw new Error("Raise and lower require exactly one ID");
+  if (
+    action === "index" &&
+    (!Number.isInteger(options.index) ||
+      options.index === undefined ||
+      options.index < 0)
+  )
+    throw new Error("Index arrange requires a non-negative integer index");
+  if (
+    (action === "before" || action === "after") &&
+    (!options.relativeTo || !SAFE_ID.test(options.relativeTo))
+  )
+    throw new Error("Relative arrange requires a valid relativeTo ID");
   const document = parseSafeDocument(source);
   const targets = ids.map((id) => {
     if (!SAFE_ID.test(id)) throw new Error("Shape ID is invalid");
@@ -474,6 +492,31 @@ export function arrangeSvgShapes(
       const target = targets[0]!;
       const previous = previousElementSibling(target);
       if (previous) parent.insertBefore(target, previous);
+      break;
+    }
+    case "index": {
+      const index = options.index!;
+      const remaining = childElements(parent).filter(
+        (element) => !ordered.includes(element),
+      );
+      if (index > remaining.length)
+        throw new Error("Arrange index exceeds the available sibling range");
+      const reference = remaining[index];
+      for (const target of ordered)
+        parent.insertBefore(target, reference ?? null);
+      break;
+    }
+    case "before":
+    case "after": {
+      const relative = childElements(parent).find(
+        (element) => element.getAttribute("id") === options.relativeTo,
+      );
+      if (!relative)
+        throw new Error("Relative arrange target must be a sibling");
+      if (ordered.includes(relative))
+        throw new Error("Relative arrange target cannot be selected");
+      const reference = action === "before" ? relative : relative.nextSibling;
+      for (const target of ordered) parent.insertBefore(target, reference);
       break;
     }
   }

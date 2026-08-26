@@ -710,10 +710,29 @@ try {
   ) {
     throw new Error("elements_arrange did not apply a typed z-order change");
   }
+  const arrangedByIndex = await workspaceClient.callTool({
+    arguments: {
+      action: "index",
+      expectedRevision: arrangedRevision,
+      ids: ["demo_text"],
+      index: 0,
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_arrange",
+  });
+  const indexedRevision = arrangedByIndex.structuredContent?.revision;
+  if (
+    arrangedByIndex.isError ||
+    arrangedByIndex.structuredContent?.index !== 0 ||
+    typeof indexedRevision !== "string"
+  ) {
+    throw new Error("elements_arrange did not support deterministic indexes");
+  }
   const grouped = await workspaceClient.callTool({
     arguments: {
       action: "group",
-      expectedRevision: arrangedRevision,
+      expectedRevision: indexedRevision,
       groupId: "demo_group",
       ids: ["demo_rect", "demo_text"],
       path: "a4.svg",

@@ -904,23 +904,58 @@ export function buildServer(config: ServerConfig): McpServer {
     "elements_arrange",
     {
       description:
-        "Moves same-parent SVG elements to front, back, one step up, or one step down without accepting arbitrary order indexes.",
-      inputSchema: z.object({
-        action: z.enum(["back", "front", "lower", "raise"]),
-        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
-        ids: z.array(shapeIdSchema).min(1).max(100),
-        path: z.string().min(1).max(1024),
-        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
-      }),
+        "Moves same-parent SVG elements to front, back, one step, a deterministic sibling index, or immediately before/after a sibling.",
+      inputSchema: z.discriminatedUnion("action", [
+        z.object({
+          action: z.enum(["back", "front", "lower", "raise"]),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z.array(shapeIdSchema).min(1).max(100),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("index"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z.array(shapeIdSchema).min(1).max(100),
+          index: z.number().int().min(0).max(100_000),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.enum(["before", "after"]),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z.array(shapeIdSchema).min(1).max(100),
+          path: z.string().min(1).max(1024),
+          relativeTo: shapeIdSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+      ]),
       outputSchema: z.object({
-        action: z.enum(["back", "front", "lower", "raise"]),
+        action: z.enum([
+          "back",
+          "front",
+          "lower",
+          "raise",
+          "index",
+          "before",
+          "after",
+        ]),
         backupCreated: z.boolean(),
         ids: z.array(shapeIdSchema),
+        index: z.number().int().nonnegative().optional(),
+        relativeTo: shapeIdSchema.optional(),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
       }),
       annotations: { destructiveHint: true },
     },
-    async ({ action, expectedRevision, ids, path, workspaceId }) => {
+    async (input) => {
+      const { action, expectedRevision, ids, path, workspaceId } = input;
+      const arrangeOptions =
+        action === "index"
+          ? { index: input.index }
+          : action === "before" || action === "after"
+            ? { relativeTo: input.relativeTo }
+            : {};
       assertDocumentWorkspace(config);
       const document = await (
         await workspaces()
@@ -929,6 +964,7 @@ export function buildServer(config: ServerConfig): McpServer {
         await readFile(document.absolutePath, "utf8"),
         ids,
         action,
+        arrangeOptions,
       );
       const committed = await fileStore.commit({
         contents: Buffer.from(arranged.svg),
@@ -941,6 +977,10 @@ export function buildServer(config: ServerConfig): McpServer {
         action,
         backupCreated: committed.backupPath !== undefined,
         ids: arranged.ids,
+        ...(action === "index" ? { index: input.index } : {}),
+        ...(action === "before" || action === "after"
+          ? { relativeTo: input.relativeTo }
+          : {}),
         revision: committed.revision,
       };
       return {

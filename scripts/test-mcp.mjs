@@ -1177,6 +1177,50 @@ try {
   ) {
     throw new Error("document_export_batch did not publish both PNG variants");
   }
+  const rejectedAtomicBatch = await workspaceClient.callTool({
+    arguments: {
+      mode: "all_or_nothing",
+      specs: [
+        {
+          area: { kind: "drawing" },
+          background: { mode: "transparent" },
+          format: "png",
+          source: { expectedRevision: settingsRevision, path: "a4.svg" },
+          target: {
+            kind: "file",
+            overwrite: false,
+            path: "must-not-publish.png",
+          },
+        },
+        {
+          area: {
+            elementIds: ["missing_selection"],
+            kind: "selection",
+            output: "combined",
+            visibility: "document",
+          },
+          background: { mode: "transparent" },
+          format: "png",
+          source: { expectedRevision: settingsRevision, path: "a4.svg" },
+          target: {
+            kind: "file",
+            overwrite: false,
+            path: "will-fail.png",
+          },
+        },
+      ],
+      workspaceId: workspace.id,
+    },
+    name: "document_export_batch",
+  });
+  const atomicOutputExists = await readFile(
+    join(workspaceRoot, "must-not-publish.png"),
+  )
+    .then(() => true)
+    .catch(() => false);
+  if (!rejectedAtomicBatch.isError || atomicOutputExists) {
+    throw new Error("all_or_nothing batch published a variant after failure");
+  }
   const selectionSvg = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,

@@ -21,9 +21,7 @@ export function createExportManifest(request: {
   if (!Number.isInteger(request.durationMs) || request.durationMs < 0)
     throw new Error("Export manifest duration is invalid");
   if (
-    !/^\d+\.\d+(?:\.\d+)?(?:[-+][A-Za-z0-9.-]+)?$/u.test(
-      request.inkscapeVersion,
-    )
+    !/^\d+(?:\.\d+){1,3}(?:\s*\([^\r\n)]*\))?$/u.test(request.inkscapeVersion)
   )
     throw new Error("Export manifest Inkscape version is invalid");
   return {

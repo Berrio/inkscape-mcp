@@ -45,6 +45,7 @@ import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import {
   buildExportArgv,
+  createExportBatchManifest,
   executeExportBatch,
   expandExportPreset,
   type ExportSpec,
@@ -2457,6 +2458,27 @@ export function buildServer(config: ServerConfig): McpServer {
         failures: z.array(
           z.object({ index: z.number().int(), message: z.string() }),
         ),
+        manifest: z.object({
+          durationMs: z.number().int().nonnegative(),
+          failures: z.array(
+            z.object({ index: z.number().int(), message: z.string() }),
+          ),
+          inkscapeVersion: z.string().optional(),
+          mode: z.enum(["all_or_nothing", "best_effort"]),
+          publication: z.enum(["file_commit_batch", "file_commit_each"]),
+          source: z.object({
+            expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+            path: z.string(),
+          }),
+          variants: z.array(
+            z.object({
+              format: z.enum(["pdf", "plain-svg", "png", "svg"]),
+              index: z.number().int(),
+              outputPath: z.string(),
+              revision: z.string().regex(/^[a-f0-9]{64}$/u),
+            }),
+          ),
+        }),
         mode: z.enum(["all_or_nothing", "best_effort"]),
         successes: z.array(
           z.object({
@@ -2470,6 +2492,7 @@ export function buildServer(config: ServerConfig): McpServer {
     },
     async ({ mode, preset, specs, workspaceId }) => {
       assertDocumentWorkspace(config);
+      const startedAt = Date.now();
       const expandedSpecs =
         specs === undefined
           ? expandExportPreset(preset!)
@@ -2502,8 +2525,8 @@ export function buildServer(config: ServerConfig): McpServer {
       const staged = await executeExportBatch({
         mode,
         variants,
-        execute: async (variant) => ({
-          bytes: await renderGenericExport({
+        execute: async (variant) => {
+          const rendered = await renderGenericExport({
             config,
             inputPath: input.absolutePath,
             inputRoot: input.workspaceRoot,
@@ -2513,9 +2536,9 @@ export function buildServer(config: ServerConfig): McpServer {
               ExportSpec,
               { format: "pdf" | "plain-svg" | "png" | "svg" }
             >,
-          }),
-          variant,
-        }),
+          });
+          return { ...rendered, variant };
+        },
       });
       if (mode === "all_or_nothing" && staged.failures.length > 0)
         throw new Error(
@@ -2566,7 +2589,24 @@ export function buildServer(config: ServerConfig): McpServer {
             revision: committed.revision,
           });
         }
-      const result = { failures: staged.failures, mode, successes };
+      const manifest = createExportBatchManifest({
+        durationMs: Date.now() - startedAt,
+        failures: staged.failures,
+        ...(staged.successes[0] === undefined
+          ? {}
+          : { inkscapeVersion: staged.successes[0].value.inkscapeVersion }),
+        mode,
+        publication:
+          mode === "all_or_nothing" ? "file_commit_batch" : "file_commit_each",
+        source,
+        variants: successes.map((success) => ({
+          format: variants[success.index]!.format,
+          index: success.index,
+          outputPath: success.outputPath,
+          revision: success.revision,
+        })),
+      });
+      const result = { failures: staged.failures, manifest, mode, successes };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
         structuredContent: result,
@@ -3981,7 +4021,7 @@ async function renderGenericExport(request: {
   runner: ProcessRunner;
   scratch: ScratchManager;
   spec: Extract<ExportSpec, { format: "pdf" | "plain-svg" | "png" | "svg" }>;
-}): Promise<Buffer> {
+}): Promise<{ bytes: Buffer; inkscapeVersion: string }> {
   const source = await readFile(request.inputPath, "utf8");
   const area = normalizeExportArea(
     request.spec.area.kind === "pages"
@@ -4062,7 +4102,10 @@ async function renderGenericExport(request: {
       throw new Error("Inkscape document export failed");
     await verifyExportArtifact(request.spec.format, temporaryOutput);
     await nativeInput.assertCurrent();
-    return await readFile(temporaryOutput);
+    return {
+      bytes: await readFile(temporaryOutput),
+      inkscapeVersion: probe.version,
+    };
   });
 }
 

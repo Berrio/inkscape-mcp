@@ -49,3 +49,7 @@ export {
   type ExportBatchMode,
   type PlannedExportVariant,
 } from "./batch.js";
+export {
+  createExportBatchManifest,
+  type ExportBatchManifest,
+} from "./batch-manifest.js";

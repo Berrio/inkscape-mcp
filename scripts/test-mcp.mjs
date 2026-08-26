@@ -1173,9 +1173,15 @@ try {
   if (
     genericBatch.isError ||
     genericBatch.structuredContent?.successes?.length !== 2 ||
-    genericBatch.structuredContent?.failures?.length !== 0
+    genericBatch.structuredContent?.failures?.length !== 0 ||
+    genericBatch.structuredContent?.manifest?.publication !==
+      "file_commit_batch" ||
+    genericBatch.structuredContent.manifest.variants.length !== 2 ||
+    typeof genericBatch.structuredContent.manifest.inkscapeVersion !== "string"
   ) {
-    throw new Error("document_export_batch did not publish both PNG variants");
+    throw new Error(
+      "document_export_batch did not publish both PNG variants and its manifest",
+    );
   }
   const presetBatch = await workspaceClient.callTool({
     arguments: {

@@ -1,6 +1,7 @@
-import { copyFile } from "node:fs/promises";
+import { copyFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { sanitizeSvg } from "../svg/index.js";
 import { assertRevision, sha256File } from "./revisions.js";
 
 export type NativeInputBundle = {
@@ -15,6 +16,15 @@ export async function createNativeInputBundle(
   directory: string,
 ): Promise<NativeInputBundle> {
   await assertRevision(sourcePath, expectedRevision);
+  const source = await readFile(sourcePath, "utf8");
+  const sanitization = sanitizeSvg(source, {
+    maxElements: 100_000,
+    maxInputBytes: 50 * 1024 * 1024,
+    mode: "preserve-local",
+  });
+  if (sanitization.removed.length > 0) {
+    throw new Error("Native export input violates the SVG safety policy");
+  }
   const path = join(directory, "input.svg");
   await copyFile(sourcePath, path);
   const revision = await sha256File(path);

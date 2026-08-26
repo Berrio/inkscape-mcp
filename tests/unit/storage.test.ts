@@ -55,6 +55,16 @@ describe("file revisions and atomic store", () => {
       createNativeInputBundle(source, expectedRevision, staging),
     ).rejects.toBeInstanceOf(RevisionConflictError);
   });
+  it("rejects unsafe SVG before a native process can receive it", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "unsafe.svg");
+    const staging = join(root, "staging");
+    await mkdir(staging);
+    await writeFile(source, "<svg><script/></svg>");
+    await expect(
+      createNativeInputBundle(source, await sha256File(source), staging),
+    ).rejects.toThrow("Native export input violates the SVG safety policy");
+  });
   it("streams a revision and refuses stale source or output revisions", async () => {
     const root = await temporaryDirectory();
     const source = join(root, "source.svg");

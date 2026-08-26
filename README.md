@@ -67,7 +67,8 @@ en staging, nunca la ruta viva del workspace.
 El proyecto no promete aislar vulnerabilidades desconocidas de parsers nativos.
 Limita rutas, XML, argumentos, procesos, tamanos y sobrescrituras; la politica
 actual de input nativo es `trusted-local-only`. La exportacion rechaza SVG con
-contenido activo o recursos remotos antes de iniciar Inkscape.
+contenido activo o recursos remotos antes de iniciar Inkscape; las mutaciones
+de resize aplican la misma regla.
 
 Las instrucciones de contribucion y los invariantes se encuentran en
 [AGENTS.md](./AGENTS.md). El paquete sigue siendo privado: publicarlo en npm o

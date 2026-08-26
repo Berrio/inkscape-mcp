@@ -87,6 +87,7 @@ export function resizePageOnlySvg(
   targetPage: PageSize,
   anchor: ResizeAnchor = "top_left",
 ): { svg: string; warnings: readonly string[] } {
+  assertMutationSafe(source);
   const settings = inspectSvgSettings(source);
   const plan = planResize({
     currentPage,
@@ -120,6 +121,7 @@ export function resizeContentSvg(
   >,
   anchor?: ResizeAnchor,
 ): { svg: string; warnings: readonly string[] } {
+  assertMutationSafe(source);
   const settings = inspectSvgSettings(source);
   const plan = planResize({
     ...(anchor === undefined ? {} : { anchor }),
@@ -175,6 +177,16 @@ export function resizeContentSvg(
         ? [...plan.warnings, "NO_RENDERABLE_CONTENT"]
         : plan.warnings,
   };
+}
+
+function assertMutationSafe(source: string): void {
+  const sanitization = sanitizeSvg(source, {
+    maxElements: 100_000,
+    maxInputBytes: 50 * 1024 * 1024,
+    mode: "preserve-local",
+  });
+  if (sanitization.removed.length > 0)
+    throw new Error("SVG must be sanitized before resizing");
 }
 
 function formatLength(length: PageSize["width"]): string {

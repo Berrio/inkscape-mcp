@@ -51,6 +51,15 @@ describe("basic SVG documents", () => {
       height: 210,
     });
   });
+  it("refuses to resize SVG that needs sanitization", () => {
+    expect(() =>
+      resizePageOnlySvg(
+        '<svg width="1px" height="1px" viewBox="0 0 1 1"><script/></svg>',
+        { width: { unit: "px", value: 1 }, height: { unit: "px", value: 1 } },
+        { width: { unit: "px", value: 2 }, height: { unit: "px", value: 2 } },
+      ),
+    ).toThrow("SVG must be sanitized before resizing");
+  });
   it("wraps only renderable root content for contain and preserves defs", () => {
     const source =
       '<svg xmlns="http://www.w3.org/2000/svg" width="800px" height="600px" viewBox="0 0 800 600"><defs><linearGradient id="keep"/></defs><rect id="shape" width="800" height="600"/></svg>';

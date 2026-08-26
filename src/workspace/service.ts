@@ -16,6 +16,8 @@ export type Workspace = { id: string; root: string };
 export type ResolvedWorkspacePath = {
   absolutePath: string;
   relativePath: string;
+  /** Internal-only canonical root for downstream staging; never serialize it. */
+  workspaceRoot: string;
   workspaceId: string;
 };
 export type DocumentPage = {
@@ -196,6 +198,7 @@ function resolved(
   return {
     absolutePath,
     relativePath: relative(workspace.root, absolutePath).split(sep).join("/"),
+    workspaceRoot: workspace.root,
     workspaceId: workspace.id,
   };
 }

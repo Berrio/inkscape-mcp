@@ -34,15 +34,20 @@ export class ArtifactStore {
     const id = `art_${crypto.randomUUID().replaceAll("-", "")}`;
     const path = join(resolve(this.root), id);
     await copyFile(sourcePath, path);
+    const staged = await stat(path);
+    if (!staged.isFile() || staged.size > this.maxArtifactBytes) {
+      await rm(path, { force: true });
+      throw new RevisionConflictError("Artifact exceeds allowed size");
+    }
     const hash = await sha256File(path);
     this.records.set(id, {
       expiresAt: Date.now() + ttlMs,
       hash,
       owner,
       path,
-      size: metadata.size,
+      size: staged.size,
     });
-    return { hash, id, size: metadata.size, uri: `inkscape://artifact/${id}` };
+    return { hash, id, size: staged.size, uri: `inkscape://artifact/${id}` };
   }
 
   public async readChunk(
@@ -53,6 +58,52 @@ export class ArtifactStore {
     maximumReadBytes: number,
   ): Promise<{ bytes: Buffer; hash: string; size: number }> {
     const record = await this.get(id, owner);
+    return this.read(record, offset, length, maximumReadBytes);
+  }
+
+  /**
+   * Reads an opaque artifact URI capability. This is used only by the MCP
+   * resource adapter: the random artifact ID is the capability, while tools
+   * continue to use the owner-bound method above.
+   */
+  public async readCapabilityChunk(
+    id: string,
+    offset: number,
+    length: number,
+    maximumReadBytes: number,
+  ): Promise<{ bytes: Buffer; hash: string; size: number }> {
+    const record = await this.get(id);
+    return this.read(record, offset, length, maximumReadBytes);
+  }
+
+  public async removeExpired(): Promise<number> {
+    let removed = 0;
+    for (const [id, record] of this.records)
+      if (record.expiresAt <= Date.now()) {
+        await rm(record.path, { force: true });
+        this.records.delete(id);
+        removed += 1;
+      }
+    return removed;
+  }
+
+  private async get(id: string, owner?: string): Promise<ArtifactRecord> {
+    const record = this.records.get(id);
+    if (
+      !record ||
+      (owner !== undefined && record.owner !== owner) ||
+      record.expiresAt <= Date.now()
+    )
+      throw new RevisionConflictError("Artifact is unavailable");
+    return record;
+  }
+
+  private async read(
+    record: ArtifactRecord,
+    offset: number,
+    length: number,
+    maximumReadBytes: number,
+  ): Promise<{ bytes: Buffer; hash: string; size: number }> {
     if (
       !Number.isSafeInteger(offset) ||
       offset < 0 ||
@@ -71,23 +122,5 @@ export class ArtifactStore {
       await handle.close();
     }
     return { bytes, hash: record.hash, size: record.size };
-  }
-
-  public async removeExpired(): Promise<number> {
-    let removed = 0;
-    for (const [id, record] of this.records)
-      if (record.expiresAt <= Date.now()) {
-        await rm(record.path, { force: true });
-        this.records.delete(id);
-        removed += 1;
-      }
-    return removed;
-  }
-
-  private async get(id: string, owner: string): Promise<ArtifactRecord> {
-    const record = this.records.get(id);
-    if (!record || record.owner !== owner || record.expiresAt <= Date.now())
-      throw new RevisionConflictError("Artifact is unavailable");
-    return record;
   }
 }

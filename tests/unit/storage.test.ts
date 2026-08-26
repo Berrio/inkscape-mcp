@@ -56,6 +56,90 @@ describe("file revisions and atomic store", () => {
       createNativeInputBundle(source, expectedRevision, staging),
     ).rejects.toBeInstanceOf(RevisionConflictError);
   });
+  it("stages every local SVG dependency with rewritten URIs and a reproducible manifest", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const assets = join(root, "assets");
+    const staging = join(root, "staging");
+    await mkdir(assets);
+    await mkdir(staging);
+    await writeFile(join(assets, "texture.png"), "texture");
+    await writeFile(
+      source,
+      '<svg><image href="assets/texture.png"/><style>.x { fill: url("assets/texture.png#paint") }</style></svg>',
+    );
+    const bundle = await createNativeInputBundle(
+      source,
+      await sha256File(source),
+      staging,
+      { allowedRoot: root },
+    );
+    expect(bundle.manifest).toEqual({
+      dependencies: [
+        expect.objectContaining({
+          path: "assets/0000-texture.png",
+          uri: "assets/texture.png",
+        }),
+      ],
+      source: { path: "input.svg", revision: await sha256File(source) },
+    });
+    await expect(
+      readFile(join(staging, "assets", "0000-texture.png"), "utf8"),
+    ).resolves.toBe("texture");
+    await expect(readFile(bundle.path, "utf8")).resolves.toContain(
+      "assets/0000-texture.png",
+    );
+    await expect(readFile(bundle.manifestPath, "utf8")).resolves.not.toContain(
+      root,
+    );
+  });
+  it("rejects dependencies outside the workspace and detects a concurrent dependency writer", async () => {
+    const parent = await temporaryDirectory();
+    const root = join(parent, "workspace");
+    const staging = join(root, "staging");
+    const source = join(root, "source.svg");
+    const outside = join(parent, "outside.png");
+    await mkdir(root);
+    await mkdir(staging);
+    await writeFile(outside, "outside");
+    await writeFile(source, '<svg><image href="../outside.png"/></svg>');
+    await expect(
+      createNativeInputBundle(source, await sha256File(source), staging, {
+        allowedRoot: root,
+      }),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+
+    const asset = join(root, "asset.png");
+    await writeFile(asset, "first");
+    await writeFile(source, '<svg><image href="asset.png"/></svg>');
+    await expect(
+      createNativeInputBundle(source, await sha256File(source), staging, {
+        allowedRoot: root,
+        beforeFinalVerification: async () => {
+          await writeFile(asset, "second");
+        },
+      }),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+  });
+  it("rehashes a staged bundle before publication", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const asset = join(root, "asset.png");
+    const staging = join(root, "staging");
+    await mkdir(staging);
+    await writeFile(asset, "first");
+    await writeFile(source, '<svg><image href="asset.png"/></svg>');
+    const bundle = await createNativeInputBundle(
+      source,
+      await sha256File(source),
+      staging,
+      { allowedRoot: root },
+    );
+    await writeFile(asset, "second");
+    await expect(bundle.assertCurrent()).rejects.toBeInstanceOf(
+      RevisionConflictError,
+    );
+  });
   it("rejects unsafe SVG before a native process can receive it", async () => {
     const root = await temporaryDirectory();
     const source = join(root, "unsafe.svg");
@@ -140,6 +224,57 @@ describe("file revisions and atomic store", () => {
     expect(
       (await readdir(root)).filter((name) => name.includes("inkscape-mcp")),
     ).toEqual([]);
+  });
+  it("rejects an external source or destination writer before atomic publication", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const target = join(root, "target.svg");
+    await writeFile(source, "source");
+    await writeFile(target, "existing");
+    const sourceRevision = await sha256File(source);
+    const targetRevision = await sha256File(target);
+    const store = new AtomicFileStore(
+      new CanonicalPathLocks(),
+      async (temporaryPath, contents) => {
+        await writeFile(temporaryPath, contents);
+        await writeFile(target, "external destination writer");
+      },
+    );
+    await expect(
+      store.commit({
+        contents: Buffer.from("replacement"),
+        expectedOutputRevision: targetRevision,
+        expectedRevision: sourceRevision,
+        sourcePath: source,
+        targetPath: target,
+      }),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+    await expect(readFile(target, "utf8")).resolves.toBe(
+      "external destination writer",
+    );
+  });
+  it("rechecks the source after a concurrent writer creates the temporary output", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const target = join(root, "target.svg");
+    await writeFile(source, "source");
+    const sourceRevision = await sha256File(source);
+    const store = new AtomicFileStore(
+      new CanonicalPathLocks(),
+      async (temporaryPath, contents) => {
+        await writeFile(temporaryPath, contents);
+        await writeFile(source, "external source writer");
+      },
+    );
+    await expect(
+      store.commit({
+        contents: Buffer.from("replacement"),
+        expectedRevision: sourceRevision,
+        sourcePath: source,
+        targetPath: target,
+      }),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+    await expect(readFile(target)).rejects.toBeDefined();
   });
   it("serializes conflicting writers in a deterministic lock order", async () => {
     const locks = new CanonicalPathLocks();
@@ -261,5 +396,28 @@ describe("file revisions and atomic store", () => {
     await expect(
       artifacts.readChunk(artifact.id, "owner-a", 0, 5, 4),
     ).rejects.toBeInstanceOf(RevisionConflictError);
+    await expect(
+      artifacts.readCapabilityChunk(artifact.id, 8, 4, 4),
+    ).resolves.toMatchObject({ bytes: Buffer.from("ij"), hash: artifact.hash });
+    await expect(
+      artifacts.readCapabilityChunk(
+        "art_00000000000000000000000000000000",
+        0,
+        1,
+        4,
+      ),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+  });
+  it("expires artifact capabilities without retaining their staged file", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "export.png");
+    await writeFile(source, "artifact");
+    const artifacts = new ArtifactStore(join(root, "artifacts"), 100);
+    const artifact = await artifacts.publish(source, "owner-a", 1);
+    await new Promise<void>((resolveTimer) => setTimeout(resolveTimer, 10));
+    await expect(
+      artifacts.readCapabilityChunk(artifact.id, 0, 1, 1),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+    await expect(artifacts.removeExpired()).resolves.toBe(1);
   });
 });

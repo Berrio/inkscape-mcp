@@ -109,6 +109,15 @@ export class AtomicFileStore {
         let backupPath: string | undefined;
         try {
           await this.writeTemporary(temporary, request.contents);
+          if (request.sourcePath && request.expectedRevision)
+            await assertRevision(request.sourcePath, request.expectedRevision);
+          const finalExists = await fileExists(target);
+          if (finalExists !== exists)
+            throw new RevisionConflictError(
+              "Output existence changed before publication",
+            );
+          if (finalExists && request.expectedOutputRevision)
+            await assertRevision(target, request.expectedOutputRevision);
           if (exists) {
             backupPath = uniqueBackupPath(target);
             await copyFile(target, backupPath, 0);

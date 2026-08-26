@@ -1534,9 +1534,9 @@ Evidencia específica adicional para WP de alto riesgo:
 #### Artifact store mínimo
 
 - [x] `F02-T22` Implementar `ArtifactStore` opaco sobre archivos autorizados/staging con metadata, ownership, TTL, `maxArtifactBytes` y límites separados; no devolver paths absolutos.
-- [ ] `F02-T23` Registrar handlers para `inkscape://artifact/{id}` y chunks inmutables acotados por `maxResourceReadBytes`; probar acceso, rangos, hash, expiración y aislamiento sin cargar el artefacto completo.
-- [ ] `F02-T24` Implementar `NativeInputBundle`: snapshot/hash del SVG y cada dependencia local en staging, URI reescritas, manifest reproducible y ejecución nativa solo contra esa copia.
-- [ ] `F02-T25` Probar writer externo que cambia source/dependencia/destino entre validación y commit, rechazo de downgrade de `sanitizeMode`, y rehash/revisión final antes de publicar.
+- [x] `F02-T23` Registrar handlers para `inkscape://artifact/{id}` y chunks inmutables acotados por `maxResourceReadBytes`; probar acceso, rangos, hash, expiración y aislamiento sin cargar el artefacto completo.
+- [x] `F02-T24` Implementar `NativeInputBundle`: snapshot/hash del SVG y cada dependencia local en staging, URI reescritas, manifest reproducible y ejecución nativa solo contra esa copia.
+- [x] `F02-T25` Probar writer externo que cambia source/dependencia/destino entre validación y commit, rechazo de downgrade de `sanitizeMode`, y rehash/revisión final antes de publicar.
 
 #### Puerta F02
 

@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { Buffer } from "node:buffer";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -422,9 +423,32 @@ try {
   if (
     preview.isError ||
     preview.structuredContent?.documentPath !== "a4-preview.png" ||
-    preview.structuredContent?.width !== 256
+    preview.structuredContent?.width !== 256 ||
+    typeof preview.structuredContent?.artifact?.uri !== "string"
   ) {
     throw new Error("document_render_preview did not render a bounded PNG");
+  }
+  const artifactUri = preview.structuredContent.artifact.uri;
+  const resourceTemplates = await workspaceClient.listResourceTemplates();
+  if (
+    !resourceTemplates.resourceTemplates.some(
+      (resource) => resource.uriTemplate === "inkscape://artifact/{id}",
+    )
+  ) {
+    throw new Error("artifact resource template is not advertised");
+  }
+  const firstArtifactChunk = await workspaceClient.readResource({
+    uri: artifactUri,
+  });
+  const laterArtifactChunk = await workspaceClient.readResource({
+    uri: `${artifactUri}/chunk/1`,
+  });
+  if (
+    typeof firstArtifactChunk.contents[0]?.blob !== "string" ||
+    typeof laterArtifactChunk.contents[0]?.blob !== "string" ||
+    Buffer.from(firstArtifactChunk.contents[0].blob, "base64").byteLength === 0
+  ) {
+    throw new Error("artifact resources did not serve bounded binary chunks");
   }
   const exported = await workspaceClient.callTool({
     arguments: {

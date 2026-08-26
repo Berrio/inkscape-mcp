@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/server";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,6 +40,7 @@ import {
 import { ProcessRunner } from "../runner/index.js";
 import {
   AtomicFileStore,
+  ArtifactStore,
   createNativeInputBundle,
   ScratchManager,
   sha256File,
@@ -65,6 +66,12 @@ const statusSchema = z.object({
     workspaceReady: z.boolean(),
   }),
   workspaceReady: z.boolean(),
+});
+const artifactSchema = z.object({
+  hash: z.string().regex(/^[a-f0-9]{64}$/u),
+  id: z.string().regex(/^art_[a-f0-9]{32}$/u),
+  size: z.number().int().nonnegative(),
+  uri: z.string().regex(/^inkscape:\/\/artifact\/art_[a-f0-9]{32}$/u),
 });
 const pageSchema = z.object({
   height: z.number().finite().positive(),
@@ -451,7 +458,53 @@ export function buildServer(config: ServerConfig): McpServer {
     ),
     fileStore,
   );
+  const artifacts = new ArtifactStore(
+    join(
+      config.scratchRoot === "auto" ? tmpdir() : config.scratchRoot,
+      "inkscape-mcp-artifacts",
+    ),
+    config.maxArtifactBytes,
+  );
   const workspaces = () => WorkspaceService.create(config.workspaceRoots);
+
+  server.registerResource(
+    "artifact",
+    new ResourceTemplate("inkscape://artifact/{id}", { list: undefined }),
+    {
+      description:
+        "First bounded immutable chunk of an opaque Inkscape artifact capability.",
+      mimeType: "application/octet-stream",
+      title: "Inkscape artifact",
+    },
+    async (uri, variables) =>
+      artifactResource(
+        artifacts,
+        resourceVariable(variables.id),
+        0,
+        uri.href,
+        config.maxResourceReadBytes,
+      ),
+  );
+  server.registerResource(
+    "artifact_chunk",
+    new ResourceTemplate("inkscape://artifact/{id}/chunk/{offset}", {
+      list: undefined,
+    }),
+    {
+      description:
+        "A later bounded immutable chunk of an opaque Inkscape artifact capability.",
+      mimeType: "application/octet-stream",
+      title: "Inkscape artifact chunk",
+    },
+    async (uri, variables) =>
+      artifactResource(
+        artifacts,
+        resourceVariable(variables.id),
+        parseArtifactOffset(resourceVariable(variables.offset)),
+        uri.href,
+        config.maxResourceReadBytes,
+      ),
+  );
 
   server.registerTool(
     "inkscape_status",
@@ -991,6 +1044,7 @@ export function buildServer(config: ServerConfig): McpServer {
               expectedRevision,
               runner,
               scratch,
+              workspaceRoot: document.workspaceRoot,
             })
           : undefined;
       const output =
@@ -1543,6 +1597,7 @@ export function buildServer(config: ServerConfig): McpServer {
       }),
       outputSchema: z.object({
         area: z.enum(["drawing", "page"]),
+        artifact: artifactSchema,
         documentPath: z.string(),
         height: z.number().int().positive(),
         inline: z.boolean(),
@@ -1588,7 +1643,11 @@ export function buildServer(config: ServerConfig): McpServer {
             input.absolutePath,
             expectedRevision,
             directory,
-            { maximumSanitizeMode: config.maximumSanitizeMode },
+            {
+              allowedRoot: input.workspaceRoot,
+              maxDependencyBytes: config.maxInputBytes,
+              maximumSanitizeMode: config.maximumSanitizeMode,
+            },
           );
           const temporaryOutput = join(directory, "preview.png");
           const result = await runner.run(candidate.executablePath, {
@@ -1613,6 +1672,7 @@ export function buildServer(config: ServerConfig): McpServer {
           const bytes = await readFile(temporaryOutput);
           if (bytes.byteLength > config.maxArtifactBytes)
             throw new Error("Preview exceeds configured artifact size limit");
+          await nativeInput.assertCurrent();
           return { bytes, metadata: await verifyPng(temporaryOutput) };
         },
       );
@@ -1625,8 +1685,17 @@ export function buildServer(config: ServerConfig): McpServer {
         sourcePath: input.absolutePath,
         targetPath: output.absolutePath,
       });
+      await artifacts.removeExpired();
+      const artifact = await artifacts.publish(
+        output.absolutePath,
+        workspaceId,
+        24 * 60 * 60 * 1_000,
+      );
+      if (artifact.hash !== committed.revision)
+        throw new Error("Preview output changed before artifact publication");
       const result = {
         area,
+        artifact,
         documentPath: output.relativePath,
         height: preview.metadata.height,
         inline: preview.bytes.byteLength <= config.maxInlineBytes,
@@ -1740,10 +1809,14 @@ export function buildServer(config: ServerConfig): McpServer {
           input.absolutePath,
           expectedRevision,
           directory,
-          { maximumSanitizeMode: config.maximumSanitizeMode },
+          {
+            allowedRoot: input.workspaceRoot,
+            maxDependencyBytes: config.maxInputBytes,
+            maximumSanitizeMode: config.maximumSanitizeMode,
+          },
         );
         const displaySettings = inspectDocumentDisplaySettings(
-          await readFile(input.absolutePath, "utf8"),
+          await readFile(nativeInput.path, "utf8"),
         );
         const backgroundArguments =
           background === "transparent"
@@ -1780,6 +1853,7 @@ export function buildServer(config: ServerConfig): McpServer {
           ...(width === undefined ? {} : { width }),
           ...(height === undefined ? {} : { height }),
         });
+        await nativeInput.assertCurrent();
         return { bytes: await readFile(temporaryOutput), metadata };
       });
       const committed = await fileStore.commit({
@@ -1866,7 +1940,11 @@ export function buildServer(config: ServerConfig): McpServer {
           input.absolutePath,
           expectedRevision,
           directory,
-          { maximumSanitizeMode: config.maximumSanitizeMode },
+          {
+            allowedRoot: input.workspaceRoot,
+            maxDependencyBytes: config.maxInputBytes,
+            maximumSanitizeMode: config.maximumSanitizeMode,
+          },
         );
         const temporaryOutput = join(directory, "export.pdf");
         const result = await runner.run(candidate.executablePath, {
@@ -1885,6 +1963,7 @@ export function buildServer(config: ServerConfig): McpServer {
         });
         if (result.exitCode !== 0 || result.terminationReason !== "completed")
           throw new Error("Inkscape PDF export failed");
+        await nativeInput.assertCurrent();
         return {
           bytes: await readFile(temporaryOutput),
           metadata: await verifyPdf(temporaryOutput),
@@ -1970,7 +2049,11 @@ export function buildServer(config: ServerConfig): McpServer {
           input.absolutePath,
           expectedRevision,
           directory,
-          { maximumSanitizeMode: config.maximumSanitizeMode },
+          {
+            allowedRoot: input.workspaceRoot,
+            maxDependencyBytes: config.maxInputBytes,
+            maximumSanitizeMode: config.maximumSanitizeMode,
+          },
         );
         const temporaryOutput = join(directory, "export.svg");
         const run = await runner.run(candidate.executablePath, {
@@ -1989,6 +2072,7 @@ export function buildServer(config: ServerConfig): McpServer {
         if (run.exitCode !== 0 || run.terminationReason !== "completed")
           throw new Error("Inkscape SVG export failed");
         await verifySvg(temporaryOutput);
+        await nativeInput.assertCurrent();
         return readFile(temporaryOutput);
       });
       const committed = await fileStore.commit({
@@ -2022,12 +2106,57 @@ function hasControlCharacters(value: string): boolean {
   });
 }
 
+async function artifactResource(
+  artifacts: ArtifactStore,
+  id: string | undefined,
+  offset: number,
+  uri: string,
+  maximumReadBytes: number,
+): Promise<{
+  contents: Array<{ blob: string; mimeType: string; uri: string }>;
+}> {
+  if (id === undefined || !/^art_[a-f0-9]{32}$/u.test(id))
+    throw new Error("Artifact URI is invalid");
+  await artifacts.removeExpired();
+  const chunk = await artifacts.readCapabilityChunk(
+    id,
+    offset,
+    maximumReadBytes,
+    maximumReadBytes,
+  );
+  return {
+    contents: [
+      {
+        blob: chunk.bytes.toString("base64"),
+        mimeType: "application/octet-stream",
+        uri,
+      },
+    ],
+  };
+}
+
+function parseArtifactOffset(value: string | undefined): number {
+  if (value === undefined || !/^(?:0|[1-9][0-9]{0,15})$/u.test(value))
+    throw new Error("Artifact chunk offset is invalid");
+  const offset = Number(value);
+  if (!Number.isSafeInteger(offset))
+    throw new Error("Artifact chunk offset is invalid");
+  return offset;
+}
+
+function resourceVariable(
+  value: string | string[] | undefined,
+): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
 async function queryNativeBounds(request: {
   config: ServerConfig;
   documentPath: string;
   expectedRevision: string;
   runner: ProcessRunner;
   scratch: ScratchManager;
+  workspaceRoot: string;
 }): Promise<ReadonlyMap<string, InkscapeBounds>> {
   const discovery = await locateInkscape({
     config: request.config,
@@ -2048,7 +2177,11 @@ async function queryNativeBounds(request: {
       request.documentPath,
       request.expectedRevision,
       directory,
-      { maximumSanitizeMode: request.config.maximumSanitizeMode },
+      {
+        allowedRoot: request.workspaceRoot,
+        maxDependencyBytes: request.config.maxInputBytes,
+        maximumSanitizeMode: request.config.maximumSanitizeMode,
+      },
     );
     const result = await request.runner.run(candidate.executablePath, {
       args: [nativeInput.path, "--query-all"],
@@ -2059,6 +2192,7 @@ async function queryNativeBounds(request: {
     });
     if (result.exitCode !== 0 || result.terminationReason !== "completed")
       throw new Error("Inkscape bounds query failed");
+    await nativeInput.assertCurrent();
     return parseInkscapeQueryAll(result.stdout.toString("utf8"));
   });
 }

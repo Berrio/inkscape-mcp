@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { extractSvgSelection } from "../../src/documents/index.js";
+import {
+  extractSvgSelection,
+  rewriteStagedAssetReferences,
+} from "../../src/documents/index.js";
 
 describe("selection SVG export", () => {
   it("keeps only selected content and its referenced definition", () => {
@@ -42,5 +45,20 @@ describe("selection SVG export", () => {
         ["one"],
       ),
     ).toThrow("cyclic reference");
+  });
+});
+
+describe("selection asset publication", () => {
+  it("rewrites only staged asset URIs in SVG and CSS", () => {
+    const result = rewriteStagedAssetReferences(
+      '<svg><style>@import "assets/0001-font.css"; .x { fill: url(assets/0000-image.png#fragment); }</style><image href="assets/0000-image.png"/><text>assets/0000-image.png</text></svg>',
+      new Map([
+        ["assets/0000-image.png", "export.svg.assets/0000-image.png"],
+        ["assets/0001-font.css", "export.svg.assets/0001-font.css"],
+      ]),
+    );
+    expect(result).toContain("export.svg.assets/0000-image.png#fragment");
+    expect(result).toContain("export.svg.assets/0001-font.css");
+    expect(result).toContain("<text>assets/0000-image.png</text>");
   });
 });

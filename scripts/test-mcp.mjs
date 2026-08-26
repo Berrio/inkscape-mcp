@@ -1108,6 +1108,52 @@ try {
   ) {
     throw new Error("export_svg did not preserve selection stylesheet closure");
   }
+  await mkdir(join(workspaceRoot, "selection-assets"));
+  const pixel = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await writeFile(join(workspaceRoot, "selection-assets", "pixel.png"), pixel);
+  await writeFile(
+    join(workspaceRoot, "image-selection.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><image id="selected-image" href="selection-assets/pixel.png" width="1" height="1"/></svg>',
+  );
+  const imageInspection = await workspaceClient.callTool({
+    arguments: {
+      level: "summary",
+      path: "image-selection.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_inspect",
+  });
+  const imageRevision = imageInspection.structuredContent?.revision;
+  if (imageInspection.isError || typeof imageRevision !== "string")
+    throw new Error("document_inspect did not prepare the image selection SVG");
+  const imageSelection = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: imageRevision,
+      flavor: "plain",
+      outputPath: "image-selection-output.svg",
+      path: "image-selection.svg",
+      selectionIds: ["selected-image"],
+      workspaceId: workspace.id,
+    },
+    name: "export_svg",
+  });
+  const publishedAsset =
+    imageSelection.structuredContent?.assets?.[0]?.path ?? "";
+  if (
+    imageSelection.isError ||
+    publishedAsset !== "image-selection-output.svg.assets/0000-pixel.png" ||
+    !(
+      await readFile(join(workspaceRoot, "image-selection-output.svg"), "utf8")
+    ).includes(publishedAsset) ||
+    !Buffer.from(await readFile(join(workspaceRoot, publishedAsset))).equals(
+      pixel,
+    )
+  ) {
+    throw new Error("export_svg did not publish autonomous selection assets");
+  }
   await writeFile(
     join(workspaceRoot, "viewbox-512.svg"),
     await readFile(

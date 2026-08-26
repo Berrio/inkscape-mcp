@@ -1,8 +1,8 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
 import { createHash } from "node:crypto";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rmdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 
 import packageMetadata from "../../package.json" with { type: "json" };
@@ -34,6 +34,7 @@ import {
   reorderSvgPages,
   resizeContentSvg,
   resizePageOnlySvg,
+  rewriteStagedAssetReferences,
   updateSvgPage,
   updateDocumentDisplaySettings,
   validateSvgPageLayout,
@@ -3333,6 +3334,12 @@ export function buildServer(config: ServerConfig): McpServer {
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
+        assets: z.array(
+          z.object({
+            path: z.string().min(1).max(1024),
+            revision: z.string().regex(/^[a-f0-9]{64}$/u),
+          }),
+        ),
         byteLength: z.number().int().positive(),
         flavor: z.enum(["inkscape", "plain"]),
         hash: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -3426,10 +3433,37 @@ export function buildServer(config: ServerConfig): McpServer {
         });
         if (run.exitCode !== 0 || run.terminationReason !== "completed")
           throw new Error("Inkscape SVG export failed");
+        const assetDirectoryName = `${basename(output.relativePath)}.assets`;
+        let bytes = await readFile(temporaryOutput);
+        const assets =
+          selection === undefined
+            ? []
+            : await Promise.all(
+                nativeInput.manifest.dependencies
+                  .filter((dependency) =>
+                    bytes.toString("utf8").includes(dependency.path),
+                  )
+                  .map(async (dependency) => ({
+                    bytes: await readFile(join(directory, dependency.path)),
+                    outputPath: `${assetDirectoryName}/${basename(dependency.path)}`,
+                    stagedPath: dependency.path,
+                  })),
+              );
+        if (assets.length > 0) {
+          const replacements = new Map(
+            assets.map((asset) => [asset.stagedPath, asset.outputPath]),
+          );
+          bytes = Buffer.from(
+            rewriteStagedAssetReferences(bytes.toString("utf8"), replacements),
+            "utf8",
+          );
+          await writeFile(temporaryOutput, bytes);
+        }
         const metadata = await verifySvg(temporaryOutput);
         await nativeInput.assertCurrent();
         return {
-          bytes: await readFile(temporaryOutput),
+          assets,
+          bytes,
           metadata,
           warnings:
             selection === undefined
@@ -3437,20 +3471,50 @@ export function buildServer(config: ServerConfig): McpServer {
               : ["SELECTION_EXTRACTED_AUTONOMOUSLY", ...selection.warnings],
         };
       });
-      const committed = await fileStore.commit({
-        contents: svg.bytes,
-        ...(expectedOutputRevision === undefined
-          ? {}
-          : { expectedOutputRevision }),
-        expectedRevision,
-        sourcePath: input.absolutePath,
-        targetPath: output.absolutePath,
-      });
+      const assetDirectory = join(
+        dirname(output.absolutePath),
+        `${basename(output.absolutePath)}.assets`,
+      );
+      const publication =
+        svg.assets.length === 0
+          ? {
+              assets: [],
+              revision: (
+                await fileStore.commit({
+                  contents: svg.bytes,
+                  ...(expectedOutputRevision === undefined
+                    ? {}
+                    : { expectedOutputRevision }),
+                  expectedRevision,
+                  sourcePath: input.absolutePath,
+                  targetPath: output.absolutePath,
+                })
+              ).revision,
+            }
+          : await publishSelectionSvgWithAssets({
+              assetDirectory,
+              assets: svg.assets,
+              ...(expectedOutputRevision === undefined
+                ? {}
+                : { expectedOutputRevision }),
+              expectedRevision,
+              fileStore,
+              inputPath: input.absolutePath,
+              outputPath: output.absolutePath,
+              svg: svg.bytes,
+            });
       const result = {
+        assets:
+          svg.assets.length === 0
+            ? []
+            : publication.assets.map((asset) => ({
+                path: asset.path,
+                revision: asset.revision,
+              })),
         byteLength: svg.metadata.byteLength,
         flavor,
         hash: svg.metadata.hash,
-        revision: committed.revision,
+        revision: publication.revision,
         viewBox: svg.metadata.viewBox,
         warnings: [
           ...svg.warnings,
@@ -3465,6 +3529,65 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   return server;
+}
+
+type SelectionPublishedAsset = {
+  bytes: Uint8Array;
+  outputPath: string;
+  stagedPath: string;
+};
+
+async function publishSelectionSvgWithAssets(args: {
+  assetDirectory: string;
+  assets: readonly SelectionPublishedAsset[];
+  expectedOutputRevision?: string;
+  expectedRevision: string;
+  fileStore: AtomicFileStore;
+  inputPath: string;
+  outputPath: string;
+  svg: Uint8Array;
+}): Promise<{
+  assets: readonly { path: string; revision: string }[];
+  revision: string;
+}> {
+  if (args.assets.length > 99)
+    throw new Error("Selection export has too many local assets");
+  try {
+    await mkdir(args.assetDirectory);
+  } catch {
+    throw new Error(
+      "Selection asset directory already exists or cannot be created",
+    );
+  }
+  try {
+    const committed = await args.fileStore.commitBatch({
+      expectedRevision: args.expectedRevision,
+      files: [
+        {
+          contents: args.svg,
+          ...(args.expectedOutputRevision === undefined
+            ? {}
+            : { expectedOutputRevision: args.expectedOutputRevision }),
+          targetPath: args.outputPath,
+        },
+        ...args.assets.map((asset) => ({
+          contents: asset.bytes,
+          targetPath: join(args.assetDirectory, basename(asset.outputPath)),
+        })),
+      ],
+      sourcePath: args.inputPath,
+    });
+    return {
+      assets: committed.files.slice(1).map((file, index) => ({
+        path: args.assets[index]!.outputPath,
+        revision: file.revision,
+      })),
+      revision: committed.files[0]!.revision,
+    };
+  } catch (error) {
+    await rmdir(args.assetDirectory).catch(() => undefined);
+    throw error;
+  }
 }
 
 function hasControlCharacters(value: string): boolean {

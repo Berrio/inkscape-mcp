@@ -9,6 +9,7 @@ import {
   addSvgPage,
   createSvgDocument,
   createSvgShapes,
+  deleteSvgShapes,
   deleteSvgPage,
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
@@ -423,6 +424,52 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         backupCreated: committed.backupPath !== undefined,
         ids: created.ids,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_delete",
+    {
+      description:
+        "Deletes explicitly selected SVG elements and rejects deletions that would leave fragment references broken.",
+      inputSchema: z.object({
+        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        ids: z.array(shapeIdSchema).min(1).max(100),
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        deletedIds: z.array(shapeIdSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, ids, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const deleted = deleteSvgShapes(
+        await readFile(document.absolutePath, "utf8"),
+        ids,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(deleted.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        deletedIds: deleted.deletedIds,
         revision: committed.revision,
       };
       return {

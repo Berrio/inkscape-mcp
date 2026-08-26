@@ -4,6 +4,7 @@ import {
   createSvgDocument,
   createSvgShapes,
   deleteSvgPage,
+  deleteSvgShapes,
   inspectSvgSettings,
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
@@ -255,5 +256,14 @@ describe("basic SVG documents", () => {
         { height: 1, id: "rect_1", kind: "rect", width: 1, x: 0, y: 0 },
       ]),
     ).toThrow("already exists");
+    expect(deleteSvgShapes(created.svg, ["circle_1"]).deletedIds).toEqual([
+      "circle_1",
+    ]);
+    expect(() =>
+      deleteSvgShapes(
+        '<svg xmlns="http://www.w3.org/2000/svg"><rect id="shape"/><use href="#shape"/></svg>',
+        ["shape"],
+      ),
+    ).toThrow("would break an SVG reference");
   });
 });

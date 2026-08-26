@@ -95,6 +95,45 @@ export function createSvgShapes(
   return { ids, svg: new XMLSerializer().serializeToString(document) };
 }
 
+export function deleteSvgShapes(
+  source: string,
+  ids: readonly string[],
+): { deletedIds: readonly string[]; svg: string } {
+  if (ids.length < 1 || ids.length > 100)
+    throw new Error("Deletion batch must contain between one and 100 IDs");
+  if (new Set(ids).size !== ids.length)
+    throw new Error("Deletion IDs must be unique");
+  const document = parseSafeDocument(source);
+  const elements = Array.from(document.getElementsByTagName("*"));
+  const targets = ids.map((id) => {
+    if (!SAFE_ID.test(id)) throw new Error("Shape ID is invalid");
+    const target = elements.find(
+      (element) => element.getAttribute("id") === id,
+    );
+    if (!target) throw new Error("Shape ID does not exist");
+    return target;
+  });
+  const targetSet = new Set(targets);
+  for (const element of elements) {
+    if (isWithinDeletedTree(element, targetSet)) continue;
+    for (let index = 0; index < element.attributes.length; index += 1) {
+      const attribute = element.attributes.item(index);
+      if (!attribute) continue;
+      if (
+        (attribute.name === "href" || attribute.name === "xlink:href") &&
+        attribute.value.trim().startsWith("#") &&
+        ids.includes(attribute.value.trim().slice(1))
+      )
+        throw new Error("Deleting this shape would break an SVG reference");
+    }
+  }
+  for (const target of targets) target.parentNode?.removeChild(target);
+  return {
+    deletedIds: [...ids],
+    svg: new XMLSerializer().serializeToString(document),
+  };
+}
+
 function parseSafeDocument(source: string): XmlDocument {
   const sanitization = sanitizeSvg(source, {
     maxElements: 100_000,
@@ -195,6 +234,20 @@ function resolveParent(
   if (!parent || parent.localName !== "g")
     throw new Error("Shape parent must be an existing group or layer");
   return parent;
+}
+function isWithinDeletedTree(
+  element: XmlElement,
+  deleted: ReadonlySet<XmlElement>,
+): boolean {
+  let current: XmlElement | null = element;
+  while (current) {
+    if (deleted.has(current)) return true;
+    current =
+      current.parentNode?.nodeType === 1
+        ? (current.parentNode as XmlElement)
+        : null;
+  }
+  return false;
 }
 function applyStyle(element: XmlElement, style: ShapeStyle | undefined): void {
   if (!style) return;

@@ -9,7 +9,12 @@ export {
 } from "./basic.js";
 export { preflightSvg, type PreflightIssue } from "./preflight.js";
 export { inspectSvgInventory, type DocumentInventory } from "./inventory.js";
-export { createSvgShapes, type ShapeSpec, type ShapeStyle } from "./shapes.js";
+export {
+  createSvgShapes,
+  deleteSvgShapes,
+  type ShapeSpec,
+  type ShapeStyle,
+} from "./shapes.js";
 export {
   PAGE_SIZE_PRESETS,
   pageSizeFromPreset,

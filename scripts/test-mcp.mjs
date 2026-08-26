@@ -124,6 +124,7 @@ try {
           x: 30,
           y: 90,
         },
+        { cx: 90, cy: 30, id: "temporary_circle", kind: "circle", r: 5 },
       ],
       expectedRevision: resizedRevision,
       path: "a4.svg",
@@ -137,13 +138,31 @@ try {
     elements.structuredContent?.ids?.[0] !== "layer_main" ||
     elements.structuredContent?.ids?.[1] !== "demo_rect" ||
     elements.structuredContent?.ids?.[2] !== "demo_text" ||
+    elements.structuredContent?.ids?.[3] !== "temporary_circle" ||
     typeof elementsRevision !== "string"
   ) {
     throw new Error("elements_create did not publish a typed rectangle");
   }
-  const inspected = await workspaceClient.callTool({
+  const deleted = await workspaceClient.callTool({
     arguments: {
       expectedRevision: elementsRevision,
+      ids: ["temporary_circle"],
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_delete",
+  });
+  const deletedRevision = deleted.structuredContent?.revision;
+  if (
+    deleted.isError ||
+    deleted.structuredContent?.deletedIds?.[0] !== "temporary_circle" ||
+    typeof deletedRevision !== "string"
+  ) {
+    throw new Error("elements_delete did not remove the selected element");
+  }
+  const inspected = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: deletedRevision,
       path: "a4.svg",
       workspaceId: workspace.id,
     },
@@ -172,7 +191,7 @@ try {
   const pageAdded = await workspaceClient.callTool({
     arguments: {
       action: "add",
-      expectedRevision: elementsRevision,
+      expectedRevision: deletedRevision,
       page: { height: 210, id: "page_back", width: 148, x: 160, y: 0 },
       path: "a4.svg",
       workspaceId: workspace.id,

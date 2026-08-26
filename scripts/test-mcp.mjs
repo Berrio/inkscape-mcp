@@ -113,6 +113,14 @@ try {
           x: 20,
           y: 20,
         },
+        {
+          id: "demo_text",
+          kind: "text",
+          style: { fill: "#000000", fontSize: 12 },
+          text: "MCP",
+          x: 30,
+          y: 90,
+        },
       ],
       expectedRevision: resizedRevision,
       path: "a4.svg",
@@ -124,6 +132,7 @@ try {
   if (
     elements.isError ||
     elements.structuredContent?.ids?.[0] !== "demo_rect" ||
+    elements.structuredContent?.ids?.[1] !== "demo_text" ||
     typeof elementsRevision !== "string"
   ) {
     throw new Error("elements_create did not publish a typed rectangle");

@@ -104,18 +104,28 @@ const shapeStyleSchema = z.object({
     .string()
     .regex(/^#[a-fA-F0-9]{6}$/u)
     .optional(),
+  fontFamily: z.string().min(1).max(256).optional(),
+  fontSize: z.number().finite().positive().max(10_000).optional(),
+  fontWeight: z.enum(["normal", "bold"]).optional(),
   opacity: z.number().finite().min(0).max(1).optional(),
   stroke: z
     .string()
     .regex(/^#[a-fA-F0-9]{6}$/u)
     .optional(),
   strokeWidth: z.number().finite().nonnegative().optional(),
+  textAnchor: z.enum(["start", "middle", "end"]).optional(),
 });
 const pointSchema = z.object({
   x: z.number().finite(),
   y: z.number().finite(),
 });
 const shapeIdSchema = z.string().regex(/^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u);
+const textContentSchema = z
+  .string()
+  .max(10_000)
+  .refine((value) => !hasControlCharacters(value), {
+    message: "Text cannot contain control characters",
+  });
 const shapeSchema = z.discriminatedUnion("kind", [
   z.object({
     height: z.number().finite().positive(),
@@ -165,6 +175,14 @@ const shapeSchema = z.discriminatedUnion("kind", [
     kind: z.literal("polyline"),
     points: z.array(pointSchema).min(2).max(1_000),
     style: shapeStyleSchema.optional(),
+  }),
+  z.object({
+    id: shapeIdSchema.optional(),
+    kind: z.literal("text"),
+    style: shapeStyleSchema.optional(),
+    text: textContentSchema,
+    x: z.number().finite(),
+    y: z.number().finite(),
   }),
 ]);
 
@@ -1158,4 +1176,11 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   return server;
+}
+
+function hasControlCharacters(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code < 32 || code === 127;
+  });
 }

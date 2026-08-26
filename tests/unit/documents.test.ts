@@ -211,6 +211,14 @@ describe("basic SVG documents", () => {
       },
       { cx: 50, cy: 60, id: "circle_1", kind: "circle", r: 10 },
       {
+        id: "text_1",
+        kind: "text",
+        style: { fontFamily: "Arial", fontSize: 12, fontWeight: "bold" },
+        text: "Hello SVG",
+        x: 5,
+        y: 100,
+      },
+      {
         id: "polyline_1",
         kind: "polyline",
         points: [
@@ -219,9 +227,11 @@ describe("basic SVG documents", () => {
         ],
       },
     ]);
-    expect(created.ids).toEqual(["rect_1", "circle_1", "polyline_1"]);
+    expect(created.ids).toEqual(["rect_1", "circle_1", "text_1", "polyline_1"]);
     expect(created.svg).toContain('id="rect_1" fill="#ff0000"');
     expect(created.svg).toContain('points="0,0 10,20"');
+    expect(created.svg).toContain('font-family="Arial"');
+    expect(created.svg).toContain(">Hello SVG</text>");
     expect(() =>
       createSvgShapes(created.svg, [
         { height: 1, id: "rect_1", kind: "rect", width: 1, x: 0, y: 0 },

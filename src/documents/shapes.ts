@@ -9,9 +9,13 @@ import { sanitizeSvg } from "../svg/index.js";
 
 export type ShapeStyle = {
   fill?: string | undefined;
+  fontFamily?: string | undefined;
+  fontSize?: number | undefined;
+  fontWeight?: "bold" | "normal" | undefined;
   opacity?: number | undefined;
   stroke?: string | undefined;
   strokeWidth?: number | undefined;
+  textAnchor?: "end" | "middle" | "start" | undefined;
 };
 type ShapeBase = { id?: string | undefined; style?: ShapeStyle | undefined };
 export type ShapeSpec =
@@ -42,6 +46,12 @@ export type ShapeSpec =
   | (ShapeBase & {
       kind: "polygon" | "polyline";
       points: readonly { x: number; y: number }[];
+    })
+  | (ShapeBase & {
+      kind: "text";
+      text: string;
+      x: number;
+      y: number;
     });
 
 const COLOR = /^#[a-fA-F0-9]{6}$/u;
@@ -141,12 +151,34 @@ function createShapeElement(
           .join(" "),
       );
       break;
+    case "text":
+      if (shape.text.length > 10_000 || hasControlCharacters(shape.text))
+        throw new Error("Text content is invalid or too long");
+      setFinite(element, "x", shape.x);
+      setFinite(element, "y", shape.y);
+      element.textContent = shape.text;
+      break;
   }
   return element;
 }
 function applyStyle(element: XmlElement, style: ShapeStyle | undefined): void {
   if (!style) return;
   if (style.fill !== undefined) element.setAttribute("fill", color(style.fill));
+  if (style.fontFamily !== undefined) {
+    if (
+      style.fontFamily.length < 1 ||
+      style.fontFamily.length > 256 ||
+      hasControlCharacters(style.fontFamily)
+    )
+      throw new Error("fontFamily is invalid");
+    element.setAttribute("font-family", style.fontFamily);
+  }
+  if (style.fontSize !== undefined) {
+    assertRange(style.fontSize, "fontSize", Number.MIN_VALUE, 10_000);
+    element.setAttribute("font-size", String(style.fontSize));
+  }
+  if (style.fontWeight !== undefined)
+    element.setAttribute("font-weight", style.fontWeight);
   if (style.stroke !== undefined)
     element.setAttribute("stroke", color(style.stroke));
   if (style.opacity !== undefined) {
@@ -157,6 +189,8 @@ function applyStyle(element: XmlElement, style: ShapeStyle | undefined): void {
     assertRange(style.strokeWidth, "strokeWidth", 0, Number.POSITIVE_INFINITY);
     element.setAttribute("stroke-width", String(style.strokeWidth));
   }
+  if (style.textAnchor !== undefined)
+    element.setAttribute("text-anchor", style.textAnchor);
 }
 function setFinite(element: XmlElement, name: string, value: number): void {
   assertFinite(value, name);
@@ -191,4 +225,10 @@ function assertRange(
   assertFinite(value, name);
   if (value < minimum || value > maximum)
     throw new Error(`${name} is out of range`);
+}
+function hasControlCharacters(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code < 32 || code === 127;
+  });
 }

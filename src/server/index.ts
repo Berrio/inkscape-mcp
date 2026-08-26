@@ -12,6 +12,7 @@ import {
   inspectDocumentDisplaySettings,
   inspectSvgSettings,
   listSvgPages,
+  pageSizeFromPreset,
   parseViewportLength,
   preflightSvg,
   reorderSvgPages,
@@ -65,6 +66,14 @@ const displaySettingsSchema = z.object({
   pageColor: z.string().regex(/^#[a-f0-9]{6}$/u),
   pageOpacity: z.number().min(0).max(1),
 });
+const pagePresetSchema = z.enum([
+  "a3-landscape",
+  "a3-portrait",
+  "a4-landscape",
+  "a4-portrait",
+  "letter-landscape",
+  "letter-portrait",
+]);
 
 export function buildServer(config: ServerConfig): McpServer {
   const server = new McpServer({
@@ -175,12 +184,13 @@ export function buildServer(config: ServerConfig): McpServer {
     "document_create",
     {
       description:
-        "Creates a new SVG document within an authorized workspace. Existing outputs are never overwritten.",
+        "Creates a new SVG document from bounded custom dimensions or a named page preset. Existing outputs are never overwritten.",
       inputSchema: z.object({
-        height: z.number().finite().positive(),
+        height: z.number().finite().positive().optional(),
         outputPath: z.string().min(1).max(1024),
-        unit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
-        width: z.number().finite().positive(),
+        preset: pagePresetSchema.optional(),
+        unit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]).optional(),
+        width: z.number().finite().positive().optional(),
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
@@ -189,18 +199,28 @@ export function buildServer(config: ServerConfig): McpServer {
       }),
       annotations: { destructiveHint: false },
     },
-    async ({ height, outputPath, unit, width, workspaceId }) => {
+    async ({ height, outputPath, preset, unit, width, workspaceId }) => {
       assertDocumentWorkspace(config);
       const workspace = await workspaces();
       const target = await workspace.resolveNewOutput(workspaceId, outputPath);
       if (!/\.svg$/iu.test(target.relativePath))
         throw new Error("document_create requires a .svg output path");
-      const svg = createSvgDocument({
-        page: {
+      const customProvided =
+        height !== undefined || unit !== undefined || width !== undefined;
+      if (preset !== undefined && customProvided)
+        throw new Error("Provide either preset or width, height and unit");
+      let page;
+      if (preset !== undefined) {
+        page = pageSizeFromPreset(preset);
+      } else {
+        if (height === undefined || unit === undefined || width === undefined)
+          throw new Error("Provide either preset or width, height and unit");
+        page = {
           width: { unit, value: width },
           height: { unit, value: height },
-        },
-      });
+        };
+      }
+      const svg = createSvgDocument({ page });
       const result = await fileStore.commit({
         contents: Buffer.from(svg),
         targetPath: target.absolutePath,

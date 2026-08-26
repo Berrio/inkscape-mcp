@@ -59,10 +59,8 @@ try {
   }
   const created = await workspaceClient.callTool({
     arguments: {
-      height: 297,
       outputPath: "a4.svg",
-      unit: "mm",
-      width: 210,
+      preset: "a4-portrait",
       workspaceId: workspace.id,
     },
     name: "document_create",

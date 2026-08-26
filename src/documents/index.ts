@@ -8,6 +8,11 @@ export {
 } from "./basic.js";
 export { preflightSvg, type PreflightIssue } from "./preflight.js";
 export {
+  PAGE_SIZE_PRESETS,
+  pageSizeFromPreset,
+  type PageSizePreset,
+} from "./presets.js";
+export {
   inspectDocumentDisplaySettings,
   updateDocumentDisplaySettings,
   type DocumentDisplaySettings,

@@ -6,6 +6,7 @@ import {
   inspectSvgSettings,
   inspectDocumentDisplaySettings,
   listSvgPages,
+  pageSizeFromPreset,
   reorderSvgPages,
   resizePageOnlySvg,
   updateSvgPage,
@@ -14,6 +15,14 @@ import {
 import { preflightSvg } from "../../src/documents/index.js";
 const mm = (value: number) => ({ unit: "mm" as const, value });
 describe("basic SVG documents", () => {
+  it("provides immutable, versioned named page sizes", () => {
+    const a4 = pageSizeFromPreset("a4-portrait");
+    a4.width.value = 1;
+    expect(pageSizeFromPreset("a4-portrait")).toEqual({
+      height: mm(297),
+      width: mm(210),
+    });
+  });
   it("creates an A4 SVG with a coherent viewBox", () => {
     const svg = createSvgDocument({
       page: { width: mm(210), height: mm(297) },

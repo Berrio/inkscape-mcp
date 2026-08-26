@@ -11,7 +11,7 @@ paginas y exportaciones verificadas a PNG, PDF y SVG.
 - Workspaces autorizados con rutas relativas seguras, revisiones SHA-256,
   locks, backups y commits atomicos.
 - Crear, inspeccionar y redimensionar documentos SVG con semantica
-  `page_only`.
+  `page_only`, medidas custom o presets A3/A4/Letter.
 - Paginas explicitas de Inkscape 1.4: listar, agregar, actualizar, borrar y
   reordenar con IDs estables.
 - Ajustes tipados de pagina: color/opacidad de pagina, color de escritorio y

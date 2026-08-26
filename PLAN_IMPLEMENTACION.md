@@ -1757,12 +1757,12 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Estilo básico
 
-- [ ] `F06-T30` Parsear/normalizar colores CSS seguros.
-- [ ] `F06-T31` Aplicar fill/stroke/opacity/fill-rule.
-- [ ] `F06-T32` Aplicar width/cap/join/miter/dash/paint-order.
-- [ ] `F06-T33` Aplicar visibilidad/display/lock y clases con política.
-- [ ] `F06-T34` Aplicar typography básica: family, size, weight, style, anchor, spacing.
-- [ ] `F06-T35` Implementar herencia/cascada sin sobrescribir estilos no relacionados.
+- [x] `F06-T30` Parsear/normalizar colores CSS seguros. — Pintura directa acepta solamente `none` o `#rrggbb`, normaliza hexadecimal a minúsculas y no acepta CSS arbitrario.
+- [x] `F06-T31` Aplicar fill/stroke/opacity/fill-rule. — Parches tipados cubren fill/stroke, opacidad global y por pintura, y fill-rule.
+- [x] `F06-T32` Aplicar width/cap/join/miter/dash/paint-order. — Soporta ancho, cap, join, miter limit, dash array acotado y paint-order allowlisted.
+- [x] `F06-T33` Aplicar visibilidad/display/lock y clases con política. — `visibility`, `display`, lock Inkscape y hasta 32 clases CSS identificadoras únicas se validan y serializan tipadamente.
+- [x] `F06-T34` Aplicar typography básica: family, size, weight, style, anchor, spacing. — Incluye family, size, normal/bold o 100–900, style, anchor y letter/word spacing finitos.
+- [x] `F06-T35` Implementar herencia/cascada sin sobrescribir estilos no relacionados. — Las propiedades se escriben como atributos SVG individuales: un patch sólo altera las claves solicitadas, preservando los demás atributos y la cascada de estilos existente.
 
 #### Transacción multioperación
 

@@ -674,7 +674,14 @@ try {
         {
           geometry: { kind: "rect", width: 45 },
           id: "demo_rect",
-          style: { fill: "#00ff00" },
+          style: {
+            classes: ["mcp-verified"],
+            fill: "#00ff00",
+            fillOpacity: 0.75,
+            paintOrder: "stroke fill markers",
+            stroke: "none",
+            strokeDasharray: [1, 2],
+          },
         },
         { id: "demo_text", text: "Updated from MCP" },
       ],

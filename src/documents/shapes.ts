@@ -8,14 +8,30 @@ import {
 import { sanitizeSvg } from "../svg/index.js";
 
 export type ShapeStyle = {
+  classes?: readonly string[] | undefined;
+  display?: "inline" | "none" | undefined;
   fill?: string | undefined;
+  fillOpacity?: number | undefined;
+  fillRule?: "evenodd" | "nonzero" | undefined;
   fontFamily?: string | undefined;
   fontSize?: number | undefined;
-  fontWeight?: "bold" | "normal" | undefined;
+  fontStyle?: "italic" | "normal" | "oblique" | undefined;
+  fontWeight?: "bold" | "normal" | number | undefined;
+  letterSpacing?: number | undefined;
+  locked?: boolean | undefined;
   opacity?: number | undefined;
+  paintOrder?:
+    "normal" | "fill stroke markers" | "stroke fill markers" | undefined;
   stroke?: string | undefined;
+  strokeDasharray?: readonly number[] | undefined;
+  strokeLineCap?: "butt" | "round" | "square" | undefined;
+  strokeLineJoin?: "bevel" | "miter" | "round" | undefined;
+  strokeMiterLimit?: number | undefined;
+  strokeOpacity?: number | undefined;
   strokeWidth?: number | undefined;
   textAnchor?: "end" | "middle" | "start" | undefined;
+  visibility?: "hidden" | "visible" | undefined;
+  wordSpacing?: number | undefined;
 };
 export type ElementTransform =
   | {
@@ -185,6 +201,7 @@ export type ShapeSpec =
 
 const COLOR = /^#[a-fA-F0-9]{6}$/u;
 const SAFE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u;
+const SAFE_CLASS = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/u;
 
 export function createSvgShapes(
   source: string,
@@ -924,7 +941,25 @@ function containsDeletedUrlFragment(
 }
 function applyStyle(element: XmlElement, style: ShapeStyle | undefined): void {
   if (!style) return;
-  if (style.fill !== undefined) element.setAttribute("fill", color(style.fill));
+  if (style.classes !== undefined) {
+    if (
+      style.classes.length > 32 ||
+      new Set(style.classes).size !== style.classes.length
+    )
+      throw new Error("classes must contain at most 32 unique CSS identifiers");
+    for (const className of style.classes)
+      if (!SAFE_CLASS.test(className)) throw new Error("class name is invalid");
+    element.setAttribute("class", style.classes.join(" "));
+  }
+  if (style.display !== undefined)
+    element.setAttribute("display", style.display);
+  if (style.fill !== undefined) element.setAttribute("fill", paint(style.fill));
+  if (style.fillOpacity !== undefined) {
+    assertRange(style.fillOpacity, "fillOpacity", 0, 1);
+    element.setAttribute("fill-opacity", String(style.fillOpacity));
+  }
+  if (style.fillRule !== undefined)
+    element.setAttribute("fill-rule", style.fillRule);
   if (style.fontFamily !== undefined) {
     if (
       style.fontFamily.length < 1 ||
@@ -938,10 +973,44 @@ function applyStyle(element: XmlElement, style: ShapeStyle | undefined): void {
     assertRange(style.fontSize, "fontSize", Number.MIN_VALUE, 10_000);
     element.setAttribute("font-size", String(style.fontSize));
   }
+  if (style.fontStyle !== undefined)
+    element.setAttribute("font-style", style.fontStyle);
   if (style.fontWeight !== undefined)
-    element.setAttribute("font-weight", style.fontWeight);
+    element.setAttribute(
+      "font-weight",
+      String(validFontWeight(style.fontWeight)),
+    );
+  if (style.letterSpacing !== undefined) {
+    assertRange(style.letterSpacing, "letterSpacing", -10_000, 10_000);
+    element.setAttribute("letter-spacing", String(style.letterSpacing));
+  }
+  if (style.locked !== undefined)
+    element.setAttributeNS(
+      "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd",
+      "sodipodi:insensitive",
+      String(style.locked),
+    );
   if (style.stroke !== undefined)
-    element.setAttribute("stroke", color(style.stroke));
+    element.setAttribute("stroke", paint(style.stroke));
+  if (style.strokeDasharray !== undefined) {
+    if (style.strokeDasharray.length > 32)
+      throw new Error("strokeDasharray may contain at most 32 values");
+    for (const value of style.strokeDasharray)
+      assertRange(value, "strokeDasharray", 0, 100_000);
+    element.setAttribute("stroke-dasharray", style.strokeDasharray.join(" "));
+  }
+  if (style.strokeLineCap !== undefined)
+    element.setAttribute("stroke-linecap", style.strokeLineCap);
+  if (style.strokeLineJoin !== undefined)
+    element.setAttribute("stroke-linejoin", style.strokeLineJoin);
+  if (style.strokeMiterLimit !== undefined) {
+    assertRange(style.strokeMiterLimit, "strokeMiterLimit", 1, 100_000);
+    element.setAttribute("stroke-miterlimit", String(style.strokeMiterLimit));
+  }
+  if (style.strokeOpacity !== undefined) {
+    assertRange(style.strokeOpacity, "strokeOpacity", 0, 1);
+    element.setAttribute("stroke-opacity", String(style.strokeOpacity));
+  }
   if (style.opacity !== undefined) {
     assertRange(style.opacity, "opacity", 0, 1);
     element.setAttribute("opacity", String(style.opacity));
@@ -950,8 +1019,16 @@ function applyStyle(element: XmlElement, style: ShapeStyle | undefined): void {
     assertRange(style.strokeWidth, "strokeWidth", 0, Number.POSITIVE_INFINITY);
     element.setAttribute("stroke-width", String(style.strokeWidth));
   }
+  if (style.paintOrder !== undefined)
+    element.setAttribute("paint-order", style.paintOrder);
   if (style.textAnchor !== undefined)
     element.setAttribute("text-anchor", style.textAnchor);
+  if (style.visibility !== undefined)
+    element.setAttribute("visibility", style.visibility);
+  if (style.wordSpacing !== undefined) {
+    assertRange(style.wordSpacing, "wordSpacing", -10_000, 10_000);
+    element.setAttribute("word-spacing", String(style.wordSpacing));
+  }
 }
 function isLayer(element: XmlElement): boolean {
   return (
@@ -1080,9 +1157,23 @@ function setPoints(
       .join(" "),
   );
 }
-function color(value: string): string {
-  if (!COLOR.test(value)) throw new Error("Shape colors must be #rrggbb");
+function paint(value: string): string {
+  if (value === "none") return value;
+  if (!COLOR.test(value))
+    throw new Error("Shape paint must be none or #rrggbb");
   return value.toLowerCase();
+}
+function validFontWeight(value: ShapeStyle["fontWeight"]): string | number {
+  if (value === "normal" || value === "bold") return value;
+  if (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 100 &&
+    value <= 900 &&
+    value % 100 === 0
+  )
+    return value;
+  throw new Error("fontWeight must be normal, bold, or 100 through 900 by 100");
 }
 function assertFinite(value: number, name: string): void {
   if (!Number.isFinite(value)) throw new Error(`${name} must be finite`);

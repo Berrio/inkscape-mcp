@@ -288,20 +288,57 @@ const pagePresetSchema = z.enum([
   "letter-portrait",
 ]);
 const shapeStyleSchema = z.object({
+  classes: z
+    .array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/u))
+    .min(1)
+    .max(32)
+    .refine((value) => new Set(value).size === value.length, {
+      message: "classes must be unique",
+    })
+    .optional(),
+  display: z.enum(["inline", "none"]).optional(),
   fill: z
     .string()
-    .regex(/^#[a-fA-F0-9]{6}$/u)
+    .regex(/^(?:none|#[a-fA-F0-9]{6})$/u)
     .optional(),
+  fillOpacity: z.number().finite().min(0).max(1).optional(),
+  fillRule: z.enum(["nonzero", "evenodd"]).optional(),
   fontFamily: z.string().min(1).max(256).optional(),
   fontSize: z.number().finite().positive().max(10_000).optional(),
-  fontWeight: z.enum(["normal", "bold"]).optional(),
+  fontStyle: z.enum(["normal", "italic", "oblique"]).optional(),
+  fontWeight: z
+    .union([
+      z.enum(["normal", "bold"]),
+      z
+        .number()
+        .int()
+        .min(100)
+        .max(900)
+        .refine((value) => value % 100 === 0),
+    ])
+    .optional(),
+  letterSpacing: z.number().finite().min(-10_000).max(10_000).optional(),
+  locked: z.boolean().optional(),
   opacity: z.number().finite().min(0).max(1).optional(),
+  paintOrder: z
+    .enum(["normal", "fill stroke markers", "stroke fill markers"])
+    .optional(),
   stroke: z
     .string()
-    .regex(/^#[a-fA-F0-9]{6}$/u)
+    .regex(/^(?:none|#[a-fA-F0-9]{6})$/u)
     .optional(),
+  strokeDasharray: z
+    .array(z.number().finite().min(0).max(100_000))
+    .max(32)
+    .optional(),
+  strokeLineCap: z.enum(["butt", "round", "square"]).optional(),
+  strokeLineJoin: z.enum(["miter", "round", "bevel"]).optional(),
+  strokeMiterLimit: z.number().finite().min(1).max(100_000).optional(),
+  strokeOpacity: z.number().finite().min(0).max(1).optional(),
   strokeWidth: z.number().finite().nonnegative().optional(),
   textAnchor: z.enum(["start", "middle", "end"]).optional(),
+  visibility: z.enum(["visible", "hidden"]).optional(),
+  wordSpacing: z.number().finite().min(-10_000).max(10_000).optional(),
 });
 const pointSchema = z.object({
   x: z.number().finite(),

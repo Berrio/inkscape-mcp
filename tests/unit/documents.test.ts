@@ -659,7 +659,23 @@ describe("basic SVG documents", () => {
       {
         geometry: { kind: "rect", width: 35, x: 12 },
         id: "rect_1",
-        style: { fill: "#00ff00", opacity: 0.5 },
+        style: {
+          classes: ["featured", "sale"],
+          fill: "#00ff00",
+          fillOpacity: 0.75,
+          fontStyle: "italic",
+          fontWeight: 600,
+          letterSpacing: 1.25,
+          locked: true,
+          opacity: 0.5,
+          paintOrder: "stroke fill markers",
+          stroke: "none",
+          strokeDasharray: [2, 3],
+          strokeLineCap: "round",
+          strokeMiterLimit: 8,
+          visibility: "visible",
+          wordSpacing: 2,
+        },
       },
       {
         geometry: { kind: "text", y: 105 },
@@ -671,6 +687,13 @@ describe("basic SVG documents", () => {
     expect(updated.svg).toContain('x="12"');
     expect(updated.svg).toContain('width="35"');
     expect(updated.svg).toContain('fill="#00ff00"');
+    expect(updated.svg).toContain('fill-opacity="0.75"');
+    expect(updated.svg).toContain('stroke="none"');
+    expect(updated.svg).toContain('stroke-dasharray="2 3"');
+    expect(updated.svg).toContain('class="featured sale"');
+    expect(updated.svg).toContain('font-weight="600"');
+    expect(updated.svg).toContain('letter-spacing="1.25"');
+    expect(updated.svg).toContain('sodipodi:insensitive="true"');
     expect(updated.svg).toContain('opacity="0.5"');
     expect(updated.svg).toContain('y="105"');
     expect(updated.svg).toContain(">Updated SVG</text>");

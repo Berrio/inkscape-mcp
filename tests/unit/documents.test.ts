@@ -9,6 +9,7 @@ import {
   pageSizeFromPreset,
   reorderSvgPages,
   resizePageOnlySvg,
+  resizeContentSvg,
   updateSvgPage,
   updateDocumentDisplaySettings,
 } from "../../src/documents/index.js";
@@ -49,6 +50,38 @@ describe("basic SVG documents", () => {
       width: 148,
       height: 210,
     });
+  });
+  it("wraps only renderable root content for contain and preserves defs", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="800px" height="600px" viewBox="0 0 800 600"><defs><linearGradient id="keep"/></defs><rect id="shape" width="800" height="600"/></svg>';
+    const result = resizeContentSvg(
+      source,
+      { width: { unit: "px", value: 800 }, height: { unit: "px", value: 600 } },
+      {
+        width: { unit: "px", value: 1080 },
+        height: { unit: "px", value: 1080 },
+      },
+      "scale_content_contain",
+    );
+    expect(result.svg).toContain('<defs><linearGradient id="keep"/></defs>');
+    expect(result.svg).toContain('transform="matrix(1.35 0 0 1.35 0 135)"');
+    expect(result.svg).toContain(
+      '<g transform="matrix(1.35 0 0 1.35 0 135)"><rect id="shape"',
+    );
+    expect(
+      resizeContentSvg(
+        source,
+        {
+          width: { unit: "px", value: 800 },
+          height: { unit: "px", value: 600 },
+        },
+        {
+          width: { unit: "px", value: 1080 },
+          height: { unit: "px", value: 1080 },
+        },
+        "scale_content_cover",
+      ).warnings,
+    ).toContain("CONTENT_MAY_BE_CROPPED");
   });
   it("reports active content and external resources without mutating SVG", () => {
     const result = preflightSvg(

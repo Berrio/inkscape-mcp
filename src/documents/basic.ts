@@ -4,7 +4,9 @@ import {
   planResize,
   type PageSize,
   type ResizeAnchor,
+  type ResizeMode,
   type UserRect,
+  toCssPixels,
 } from "../geometry/index.js";
 import { sanitizeSvg } from "../svg/index.js";
 
@@ -105,6 +107,70 @@ export function resizePageOnlySvg(
   return {
     svg: new XMLSerializer().serializeToString(document),
     warnings: plan.warnings,
+  };
+}
+
+export function resizeContentSvg(
+  source: string,
+  currentPage: PageSize,
+  targetPage: PageSize,
+  mode: Extract<ResizeMode, "scale_content_contain" | "scale_content_cover">,
+  anchor?: ResizeAnchor,
+): { svg: string; warnings: readonly string[] } {
+  const settings = inspectSvgSettings(source);
+  const plan = planResize({
+    ...(anchor === undefined ? {} : { anchor }),
+    currentPage,
+    currentViewBox: settings.viewBox,
+    mode,
+    targetPage,
+  });
+  const transform = plan.contentTransform;
+  if (!transform)
+    throw new Error("Content resize requires a content transform");
+  const document = new DOMParser().parseFromString(source, "image/svg+xml");
+  const root = document.documentElement;
+  if (!root) throw new Error("SVG root is missing");
+  const [scale, , , , offsetX, offsetY] = transform;
+  const targetCssWidth = toCssPixels(targetPage.width);
+  const targetCssHeight = toCssPixels(targetPage.height);
+  const translateX =
+    settings.viewBox.x * (1 - scale) +
+    offsetX * (plan.newViewBox.width / targetCssWidth);
+  const translateY =
+    settings.viewBox.y * (1 - scale) +
+    offsetY * (plan.newViewBox.height / targetCssHeight);
+  const group = document.createElementNS(
+    root.namespaceURI ?? "http://www.w3.org/2000/svg",
+    "g",
+  );
+  group.setAttribute(
+    "transform",
+    `matrix(${scale} 0 0 ${scale} ${translateX} ${translateY})`,
+  );
+  const renderable = Array.from(root.childNodes).filter(
+    (node) =>
+      node.nodeType === 1 &&
+      !new Set(["defs", "desc", "metadata", "namedview", "style", "title"]).has(
+        node.localName ?? "",
+      ),
+  );
+  if (renderable.length > 0) {
+    root.insertBefore(group, renderable[0] ?? null);
+    for (const node of renderable) group.appendChild(node);
+  }
+  root.setAttribute("width", formatLength(targetPage.width));
+  root.setAttribute("height", formatLength(targetPage.height));
+  root.setAttribute(
+    "viewBox",
+    `${plan.newViewBox.x} ${plan.newViewBox.y} ${plan.newViewBox.width} ${plan.newViewBox.height}`,
+  );
+  return {
+    svg: new XMLSerializer().serializeToString(document),
+    warnings:
+      renderable.length === 0
+        ? [...plan.warnings, "NO_RENDERABLE_CONTENT"]
+        : plan.warnings,
   };
 }
 

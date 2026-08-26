@@ -2,6 +2,7 @@ export {
   createSvgDocument,
   inspectSvgSettings,
   parseViewportLength,
+  resizeContentSvg,
   resizePageOnlySvg,
   type DocumentSettings,
   type DocumentSpec,

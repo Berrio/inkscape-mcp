@@ -209,6 +209,24 @@ try {
   if (plainSvg.isError || plainSvg.structuredContent?.flavor !== "plain") {
     throw new Error("export_svg did not publish the expected plain SVG");
   }
+  const contained = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: settingsRevision,
+      height: 297,
+      mode: "scale_content_contain",
+      path: "a4.svg",
+      unit: "mm",
+      width: 297,
+      workspaceId: workspace.id,
+    },
+    name: "document_resize",
+  });
+  if (
+    contained.isError ||
+    typeof contained.structuredContent?.revision !== "string"
+  ) {
+    throw new Error("document_resize did not apply scale_content_contain");
+  }
 } finally {
   await workspaceClient.close();
   await rm(workspaceRoot, { force: true, recursive: true });

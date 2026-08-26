@@ -16,6 +16,7 @@ import {
   parseViewportLength,
   preflightSvg,
   reorderSvgPages,
+  resizeContentSvg,
   resizePageOnlySvg,
   updateSvgPage,
   updateDocumentDisplaySettings,
@@ -365,9 +366,12 @@ export function buildServer(config: ServerConfig): McpServer {
             "bottom_center",
             "bottom_right",
           ])
-          .default("top_left"),
+          .optional(),
         expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
         height: z.number().finite().positive(),
+        mode: z
+          .enum(["page_only", "scale_content_contain", "scale_content_cover"])
+          .default("page_only"),
         path: z.string().min(1).max(1024),
         unit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
         width: z.number().finite().positive(),
@@ -384,6 +388,7 @@ export function buildServer(config: ServerConfig): McpServer {
       anchor,
       expectedRevision,
       height,
+      mode,
       path,
       unit,
       width,
@@ -398,15 +403,14 @@ export function buildServer(config: ServerConfig): McpServer {
         width: parseViewportLength(settings.width),
         height: parseViewportLength(settings.height),
       };
-      const resized = resizePageOnlySvg(
-        source,
-        currentPage,
-        {
-          width: { unit, value: width },
-          height: { unit, value: height },
-        },
-        anchor,
-      );
+      const targetPage = {
+        width: { unit, value: width },
+        height: { unit, value: height },
+      };
+      const resized =
+        mode === "page_only"
+          ? resizePageOnlySvg(source, currentPage, targetPage, anchor)
+          : resizeContentSvg(source, currentPage, targetPage, mode, anchor);
       const result = await fileStore.commit({
         contents: Buffer.from(resized.svg),
         expectedOutputRevision: expectedRevision,

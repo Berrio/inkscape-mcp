@@ -106,7 +106,13 @@ function remove(element: XmlElement, name: string, removed: string[]): void {
 function isForbiddenReference(value: string, mode: SanitizeMode): boolean {
   if (mode === "trusted") return false;
   if (mode === "strict") return !value.startsWith("#");
+  if (isSafeEmbeddedRasterDataUri(value)) return false;
   return /^(?:https?:|file:|data:|javascript:|\/\/)/iu.test(value);
+}
+function isSafeEmbeddedRasterDataUri(value: string): boolean {
+  return /^data:image\/(?:gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
+    value,
+  );
 }
 function isDirectReferenceAttribute(name: string): boolean {
   return name === "href" || name === "xlink:href" || name === "src";

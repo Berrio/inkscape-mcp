@@ -2,7 +2,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rmdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { z } from "zod";
 
 import packageMetadata from "../../package.json" with { type: "json" };
@@ -38,9 +38,11 @@ import {
   updateSvgPage,
   updateDocumentDisplaySettings,
   validateSvgPageLayout,
+  type ShapeSpec,
 } from "../documents/index.js";
 import { nativeVisualBoundsDescriptor } from "../geometry/index.js";
 import {
+  normalizeSvgIds,
   remapSvgIdsForNativeQuery,
   sanitizeSvg,
   summarizeSvgDiff,
@@ -81,7 +83,10 @@ import {
   sha256File,
   SnapshotStore,
 } from "../storage/index.js";
-import { WorkspaceService } from "../workspace/index.js";
+import {
+  WorkspaceService,
+  type ResolvedWorkspacePath,
+} from "../workspace/index.js";
 
 const statusSchema = z.object({
   actionCount: z.number().int().nonnegative(),
@@ -405,6 +410,21 @@ const shapeSchema = z.discriminatedUnion("kind", [
     style: shapeStyleSchema.optional(),
   }),
   z.object({
+    assetPath: z.string().min(1).max(1024),
+    embedding: z.enum(["embed", "link"]).default("link"),
+    height: z.number().finite().positive(),
+    id: shapeIdSchema.optional(),
+    kind: z.literal("image"),
+    parentId: shapeIdSchema.optional(),
+    preserveAspectRatio: z
+      .enum(["none", "xMidYMid meet", "xMidYMid slice"])
+      .optional(),
+    style: shapeStyleSchema.optional(),
+    width: z.number().finite().positive(),
+    x: z.number().finite(),
+    y: z.number().finite(),
+  }),
+  z.object({
     id: shapeIdSchema.optional(),
     kind: z.literal("text"),
     parentId: shapeIdSchema.optional(),
@@ -437,6 +457,7 @@ const shapeSchema = z.discriminatedUnion("kind", [
     style: shapeStyleSchema.optional(),
   }),
 ]);
+type ShapeRequest = z.infer<typeof shapeSchema>;
 const transformSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("translate"),
@@ -1355,6 +1376,79 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "document_normalize_ids",
+    {
+      description:
+        "Explicitly normalizes invalid or duplicate SVG IDs and rewrites supported local href, URL, ARIA and CSS references. Existing valid unique IDs remain unchanged.",
+      inputSchema: z
+        .object({
+          assignMissingIds: z.boolean().default(false),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          prefix: z
+            .string()
+            .regex(/^[A-Za-z_][A-Za-z0-9_.-]{0,95}$/u)
+            .default("svg"),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        renamed: z.array(
+          z.object({
+            from: z.string().optional(),
+            reason: z.enum(["duplicate", "invalid", "missing"]),
+            to: shapeIdSchema,
+          }),
+        ),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({
+      assignMissingIds,
+      expectedRevision,
+      path,
+      prefix,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const safety = sanitizeSvg(source, {
+        maxElements: 100_000,
+        maxInputBytes: config.maxInputBytes,
+        maximumMode: config.maximumSanitizeMode,
+        mode: "preserve-local",
+      });
+      if (safety.removed.length > 0)
+        throw new Error("SVG must be sanitized before normalizing IDs");
+      const normalized = normalizeSvgIds(source, {
+        assignMissingIds,
+        prefix,
+      });
+      const committed = await fileStore.commit({
+        contents: Buffer.from(normalized.svg, "utf8"),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        renamed: normalized.renamed,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
     "elements_create",
     {
       description:
@@ -1374,12 +1468,11 @@ export function buildServer(config: ServerConfig): McpServer {
     },
     async ({ elements, expectedRevision, path, workspaceId }) => {
       assertDocumentWorkspace(config);
-      const document = await (
-        await workspaces()
-      ).resolveExisting(workspaceId, path);
+      const workspace = await workspaces();
+      const document = await workspace.resolveExisting(workspaceId, path);
       const created = createSvgShapes(
         await readFile(document.absolutePath, "utf8"),
-        elements,
+        await prepareShapeSpecs(elements, document, workspace, config),
       );
       const committed = await fileStore.commit({
         contents: Buffer.from(created.svg),
@@ -4494,6 +4587,89 @@ function hasControlCharacters(value: string): boolean {
     const code = character.codePointAt(0) ?? 0;
     return code < 32 || code === 127;
   });
+}
+
+/** Resolves public image requests before the DOM-only shape constructor runs. */
+async function prepareShapeSpecs(
+  elements: readonly ShapeRequest[],
+  document: ResolvedWorkspacePath,
+  workspace: WorkspaceService,
+  config: ServerConfig,
+): Promise<ShapeSpec[]> {
+  const prepared: ShapeSpec[] = [];
+  for (const element of elements) {
+    if (element.kind !== "image") {
+      prepared.push(element);
+      continue;
+    }
+    const asset = await workspace.resolveExisting(
+      document.workspaceId,
+      element.assetPath,
+    );
+    const metadata = await stat(asset.absolutePath);
+    if (metadata.size > config.maxInputBytes)
+      throw new Error("Image asset exceeds the configured size limit");
+    const bytes = await readFile(asset.absolutePath);
+    const mime = sniffRasterMime(bytes);
+    const href =
+      element.embedding === "embed"
+        ? `data:${mime};base64,${bytes.toString("base64")}`
+        : relative(
+            dirname(document.absolutePath),
+            asset.absolutePath,
+          ).replaceAll("\\", "/");
+    if (!href || href.startsWith("/"))
+      throw new Error("Image asset must resolve to a local relative resource");
+    prepared.push({
+      ...(element.id === undefined ? {} : { id: element.id }),
+      ...(element.parentId === undefined ? {} : { parentId: element.parentId }),
+      ...(element.preserveAspectRatio === undefined
+        ? {}
+        : { preserveAspectRatio: element.preserveAspectRatio }),
+      ...(element.style === undefined ? {} : { style: element.style }),
+      height: element.height,
+      href,
+      kind: "image",
+      width: element.width,
+      x: element.x,
+      y: element.y,
+    });
+  }
+  return prepared;
+}
+
+function sniffRasterMime(bytes: Uint8Array): string {
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  )
+    return "image/png";
+  if (
+    bytes.length >= 3 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff
+  )
+    return "image/jpeg";
+  if (
+    bytes.length >= 6 &&
+    String.fromCharCode(...bytes.subarray(0, 6)).match(/^GIF(?:87a|89a)$/u)
+  )
+    return "image/gif";
+  if (
+    bytes.length >= 12 &&
+    String.fromCharCode(...bytes.subarray(0, 4)) === "RIFF" &&
+    String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP"
+  )
+    return "image/webp";
+  throw new Error("Image asset is not a supported raster format");
 }
 
 async function artifactResource(

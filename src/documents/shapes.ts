@@ -142,6 +142,15 @@ export type ShapeSpec =
     })
   | (ShapeBase & { d: string; kind: "path" })
   | (ShapeBase & {
+      height: number;
+      href: string;
+      kind: "image";
+      preserveAspectRatio?: "none" | "xMidYMid meet" | "xMidYMid slice";
+      width: number;
+      x: number;
+      y: number;
+    })
+  | (ShapeBase & {
       kind: "text";
       spans?:
         | readonly {
@@ -179,7 +188,7 @@ export function createSvgShapes(
   );
   const ids: string[] = [];
   for (const shape of shapes) {
-    const id = shape.id ?? `shape_${crypto.randomUUID().replaceAll("-", "")}`;
+    const id = shape.id ?? nextGeneratedId(usedIds);
     if (!SAFE_ID.test(id)) throw new Error("Shape ID is invalid");
     if (usedIds.has(id)) throw new Error("Shape ID already exists");
     usedIds.add(id);
@@ -190,6 +199,13 @@ export function createSvgShapes(
     ids.push(id);
   }
   return { ids, svg: new XMLSerializer().serializeToString(document) };
+}
+function nextGeneratedId(usedIds: ReadonlySet<string>): string {
+  for (let index = 1; index <= 1_000_000; index += 1) {
+    const id = `shape_${index}`;
+    if (!usedIds.has(id)) return id;
+  }
+  throw new Error("No generated shape ID is available");
 }
 
 export function deleteSvgShapes(
@@ -544,6 +560,16 @@ function createShapeElement(
       validatePathData(shape.d);
       element.setAttribute("d", shape.d.trim());
       break;
+    case "image":
+      setFinite(element, "x", shape.x);
+      setFinite(element, "y", shape.y);
+      setPositive(element, "width", shape.width);
+      setPositive(element, "height", shape.height);
+      validateImageHref(shape.href);
+      element.setAttribute("href", shape.href);
+      if (shape.preserveAspectRatio !== undefined)
+        element.setAttribute("preserveAspectRatio", shape.preserveAspectRatio);
+      break;
     case "text":
       validateText(shape.text);
       setFinite(element, "x", shape.x);
@@ -880,6 +906,25 @@ function hasControlCharacters(value: string): boolean {
 function validateText(value: string): void {
   if (value.length > 10_000 || hasControlCharacters(value))
     throw new Error("Text content is invalid or too long");
+}
+function validateImageHref(value: string): void {
+  if (
+    value.length < 1 ||
+    value.length > 75 * 1024 * 1024 ||
+    hasControlCharacters(value)
+  )
+    throw new Error("Image href is invalid");
+  if (
+    /^data:image\/(?:gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
+      value,
+    )
+  )
+    return;
+  if (
+    /^(?:[a-z][a-z0-9+.-]*:|\/|\\|\/\/)/iu.test(value) ||
+    value.startsWith("#")
+  )
+    throw new Error("Image href must be a local relative raster resource");
 }
 function validatePathData(value: string): void {
   if (value.length < 1 || value.length > 100_000)

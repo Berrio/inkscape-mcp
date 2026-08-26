@@ -696,6 +696,64 @@ describe("basic SVG documents", () => {
     expect(result.svg).toContain('d="M 10 10 L');
     expect(result.svg).not.toContain("NaN");
   });
+  it("creates only local or supported embedded raster image elements", () => {
+    const source = createSvgDocument({
+      page: { width: mm(20), height: mm(20) },
+    });
+    const result = createSvgShapes(source, [
+      {
+        height: 8,
+        href: "assets/photo.png",
+        id: "linked_image",
+        kind: "image",
+        preserveAspectRatio: "xMidYMid meet",
+        width: 10,
+        x: 1,
+        y: 2,
+      },
+      {
+        height: 1,
+        href: "data:image/png;base64,AA==",
+        id: "embedded_image",
+        kind: "image",
+        width: 1,
+        x: 0,
+        y: 0,
+      },
+    ]);
+    expect(result.svg).toContain('href="assets/photo.png"');
+    expect(result.svg).toContain('preserveAspectRatio="xMidYMid meet"');
+    expect(result.svg).toContain('href="data:image/png;base64,AA=="');
+    expect(() =>
+      createSvgShapes(source, [
+        {
+          height: 1,
+          href: "https://example.test/image.png",
+          kind: "image",
+          width: 1,
+          x: 0,
+          y: 0,
+        },
+      ]),
+    ).toThrow("local relative raster");
+  });
+  it("generates deterministic noncolliding IDs while rejecting explicit collisions", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect id="shape_1"/></svg>';
+    const first = createSvgShapes(source, [
+      { height: 1, kind: "rect", width: 1, x: 0, y: 0 },
+    ]);
+    const second = createSvgShapes(first.svg, [
+      { height: 1, kind: "rect", width: 1, x: 1, y: 0 },
+    ]);
+    expect(first.ids).toEqual(["shape_2"]);
+    expect(second.ids).toEqual(["shape_3"]);
+    expect(() =>
+      createSvgShapes(second.svg, [
+        { height: 1, id: "shape_2", kind: "rect", width: 1, x: 2, y: 0 },
+      ]),
+    ).toThrow("already exists");
+  });
   it("queries typed element summaries by layer, kind, and bounded offset", () => {
     const source = createSvgShapes(
       createSvgDocument({ page: { width: mm(10), height: mm(10) } }),

@@ -1730,9 +1730,9 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F06-T09` Crear star/regular polygon/spiral compatibles con Inkscape o SVG estándar según modo. — Star/polígono se serializan como `<polygon>` y spiral como `<path>` SVG estándar de espiral de Arquímedes, con turnos/radio/rotación acotados; pruebas unitarias y MCP reales cubren su creación.
 - [x] `F06-T10` Elegir e implementar un parser/validador read-only completo de path `d` (M/L/H/V/C/S/Q/T/A/Z, límites y finitud) y crear paths solo después de validarlos.
 - [x] `F06-T11` Crear texto/tspan básico.
-- [ ] `F06-T12` Crear imagen local linked/embedded detrás de política.
+- [x] `F06-T12` Crear imagen local linked/embedded detrás de política. — `elements_create` resuelve sólo raster local dentro del workspace, verifica firma PNG/JPEG/GIF/WebP y límite de tamaño; publica href relativo o data URI raster Base64 seguro.
 - [x] `F06-T13` Crear group y layer con label/ID.
-- [ ] `F06-T14` Implementar ID generation, collision policy y reescritura de refs.
+- [x] `F06-T14` Implementar ID generation, collision policy y reescritura de refs. — IDs automáticos deterministas evitan colisiones; IDs explícitos en colisión se rechazan. `document_normalize_ids` realiza la renormalización explícita y reescribe href/URL/ARIA/CSS locales con manifiesto de cambios.
 - [x] `F06-T15` Implementar `elements_create` con batch acotado.
 
 #### Update/delete/duplicate/group

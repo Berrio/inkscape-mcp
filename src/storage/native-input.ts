@@ -326,6 +326,7 @@ function rewriteCssReferences(
 function parseLocalReference(raw: string): LocalReference | undefined {
   const value = raw.trim();
   if (!value || value.startsWith("#")) return undefined;
+  if (isSafeEmbeddedRasterDataUri(value)) return undefined;
   if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/iu.test(value))
     throw new RevisionConflictError("Native input dependency must be local");
   const fragmentIndex = value.indexOf("#");
@@ -341,6 +342,11 @@ function parseLocalReference(raw: string): LocalReference | undefined {
     query: queryIndex < 0 ? "" : beforeFragment.slice(queryIndex),
     raw,
   };
+}
+function isSafeEmbeddedRasterDataUri(value: string): boolean {
+  return /^data:image\/(?:gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
+    value,
+  );
 }
 function uniqueReferences(
   references: readonly LocalReference[],

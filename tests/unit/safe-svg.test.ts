@@ -55,4 +55,18 @@ describe("safe SVG", () => {
     expect(result.svg).toContain('href="#shape"');
     expect(result.svg).toContain("inkscape:label");
   });
+  it("allows only declared raster Base64 data URIs in preserve-local mode", () => {
+    const source =
+      '<svg><image href="data:image/png;base64,AA=="/><image href="data:image/svg+xml;base64,PHN2Zy8+"/></svg>';
+    const result = sanitizeSvg(source, { ...limits, mode: "preserve-local" });
+    expect(result.svg).toContain("data:image/png;base64,AA==");
+    expect(result.svg).not.toContain("data:image/svg+xml");
+    expect(result.removed).toContain("reference:href");
+    expect(
+      sanitizeSvg('<svg><image href="data:image/png;base64,AA=="/></svg>', {
+        ...limits,
+        mode: "strict",
+      }).svg,
+    ).not.toContain("data:image/png");
+  });
 });

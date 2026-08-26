@@ -132,6 +132,44 @@ try {
   )
     throw new Error("document_import_svg published unsafe SVG content");
   await writeFile(
+    join(workspaceRoot, "normalize-ids.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="legacy:gradient"/></defs><style>#legacy\\:gradient { fill: url(#legacy:gradient); }</style><rect id="duplicate" fill="url(#legacy:gradient)"/><use href="#legacy:gradient"/><circle id="duplicate"/><path/></svg>',
+  );
+  const normalizationRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "normalize-ids.svg")))
+    .digest("hex");
+  const normalizedIds = await workspaceClient.callTool({
+    arguments: {
+      assignMissingIds: true,
+      expectedRevision: normalizationRevision,
+      path: "normalize-ids.svg",
+      prefix: "normalized",
+      workspaceId: workspace.id,
+    },
+    name: "document_normalize_ids",
+  });
+  const normalizedLegacyId = normalizedIds.structuredContent?.renamed?.find(
+    (rename) => rename.from === "legacy:gradient",
+  )?.to;
+  const normalizedText = await readFile(
+    join(workspaceRoot, "normalize-ids.svg"),
+    "utf8",
+  );
+  if (
+    normalizedIds.isError ||
+    typeof normalizedLegacyId !== "string" ||
+    normalizedText.includes("legacy:gradient") ||
+    !normalizedText.includes(`url(#${normalizedLegacyId})`) ||
+    !normalizedText.includes(`href="#${normalizedLegacyId}"`) ||
+    !normalizedIds.structuredContent?.renamed?.some(
+      (rename) => rename.reason === "duplicate",
+    ) ||
+    !normalizedIds.structuredContent?.renamed?.some(
+      (rename) => rename.reason === "missing",
+    )
+  )
+    throw new Error("document_normalize_ids did not rewrite safe references");
+  await writeFile(
     join(workspaceRoot, "id-delimiters.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20"><rect id="with,comma" x="0" y="0" width="10" height="10"/><rect id="with;semicolon" x="20" y="0" width="10" height="10"/><rect id="with space" x="40" y="0" width="10" height="10"/><rect id="mañana" x="60" y="0" width="10" height="10"/><rect id="public_rect" x="80" y="0" width="10" height="10"/></svg>',
   );
@@ -480,6 +518,26 @@ try {
           r: 12,
           turns: 2,
         },
+        {
+          assetPath: "package-texture.png",
+          embedding: "link",
+          height: 12,
+          id: "linked_image",
+          kind: "image",
+          width: 12,
+          x: 5,
+          y: 110,
+        },
+        {
+          assetPath: "package-texture.png",
+          embedding: "embed",
+          height: 8,
+          id: "embedded_image",
+          kind: "image",
+          width: 8,
+          x: 20,
+          y: 110,
+        },
       ],
       expectedRevision: resizedAgainRevision,
       path: "a4.svg",
@@ -497,10 +555,23 @@ try {
     elements.structuredContent?.ids?.[4] !== "demo_path" ||
     elements.structuredContent?.ids?.[5] !== "demo_star" ||
     elements.structuredContent?.ids?.[6] !== "demo_spiral" ||
+    elements.structuredContent?.ids?.[7] !== "linked_image" ||
+    elements.structuredContent?.ids?.[8] !== "embedded_image" ||
     typeof elementsRevision !== "string"
   ) {
     throw new Error("elements_create did not publish a typed rectangle");
   }
+  const createdElementsText = await readFile(
+    join(workspaceRoot, "a4.svg"),
+    "utf8",
+  );
+  if (
+    !createdElementsText.includes('href="package-texture.png"') ||
+    !createdElementsText.includes('href="data:image/png;base64,')
+  )
+    throw new Error(
+      "elements_create did not publish linked and embedded images",
+    );
   const deleted = await workspaceClient.callTool({
     arguments: {
       expectedRevision: elementsRevision,

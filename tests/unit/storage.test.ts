@@ -93,6 +93,26 @@ describe("file revisions and atomic store", () => {
       root,
     );
   });
+  it("keeps an approved embedded raster inside the native SVG without staging it", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const staging = join(root, "staging");
+    await mkdir(staging);
+    await writeFile(
+      source,
+      '<svg><image href="data:image/png;base64,AA=="/></svg>',
+    );
+    const bundle = await createNativeInputBundle(
+      source,
+      await sha256File(source),
+      staging,
+      { allowedRoot: root },
+    );
+    expect(bundle.manifest.dependencies).toEqual([]);
+    await expect(readFile(bundle.path, "utf8")).resolves.toContain(
+      "data:image/png;base64,AA==",
+    );
+  });
   it("rejects dependencies outside the workspace and detects a concurrent dependency writer", async () => {
     const parent = await temporaryDirectory();
     const root = join(parent, "workspace");

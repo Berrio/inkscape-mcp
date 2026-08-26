@@ -1748,10 +1748,10 @@ Evidencia específica adicional para WP de alto riesgo:
 #### Transformaciones y arrange
 
 - [x] `F06-T23` Implementar translate/scale/rotate/skew/flip/matrix.
-- [ ] `F06-T24` Definir anchor/origin por bbox, página, coordenada o elemento.
+- [x] `F06-T24` Definir anchor/origin por bbox, página, coordenada o elemento. — `elements_align` acepta como referencia el bbox unido de la selección, una página explícita (o el viewBox si no hay páginas), una coordenada o el bbox visual de otro elemento; obtiene los bounds de Inkscape con revisión esperada.
 - [ ] `F06-T25` Preservar o aplanar transforms solo según opción explícita.
-- [ ] `F06-T26` Implementar align left/center/right/top/middle/bottom.
-- [ ] `F06-T27` Implementar distribute edges/centers/gaps.
+- [x] `F06-T26` Implementar align left/center/right/top/middle/bottom. — `elements_align` calcula traslaciones individuales desde bounds visuales nativos, conserva los transforms existentes y rechaza selecciones con ancestro y descendiente.
+- [x] `F06-T27` Implementar distribute edges/centers/gaps. — `elements_distribute` ordena de forma estable por el eje, conserva los extremos y distribuye bordes, centros o gaps de manera determinista.
 - [ ] `F06-T28` Implementar remove overlaps como capability separada.
 - [ ] `F06-T29` Probar nested transforms, negative scale, text/image y stroke scaling.
 

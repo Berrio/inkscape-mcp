@@ -962,9 +962,45 @@ try {
     typeof reparentedRevision !== "string"
   )
     throw new Error("elements_reparent did not move an element into a group");
+  const aligned = await workspaceClient.callTool({
+    arguments: {
+      alignment: "center",
+      anchor: { kind: "page", pageId: "page_front" },
+      expectedRevision: reparentedRevision,
+      ids: ["demo_rect", "demo_text"],
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_align",
+  });
+  const alignedRevision = aligned.structuredContent?.revision;
+  if (
+    aligned.isError ||
+    aligned.structuredContent?.moves?.length !== 2 ||
+    typeof alignedRevision !== "string"
+  )
+    throw new Error("elements_align did not use native page visual bounds");
+  const distributed = await workspaceClient.callTool({
+    arguments: {
+      axis: "horizontal",
+      expectedRevision: alignedRevision,
+      ids: ["demo_rect", "demo_text", "demo_star"],
+      mode: "centers",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_distribute",
+  });
+  const distributedRevision = distributed.structuredContent?.revision;
+  if (
+    distributed.isError ||
+    distributed.structuredContent?.moves?.length !== 3 ||
+    typeof distributedRevision !== "string"
+  )
+    throw new Error("elements_distribute did not use native visual bounds");
   const inspected = await workspaceClient.callTool({
     arguments: {
-      expectedRevision: reparentedRevision,
+      expectedRevision: distributedRevision,
       includeVisualBounds: true,
       path: "a4.svg",
       workspaceId: workspace.id,
@@ -1022,7 +1058,7 @@ try {
   const pageAdded = await workspaceClient.callTool({
     arguments: {
       action: "add",
-      expectedRevision: reparentedRevision,
+      expectedRevision: distributedRevision,
       page: { height: 210, id: "page_back", width: 148, x: 160, y: 0 },
       path: "a4.svg",
       workspaceId: workspace.id,

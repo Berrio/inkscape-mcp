@@ -42,7 +42,15 @@ import {
   validateSvgPageLayout,
   type ShapeSpec,
 } from "../documents/index.js";
-import { nativeVisualBoundsDescriptor } from "../geometry/index.js";
+import {
+  nativeVisualBoundsDescriptor,
+  planAlignment,
+  planDistribution,
+  unionLayoutBounds,
+  type LayoutBounds,
+  type LayoutMove,
+  type LayoutReference,
+} from "../geometry/index.js";
 import {
   normalizeSvgIds,
   remapSvgIdsForNativeQuery,
@@ -535,6 +543,21 @@ const transformSchema = z.discriminatedUnion("kind", [
     kind: z.literal("matrix"),
   }),
 ]);
+const layoutAnchorSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("selection") }),
+  z.object({ kind: z.literal("page"), pageId: shapeIdSchema.optional() }),
+  z.object({ id: shapeIdSchema, kind: z.literal("element") }),
+  z.object({
+    kind: z.literal("coordinate"),
+    x: z.number().finite(),
+    y: z.number().finite(),
+  }),
+]);
+const layoutMoveSchema = z.object({
+  id: shapeIdSchema,
+  x: z.number().finite(),
+  y: z.number().finite(),
+});
 const geometryPatchSchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -2174,6 +2197,152 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         backupCreated: committed.backupPath !== undefined,
         ids: transformed.ids,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_align",
+    {
+      description:
+        "Aligns SVG elements to a selection, page, coordinate or another element using Inkscape visual bounds; selected ancestors and descendants are rejected.",
+      inputSchema: z
+        .object({
+          alignment: z.enum([
+            "left",
+            "center",
+            "right",
+            "top",
+            "middle",
+            "bottom",
+          ]),
+          anchor: layoutAnchorSchema.default({ kind: "selection" }),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z.array(shapeIdSchema).min(1).max(100),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        alignment: z.enum([
+          "left",
+          "center",
+          "right",
+          "top",
+          "middle",
+          "bottom",
+        ]),
+        backupCreated: z.boolean(),
+        moves: z.array(layoutMoveSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ alignment, anchor, expectedRevision, ids, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      assertNoNestedLayoutSelection(source, ids);
+      const nativeBounds = await queryNativeBounds({
+        config,
+        documentPath: document.absolutePath,
+        expectedRevision,
+        runner,
+        scratch,
+        workspaceRoot: document.workspaceRoot,
+      });
+      const selected = requireLayoutBounds(ids, nativeBounds);
+      const reference = resolveLayoutAnchor(
+        anchor,
+        source,
+        selected,
+        nativeBounds,
+      );
+      const moves = planAlignment(selected, alignment, reference);
+      const changed = applyLayoutMoves(source, moves);
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        alignment,
+        backupCreated: committed.backupPath !== undefined,
+        moves,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_distribute",
+    {
+      description:
+        "Distributes SVG elements by visual edges, centres or gaps using native Inkscape bounds, preserving the first and last element on the chosen axis.",
+      inputSchema: z
+        .object({
+          axis: z.enum(["horizontal", "vertical"]),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z.array(shapeIdSchema).min(3).max(100),
+          mode: z.enum(["edges", "centers", "gaps"]),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        axis: z.enum(["horizontal", "vertical"]),
+        backupCreated: z.boolean(),
+        mode: z.enum(["edges", "centers", "gaps"]),
+        moves: z.array(layoutMoveSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ axis, expectedRevision, ids, mode, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      assertNoNestedLayoutSelection(source, ids);
+      const nativeBounds = await queryNativeBounds({
+        config,
+        documentPath: document.absolutePath,
+        expectedRevision,
+        runner,
+        scratch,
+        workspaceRoot: document.workspaceRoot,
+      });
+      const moves = planDistribution(
+        requireLayoutBounds(ids, nativeBounds),
+        axis,
+        mode,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(applyLayoutMoves(source, moves)),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        axis,
+        backupCreated: committed.backupPath !== undefined,
+        mode,
+        moves,
         revision: committed.revision,
       };
       return {
@@ -5359,6 +5528,102 @@ function unionBounds(bounds: readonly InkscapeBounds[]): InkscapeBounds {
   if (right <= left || bottom <= top)
     throw new Error("Native visual bounds have no positive area");
   return { height: bottom - top, width: right - left, x: left, y: top };
+}
+
+function requireLayoutBounds(
+  ids: readonly string[],
+  nativeBounds: ReadonlyMap<string, InkscapeBounds>,
+): LayoutBounds[] {
+  if (new Set(ids).size !== ids.length)
+    throw new Error("Layout IDs must be unique");
+  return ids.map((id) => {
+    const bounds = nativeBounds.get(id);
+    if (bounds === undefined || bounds.width <= 0 || bounds.height <= 0)
+      throw new Error(
+        "Inkscape did not return positive visual bounds for a layout ID",
+      );
+    return { id, ...bounds };
+  });
+}
+
+function resolveLayoutAnchor(
+  anchor: z.infer<typeof layoutAnchorSchema>,
+  source: string,
+  selected: readonly LayoutBounds[],
+  nativeBounds: ReadonlyMap<string, InkscapeBounds>,
+): LayoutReference {
+  switch (anchor.kind) {
+    case "selection":
+      return unionLayoutBounds(selected);
+    case "coordinate":
+      return { height: 0, width: 0, x: anchor.x, y: anchor.y };
+    case "element": {
+      const bounds = requireLayoutBounds([anchor.id], nativeBounds)[0]!;
+      return bounds;
+    }
+    case "page": {
+      const pages = listSvgPages(source);
+      if (pages.length === 0) return inspectSvgSettings(source).viewBox;
+      if (anchor.pageId === undefined && pages.length !== 1)
+        throw new Error(
+          "A page anchor requires pageId when the document has multiple pages",
+        );
+      const page =
+        anchor.pageId === undefined
+          ? pages[0]
+          : pages.find((candidate) => candidate.id === anchor.pageId);
+      if (!page) throw new Error("Layout page anchor does not exist");
+      return page;
+    }
+  }
+}
+
+function applyLayoutMoves(
+  source: string,
+  moves: readonly LayoutMove[],
+): string {
+  let changed = source;
+  for (const move of moves) {
+    if (move.x === 0 && move.y === 0) continue;
+    changed = transformSvgShapes(changed, [move.id], {
+      kind: "translate",
+      x: move.x,
+      y: move.y,
+    }).svg;
+  }
+  return changed;
+}
+
+function assertNoNestedLayoutSelection(
+  source: string,
+  ids: readonly string[],
+): void {
+  if (new Set(ids).size !== ids.length)
+    throw new Error("Layout IDs must be unique");
+  const catalog = querySvgElementTargets(source, {
+    limit: 1_000,
+    offset: 0,
+  });
+  if (catalog.total > catalog.elements.length)
+    throw new Error(
+      "Layout cannot validate nesting in a document with over 1,000 elements",
+    );
+  const parentById = new Map(
+    catalog.elements.flatMap(({ summary }) =>
+      summary.id === undefined ? [] : [[summary.id, summary.parentId] as const],
+    ),
+  );
+  const selected = new Set(ids);
+  for (const id of ids) {
+    let parentId = parentById.get(id);
+    while (parentId !== undefined) {
+      if (selected.has(parentId))
+        throw new Error(
+          "Layout cannot select an ancestor and descendant together",
+        );
+      parentId = parentById.get(parentId);
+    }
+  }
 }
 
 async function queryNativeBounds(request: {

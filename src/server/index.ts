@@ -79,6 +79,8 @@ const inventorySchema = z.object({
   duplicateIds: z.array(z.string()),
   elementCount: z.number().int().nonnegative(),
   externalResourceCount: z.number().int().nonnegative(),
+  fontFamilies: z.array(z.string()),
+  fontResolution: z.literal("unavailable"),
   images: z.array(
     z.object({ kind: z.enum(["embedded", "external", "linked"]) }),
   ),

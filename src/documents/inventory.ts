@@ -17,6 +17,8 @@ export type DocumentInventory = {
   duplicateIds: readonly string[];
   elementCount: number;
   externalResourceCount: number;
+  fontFamilies: readonly string[];
+  fontResolution: "unavailable";
   images: readonly { kind: "embedded" | "external" | "linked" }[];
   ids: readonly string[];
   layers: readonly {
@@ -77,6 +79,7 @@ export function inspectSvgInventory(
   const namespaces = new Set<string>();
   const layers: DocumentInventory["layers"][number][] = [];
   const images: DocumentInventory["images"][number][] = [];
+  const fontFamilies = new Set<string>();
   const paintUsage: DocumentInventory["paintUsage"] = {
     fills: 0,
     filters: 0,
@@ -98,6 +101,14 @@ export function inspectSvgInventory(
     const stroke = element.getAttribute("stroke") ?? style.stroke;
     const filter = element.getAttribute("filter") ?? style.filter;
     const opacity = element.getAttribute("opacity") ?? style.opacity;
+    const fontFamily =
+      element.getAttribute("font-family") ?? style["font-family"];
+    if (fontFamily) {
+      for (const family of fontFamily.split(",")) {
+        const normalized = family.trim().replace(/^['"]|['"]$/gu, "");
+        if (normalized) fontFamilies.add(normalized);
+      }
+    }
     if (fill !== undefined) {
       paintUsage.fills += 1;
       if (
@@ -171,6 +182,8 @@ export function inspectSvgInventory(
     duplicateIds: [...duplicateIds].sort(),
     elementCount,
     externalResourceCount,
+    fontFamilies: [...fontFamilies].sort(),
+    fontResolution: "unavailable",
     images,
     ids: inspectedIds,
     layers,

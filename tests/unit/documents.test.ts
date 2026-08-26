@@ -131,11 +131,13 @@ describe("basic SVG documents", () => {
   });
   it("summarizes IDs, layers, images and unresolved references without paths", () => {
     const inventory = inspectSvgInventory(
-      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:custom="urn:custom" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"><defs><linearGradient id="gradient"/></defs><g id="layer" inkscape:groupmode="layer" inkscape:label="Layer" sodipodi:insensitive="true" style="display:none"><rect id="same" fill="url(#gradient)" stroke="#000000" opacity="0.5" filter="url(#blur)"/><use href="#missing"/></g><image href="data:image/png;base64,AA=="/><image href="https://example.test/image.png"/><circle id="same"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:custom="urn:custom" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"><defs><linearGradient id="gradient"/></defs><g id="layer" inkscape:groupmode="layer" inkscape:label="Layer" sodipodi:insensitive="true" style="display:none"><rect id="same" fill="url(#gradient)" stroke="#000000" opacity="0.5" filter="url(#blur)" style="font-family: Arial, NotoSans"/><use href="#missing"/></g><image href="data:image/png;base64,AA=="/><image href="https://example.test/image.png"/><circle id="same"/></svg>',
     );
     expect(inventory).toMatchObject({
       duplicateIds: ["same"],
       externalResourceCount: 2,
+      fontFamilies: ["Arial", "NotoSans"],
+      fontResolution: "unavailable",
       ids: ["gradient", "layer", "same", "same"],
       unknownNamespaces: ["urn:custom"],
       unresolvedReferences: ["missing"],

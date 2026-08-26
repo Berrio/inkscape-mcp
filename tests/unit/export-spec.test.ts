@@ -7,6 +7,7 @@ import {
   exportSpecSchema,
   normalizeExportArea,
   parseExportSpec,
+  requiredPdfCapabilityFlags,
   requiredPngCapabilityFlags,
   runExportPipeline,
 } from "../../src/export/index.js";
@@ -106,6 +107,43 @@ it("rejects an incompatible PNG bit depth and color mode", () => {
       target,
     }).success,
   ).toBe(false);
+});
+
+it("builds and gates the complete PDF renderer option set", () => {
+  const spec = parseExportSpec({
+    area: { kind: "document" },
+    filterRasterDpi: 300,
+    filters: "ignore-with-warning",
+    format: "pdf",
+    latex: true,
+    source,
+    target: { ...target, path: "out/label.pdf" },
+    text: "paths",
+    version: "1.4",
+  });
+  expect(
+    buildExportArgv({
+      area: normalizeExportArea({ kind: "document" }, []),
+      inputPath: "trusted-input.svg",
+      outputPath: "trusted-output.pdf",
+      spec,
+    }),
+  ).toEqual(
+    expect.arrayContaining([
+      "--export-pdf-version=1.4",
+      "--export-text-to-path",
+      "--export-latex",
+      "--export-ignore-filters",
+      "--export-filter-dpi=300",
+    ]),
+  );
+  expect(requiredPdfCapabilityFlags(spec)).toEqual([
+    "--export-pdf-version",
+    "--export-text-to-path",
+    "--export-latex",
+    "--export-ignore-filters",
+    "--export-filter-dpi",
+  ]);
 });
 
 it("rejects crossed format, target, path and overwrite combinations", () => {

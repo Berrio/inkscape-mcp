@@ -3,13 +3,16 @@ export { verifyPdf, type PdfMetadata } from "./pdf.js";
 export { verifySvg } from "./svg.js";
 export {
   buildExportArgv,
+  PDF_OPTION_CAPABILITY_FLAGS,
   PNG_OPTION_CAPABILITY_FLAGS,
+  requiredPdfCapabilityFlags,
   requiredPngCapabilityFlags,
   type ExportArgvRequest,
 } from "./argv.js";
 export {
   normalizeExportArea,
   type ExportAreaRequest,
+  type ExportDocumentArea,
   type ExportDrawingArea,
   type ExportPageArea,
   type ExportPageRectangle,
@@ -35,3 +38,4 @@ export {
   type OutputTarget,
 } from "./spec.js";
 export { verifyExportArtifact, type ExportVerification } from "./verify.js";
+export { pruneSvgPagesForPdf } from "./pdf-pages.js";

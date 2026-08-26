@@ -8,6 +8,13 @@ export const PNG_OPTION_CAPABILITY_FLAGS = {
   dithering: "--export-png-use-dithering",
   snapAreaToPixels: "--export-area-snap",
 } as const;
+export const PDF_OPTION_CAPABILITY_FLAGS = {
+  filterRasterDpi: "--export-filter-dpi",
+  filters: "--export-ignore-filters",
+  latex: "--export-latex",
+  text: "--export-text-to-path",
+  version: "--export-pdf-version",
+} as const;
 
 export type ExportArgvRequest = {
   area: NormalizedExportArea;
@@ -76,6 +83,26 @@ export function requiredPngCapabilityFlags(
   ];
 }
 
+/** Returns only flags required by options that change PDF export semantics. */
+export function requiredPdfCapabilityFlags(
+  spec: ExportSpec,
+): readonly string[] {
+  if (spec.format !== "pdf") return [];
+  return [
+    ...(spec.version === undefined
+      ? []
+      : [PDF_OPTION_CAPABILITY_FLAGS.version]),
+    ...(spec.text === "paths" ? [PDF_OPTION_CAPABILITY_FLAGS.text] : []),
+    ...(spec.latex ? [PDF_OPTION_CAPABILITY_FLAGS.latex] : []),
+    ...(spec.filters === "ignore-with-warning"
+      ? [PDF_OPTION_CAPABILITY_FLAGS.filters]
+      : []),
+    ...(spec.filterRasterDpi === undefined
+      ? []
+      : [PDF_OPTION_CAPABILITY_FLAGS.filterRasterDpi]),
+  ];
+}
+
 function pngArguments(spec: Extract<ExportSpec, { format: "png" }>): string[] {
   const argumentsList: string[] = [];
   if (spec.size?.mode === "dpi")
@@ -117,6 +144,10 @@ function pdfArguments(spec: Extract<ExportSpec, { format: "pdf" }>): string[] {
       ? []
       : [`--export-pdf-version=${spec.version}`]),
     ...(spec.text === "paths" ? ["--export-text-to-path"] : []),
+    ...(spec.latex ? ["--export-latex"] : []),
+    ...(spec.filters === "ignore-with-warning"
+      ? ["--export-ignore-filters"]
+      : []),
     ...(spec.filterRasterDpi === undefined
       ? []
       : [`--export-filter-dpi=${spec.filterRasterDpi}`]),

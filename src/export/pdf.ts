@@ -1,8 +1,13 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { PDFDocument } from "pdf-lib";
 
+export type PdfBox = { height: number; width: number; x: number; y: number };
 export type PdfMetadata = {
-  mediaBoxes: readonly { height: number; width: number }[];
+  byteLength: number;
+  cropBoxes: readonly PdfBox[];
+  hash: string;
+  mediaBoxes: readonly PdfBox[];
   pageCount: number;
   version: string;
 };
@@ -20,8 +25,19 @@ export async function verifyPdf(path: string): Promise<PdfMetadata> {
   }
   const mediaBoxes = document.getPages().map((page) => {
     const box = page.getMediaBox();
-    return { height: box.height, width: box.width };
+    return { height: box.height, width: box.width, x: box.x, y: box.y };
+  });
+  const cropBoxes = document.getPages().map((page) => {
+    const box = page.getCropBox();
+    return { height: box.height, width: box.width, x: box.x, y: box.y };
   });
   if (mediaBoxes.length === 0) throw new Error("Export PDF has no pages");
-  return { mediaBoxes, pageCount: mediaBoxes.length, version: match[1]! };
+  return {
+    byteLength: bytes.byteLength,
+    cropBoxes,
+    hash: createHash("sha256").update(bytes).digest("hex"),
+    mediaBoxes,
+    pageCount: mediaBoxes.length,
+    version: match[1]!,
+  };
 }

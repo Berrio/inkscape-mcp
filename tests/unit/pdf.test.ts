@@ -20,9 +20,15 @@ describe("PDF verification", () => {
     document.addPage([400, 500]);
     await writeFile(path, await document.save());
     await expect(verifyPdf(path)).resolves.toMatchObject({
+      byteLength: expect.any(Number),
+      cropBoxes: [
+        { height: 300, width: 200, x: 0, y: 0 },
+        { height: 500, width: 400, x: 0, y: 0 },
+      ],
+      hash: expect.stringMatching(/^[a-f0-9]{64}$/u),
       mediaBoxes: [
-        { height: 300, width: 200 },
-        { height: 500, width: 400 },
+        { height: 300, width: 200, x: 0, y: 0 },
+        { height: 500, width: 400, x: 0, y: 0 },
       ],
       pageCount: 2,
       version: "1.7",

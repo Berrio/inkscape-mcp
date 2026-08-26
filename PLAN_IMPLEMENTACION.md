@@ -1669,7 +1669,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### PDF
 
-- [ ] `F05-T14` Ejecutar spike/ADR: elegir inspector PDF JS, confirmar que 1.4.4 separa `--export-page`, fijar estrategia prune (direct solo por capability futura; merge como último fallback), tolerancias de boxes y fixture de `viewBox` con origen no cero.
+- [x] `F05-T14` Ejecutar spike/ADR: elegir inspector PDF JS, confirmar que 1.4.4 separa `--export-page`, fijar estrategia prune (direct solo por capability futura; merge como último fallback), tolerancias de boxes y fixture de `viewBox` con origen no cero. — ADR-011 fija `pdf-lib` MIT, sonda 1.4.4, tolerancia 0.6 pt y los fixtures `pdf-multipage.svg`/`pdf-nonzero-viewbox.svg`.
 - [ ] `F05-T15` Implementar opciones PDF 1.4/1.5, text-to-path, filter DPI/ignore y LaTeX; margen queda capability-gated por sonda y usa expansión temporal si el flag falla; normalizar una copia temporal a origen cero cuando la sonda detecte el problema de PDF con `viewBox` no cero.
 - [ ] `F05-T16` Implementar PDF multipágina completo sin asumir semántica errónea de `--export-page`.
 - [ ] `F05-T17` Implementar subset a PDF único por poda de SVG temporal en 1.4.4; habilitar direct solo por capability futura y unión externa únicamente si la poda no preserva semántica.
@@ -2480,8 +2480,8 @@ Estados: `open`, `proposed`, `resolved` o `waived`. Toda resolución enlaza ADR/
 | D007 | Semántica page/viewBox/coordinates     | proposed       | implementer + review          |         F03-T00 | políticas/vectores de §10; ADR                                            |
 | D008 | IDs de páginas sintéticos/persistentes | proposed       | implementer + review          |         F03-T00 | mapping ligado a revisión; fixtures                                       |
 | D009 | Librería path/geometry                 | open           | implementer + review          |         F06-T10 | JS pura + Inkscape autoritativo para visual bounds                        |
-| D010 | Inspector PDF                          | open           | implementer + review          |         F05-T14 | JS pura con page count/boxes; spike/ADR                                   |
-| D011 | Subset PDF único                       | proposed       | implementer + review          |         F05-T14 | prune SVG en 1.4.4; direct futuro; merge último recurso                   |
+| D010 | Inspector PDF                          | resolved       | implementer + review          |         F05-T14 | `pdf-lib` 1.17.1 MIT; ADR-011, page count/MediaBox/CropBox/hash           |
+| D011 | Subset PDF único                       | resolved       | implementer + review          |         F05-T14 | poda SVG en 1.4.4; direct futuro por sonda; merge último recurso; ADR-011 |
 | D012 | Artifact/job/resource ownership y TTL  | open           | implementer + security review | F02-T22/F09-T07 | IDs opacos ligados a auth/workspace; tests cruzados                       |
 | D013 | Overwrite concurrente de outputs       | proposed       | implementer + security review |         F02-T09 | lock + expectedOutputRevision; race tests                                 |
 | D014 | Instalación Inkscape adicional         | proposed       | usuario                       |         F01-G01 | solo si MSIX falla desde Node runner                                      |

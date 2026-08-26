@@ -779,12 +779,27 @@ try {
       "export_png did not gate and verify advanced 16-bit PNG options",
     );
   }
+  const unavailableFilterDpi = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: settingsRevision,
+      filterDpi: 150,
+      outputPath: "a4-filter-dpi.pdf",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_pdf",
+  });
+  if (!unavailableFilterDpi.isError) {
+    throw new Error("export_pdf accepted filter DPI absent from Inkscape help");
+  }
   const pdf = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,
+      filters: "ignore",
       outputPath: "a4.pdf",
       path: "a4.svg",
       pdfVersion: "1.5",
+      textToPath: true,
       workspaceId: workspace.id,
     },
     name: "export_pdf",
@@ -792,9 +807,71 @@ try {
   if (
     pdf.isError ||
     pdf.structuredContent?.version !== "1.5" ||
-    (pdf.structuredContent?.pageCount ?? 0) < 1
+    (pdf.structuredContent?.pageCount ?? 0) < 1 ||
+    typeof pdf.structuredContent?.hash !== "string" ||
+    pdf.structuredContent?.cropBoxes?.length !==
+      pdf.structuredContent?.pageCount ||
+    !pdf.structuredContent?.warnings?.includes(
+      "FILTERS_IGNORED_VISUAL_CHANGE",
+    ) ||
+    !pdf.structuredContent?.warnings?.includes("TEXT_CONVERTED_TO_PATHS")
   ) {
     throw new Error("export_pdf did not publish an inspectable PDF");
+  }
+  await writeFile(
+    join(workspaceRoot, "multipage.svg"),
+    await readFile(
+      join(process.cwd(), "tests", "fixtures", "pdf-multipage.svg"),
+    ),
+  );
+  const multipageInspection = await workspaceClient.callTool({
+    arguments: {
+      level: "summary",
+      path: "multipage.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_inspect",
+  });
+  const multipageRevision = multipageInspection.structuredContent?.revision;
+  if (multipageInspection.isError || typeof multipageRevision !== "string") {
+    throw new Error(
+      "document_inspect did not prepare the PDF multipage fixture",
+    );
+  }
+  const multipagePdf = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: multipageRevision,
+      outputPath: "multipage.pdf",
+      path: "multipage.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_pdf",
+  });
+  if (
+    multipagePdf.isError ||
+    multipagePdf.structuredContent?.pageCount !== 2 ||
+    multipagePdf.structuredContent?.strategy !== "full_document"
+  ) {
+    throw new Error("export_pdf did not preserve a multipage PDF document");
+  }
+  const subsetPdf = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: multipageRevision,
+      outputPath: "multipage-extra.pdf",
+      pageIds: ["page_extra"],
+      path: "multipage.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_pdf",
+  });
+  if (
+    subsetPdf.isError ||
+    subsetPdf.structuredContent?.pageCount !== 1 ||
+    subsetPdf.structuredContent?.strategy !== "prune_subset" ||
+    subsetPdf.structuredContent?.pageIds?.[0] !== "page_extra" ||
+    !subsetPdf.structuredContent?.warnings?.includes("PDF_SUBSET_PRUNED")
+  ) {
+    throw new Error("export_pdf did not create a pruned PDF subset");
   }
   const plainSvg = await workspaceClient.callTool({
     arguments: {

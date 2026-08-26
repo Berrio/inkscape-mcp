@@ -1,6 +1,6 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
 import { createHash } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -44,6 +44,8 @@ import {
   buildExportArgv,
   normalizeExportArea,
   parseExportSpec,
+  pruneSvgPagesForPdf,
+  requiredPdfCapabilityFlags,
   requiredPngCapabilityFlags,
   verifyPdf,
   verifyPng,
@@ -582,6 +584,17 @@ function pngCapabilityLabel(flag: string): string {
     "--export-png-use-dithering": "dithering",
   };
   return labels[flag] ?? "PNG renderer option";
+}
+
+function pdfCapabilityLabel(flag: string): string {
+  const labels: Readonly<Record<string, string>> = {
+    "--export-filter-dpi": "filter DPI",
+    "--export-ignore-filters": "ignore filters",
+    "--export-latex": "LaTeX sidecar",
+    "--export-pdf-version": "PDF version",
+    "--export-text-to-path": "text to paths",
+  };
+  return labels[flag] ?? "PDF renderer option";
 }
 
 export function buildServer(config: ServerConfig): McpServer {
@@ -2763,30 +2776,61 @@ export function buildServer(config: ServerConfig): McpServer {
           .regex(/^[a-f0-9]{64}$/u)
           .optional(),
         expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        filterDpi: z.number().finite().positive().max(10_000).optional(),
+        filters: z.enum(["ignore", "preserve"]).default("preserve"),
         outputPath: z.string().min(1).max(1024),
+        pageIds: z
+          .array(shapeIdSchema)
+          .min(1)
+          .max(100)
+          .refine(
+            (ids) => new Set(ids).size === ids.length,
+            "PDF page IDs must be distinct",
+          )
+          .optional(),
         path: z.string().min(1).max(1024),
         pdfVersion: z.enum(["1.4", "1.5"]).optional(),
+        textToPath: z.boolean().default(false),
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
+        byteLength: z.number().int().positive(),
+        cropBoxes: z.array(
+          z.object({
+            height: z.number().positive(),
+            width: z.number().positive(),
+            x: z.number(),
+            y: z.number(),
+          }),
+        ),
+        hash: z.string().regex(/^[a-f0-9]{64}$/u),
         mediaBoxes: z.array(
           z.object({
             height: z.number().positive(),
             width: z.number().positive(),
+            x: z.number(),
+            y: z.number(),
           }),
         ),
         pageCount: z.number().int().positive(),
+        pageIds: z.array(shapeIdSchema).optional(),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        strategy: z.enum(["full_document", "prune_subset"]),
         version: z.string().regex(/^1\.[0-9]$/u),
+        warnings: z.array(z.string()),
       }),
       annotations: { destructiveHint: false },
     },
     async ({
       expectedOutputRevision,
       expectedRevision,
+      filterDpi,
+      filters,
       outputPath,
+      pageIds,
       path,
       pdfVersion,
+      textToPath,
       workspaceId,
     }) => {
       assertDocumentWorkspace(config);
@@ -2795,6 +2839,35 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = await workspace.resolveNewOutput(workspaceId, outputPath);
       if (!/\.pdf$/iu.test(output.relativePath))
         throw new Error("export_pdf requires a .pdf output path");
+      if (pageIds !== undefined) {
+        const available = new Set(
+          listSvgPages(await readFile(input.absolutePath, "utf8")).map(
+            (page) => page.id,
+          ),
+        );
+        if (pageIds.some((id) => !available.has(id)))
+          throw new Error("Requested PDF subset page does not exist");
+      }
+      const pdfSpec = parseExportSpec({
+        area:
+          pageIds === undefined
+            ? { kind: "document" }
+            : { kind: "pages", pageIds },
+        ...(filterDpi === undefined ? {} : { filterRasterDpi: filterDpi }),
+        filters: filters === "ignore" ? "ignore-with-warning" : "preserve",
+        format: "pdf",
+        source: { expectedRevision, path },
+        target: {
+          ...(expectedOutputRevision === undefined
+            ? {}
+            : { expectedOutputRevision }),
+          kind: "file",
+          overwrite: expectedOutputRevision !== undefined,
+          path: outputPath,
+        },
+        text: textToPath ? "paths" : "preserve",
+        ...(pdfVersion === undefined ? {} : { version: pdfVersion }),
+      });
       const discovery = await locateInkscape({
         config,
         cwd: process.cwd(),
@@ -2809,6 +2882,27 @@ export function buildServer(config: ServerConfig): McpServer {
       );
       if (!("version" in probe))
         throw new Error("Inkscape executable could not be validated");
+      const requiredCapabilities = requiredPdfCapabilityFlags(pdfSpec);
+      if (requiredCapabilities.length > 0) {
+        const observed = await capabilities.inspect(
+          runner,
+          candidate,
+          probe.version,
+          process.cwd(),
+        );
+        const available = new Set(
+          observed.flags
+            .filter((flag) => flag.availability === "available")
+            .map((flag) => flag.name),
+        );
+        const unavailable = requiredCapabilities.filter(
+          (flag) => !available.has(flag),
+        );
+        if (unavailable.length > 0)
+          throw new Error(
+            `Requested PDF renderer options are unavailable in this Inkscape installation: ${unavailable.map(pdfCapabilityLabel).join(", ")}`,
+          );
+      }
       const pdf = await scratch.withDirectory("staging", async (directory) => {
         const nativeInput = await createNativeInputBundle(
           input.absolutePath,
@@ -2820,16 +2914,26 @@ export function buildServer(config: ServerConfig): McpServer {
             maximumSanitizeMode: config.maximumSanitizeMode,
           },
         );
+        const runnerInputPath =
+          pageIds === undefined
+            ? nativeInput.path
+            : join(directory, "pdf-subset.svg");
+        if (pageIds !== undefined)
+          await writeFile(
+            runnerInputPath,
+            pruneSvgPagesForPdf(
+              await readFile(nativeInput.path, "utf8"),
+              pageIds,
+            ).svg,
+          );
         const temporaryOutput = join(directory, "export.pdf");
         const result = await runner.run(candidate.executablePath, {
-          args: [
-            nativeInput.path,
-            "--export-type=pdf",
-            `--export-filename=${temporaryOutput}`,
-            ...(pdfVersion === undefined
-              ? []
-              : [`--export-pdf-version=${pdfVersion}`]),
-          ],
+          args: buildExportArgv({
+            area: normalizeExportArea({ kind: "document" }, []),
+            inputPath: runnerInputPath,
+            outputPath: temporaryOutput,
+            spec: pdfSpec,
+          }),
           cwd: directory,
           maxStderrBytes: config.maxStderrBytes,
           maxStdoutBytes: config.maxStdoutBytes,
@@ -2838,9 +2942,16 @@ export function buildServer(config: ServerConfig): McpServer {
         if (result.exitCode !== 0 || result.terminationReason !== "completed")
           throw new Error("Inkscape PDF export failed");
         await nativeInput.assertCurrent();
+        const metadata = await verifyPdf(temporaryOutput);
+        if (pdfVersion !== undefined && metadata.version !== pdfVersion)
+          throw new Error("Inkscape did not produce the requested PDF version");
+        if (pageIds !== undefined && metadata.pageCount !== pageIds.length)
+          throw new Error(
+            "PDF subset did not preserve the requested page count",
+          );
         return {
           bytes: await readFile(temporaryOutput),
-          metadata: await verifyPdf(temporaryOutput),
+          metadata,
         };
       });
       const committed = await fileStore.commit({
@@ -2853,10 +2964,20 @@ export function buildServer(config: ServerConfig): McpServer {
         targetPath: output.absolutePath,
       });
       const result = {
+        byteLength: pdf.metadata.byteLength,
+        cropBoxes: pdf.metadata.cropBoxes,
+        hash: pdf.metadata.hash,
         mediaBoxes: pdf.metadata.mediaBoxes,
         pageCount: pdf.metadata.pageCount,
+        ...(pageIds === undefined ? {} : { pageIds }),
         revision: committed.revision,
+        strategy: pageIds === undefined ? "full_document" : "prune_subset",
         version: pdf.metadata.version,
+        warnings: [
+          ...(pageIds === undefined ? [] : ["PDF_SUBSET_PRUNED"]),
+          ...(filters === "ignore" ? ["FILTERS_IGNORED_VISUAL_CHANGE"] : []),
+          ...(textToPath ? ["TEXT_CONVERTED_TO_PATHS"] : []),
+        ],
       };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
@@ -3027,7 +3148,7 @@ function resourceVariable(
 function previewCacheKey(request: {
   area: {
     args: readonly string[];
-    kind: "custom" | "drawing" | "page" | "selection";
+    kind: "custom" | "document" | "drawing" | "page" | "selection";
     pageId?: string | undefined;
     selectionId?: string | undefined;
   };

@@ -3,6 +3,7 @@ export type ExportPageArea = {
   pageId?: string | undefined;
   pageIds?: readonly string[] | undefined;
 };
+export type ExportDocumentArea = { kind: "document" };
 export type ExportDrawingArea = { kind: "drawing" };
 export type ExportCustomArea = {
   kind: "custom";
@@ -17,7 +18,11 @@ export type ExportSelectionArea =
       visibility: "document" | "selected-only";
     };
 export type ExportAreaRequest =
-  ExportDrawingArea | ExportPageArea | ExportCustomArea | ExportSelectionArea;
+  | ExportDocumentArea
+  | ExportDrawingArea
+  | ExportPageArea
+  | ExportCustomArea
+  | ExportSelectionArea;
 export type ExportPageRectangle = {
   height: number;
   id: string;
@@ -42,6 +47,7 @@ export function normalizeExportArea(
   area: ExportAreaRequest,
   pages: readonly ExportPageRectangle[],
 ): NormalizedExportArea {
+  if (area.kind === "document") return { args: [], kind: "document" };
   if (area.kind === "drawing")
     return { args: ["--export-area-drawing"], kind: "drawing" };
   if (area.kind === "selection") {

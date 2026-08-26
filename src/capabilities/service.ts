@@ -17,6 +17,9 @@ const OUTPUT_LIMIT_BYTES = 2 * 1024 * 1024;
 const TRACKED_FLAGS = [
   "--export-margin",
   "--export-page",
+  "--export-filter-dpi",
+  "--export-ignore-filters",
+  "--export-latex",
   "--export-pdf-version",
   "--export-plain-svg",
   "--export-area-snap",
@@ -25,6 +28,7 @@ const TRACKED_FLAGS = [
   "--export-png-compression",
   "--export-png-use-dithering",
   "--export-type",
+  "--export-text-to-path",
 ] as const;
 
 type CachedCapabilities = { expiresAt: number; value: InkscapeCapabilities };

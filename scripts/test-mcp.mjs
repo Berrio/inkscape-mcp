@@ -97,6 +97,78 @@ try {
       "document_resize accepted an ambiguous percentage viewport",
     );
   }
+  await writeFile(
+    join(workspaceRoot, "fit.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 50"><rect id="fit_rect" x="10" y="5" width="30" height="20"/></svg>',
+  );
+  const fitInspection = await workspaceClient.callTool({
+    arguments: {
+      level: "summary",
+      path: "fit.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_inspect",
+  });
+  const fitRevision = fitInspection.structuredContent?.revision;
+  if (fitInspection.isError || typeof fitRevision !== "string") {
+    throw new Error("document_inspect did not prepare the fit fixture");
+  }
+  const fitted = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: fitRevision,
+      ids: ["fit_rect"],
+      margins: { bottom: 3, left: 5, right: 5, top: 2 },
+      path: "fit.svg",
+      scope: "selection",
+      unit: "mm",
+      workspaceId: workspace.id,
+    },
+    name: "document_fit_page",
+  });
+  const fittedRevision = fitted.structuredContent?.revision;
+  if (
+    fitted.isError ||
+    fitted.structuredContent?.boundsFidelity !== "partial" ||
+    !fitted.structuredContent?.warnings?.includes("FIT_USED_VISUAL_BOUNDS") ||
+    typeof fittedRevision !== "string"
+  ) {
+    throw new Error("document_fit_page did not fit selected visual bounds");
+  }
+  const cropped = await workspaceClient.callTool({
+    arguments: {
+      action: "crop",
+      expectedRevision: fittedRevision,
+      margins: { bottom: 1, left: 1, right: 1, top: 1 },
+      path: "fit.svg",
+      unit: "mm",
+      workspaceId: workspace.id,
+    },
+    name: "document_page_adjust",
+  });
+  const croppedRevision = cropped.structuredContent?.revision;
+  if (
+    cropped.isError ||
+    !cropped.structuredContent?.warnings?.includes("PAGE_CROPPED") ||
+    typeof croppedRevision !== "string"
+  ) {
+    throw new Error("document_page_adjust did not crop the page");
+  }
+  const oriented = await workspaceClient.callTool({
+    arguments: {
+      action: "toggle_orientation",
+      expectedRevision: croppedRevision,
+      path: "fit.svg",
+      unit: "mm",
+      workspaceId: workspace.id,
+    },
+    name: "document_page_adjust",
+  });
+  if (
+    oriented.isError ||
+    !oriented.structuredContent?.warnings?.includes("PAGE_ORIENTATION_CHANGED")
+  ) {
+    throw new Error("document_page_adjust did not change orientation");
+  }
   const created = await workspaceClient.callTool({
     arguments: {
       outputPath: "a4.svg",

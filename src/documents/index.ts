@@ -1,5 +1,8 @@
 export {
   createSvgDocument,
+  adjustPageMarginsSvg,
+  changePageOrientationSvg,
+  fitPageToBoundsSvg,
   inspectSvgSettings,
   parseViewportLength,
   resizeContentSvg,
@@ -7,6 +10,7 @@ export {
   type DocumentSettings,
   type DocumentViewportWarning,
   type DocumentSpec,
+  type PageMargins,
   type ViewportDimensionSource,
 } from "./basic.js";
 export { preflightSvg, type PreflightIssue } from "./preflight.js";

@@ -6,11 +6,20 @@ import {
   type ResizeAnchor,
   type ResizeMode,
   type UserRect,
+  type ViewportLength,
+  convertPhysical,
+  toMillimeters,
   toCssPixels,
 } from "../geometry/index.js";
 import { sanitizeSvg } from "../svg/index.js";
 
 export type DocumentSpec = { page: PageSize; viewBox?: UserRect };
+export type PageMargins = {
+  bottom: ViewportLength;
+  left: ViewportLength;
+  right: ViewportLength;
+  top: ViewportLength;
+};
 export type DocumentViewportWarning =
   | "VIEWBOX_MISSING_INFERRED_FROM_VIEWPORT"
   | "VIEWPORT_HEIGHT_DEFAULTED"
@@ -225,6 +234,101 @@ export function resizeContentSvg(
   };
 }
 
+/** Fits the page viewport to a supplied visual bounds rectangle without moving objects. */
+export function fitPageToBoundsSvg(
+  source: string,
+  currentPage: PageSize,
+  bounds: UserRect,
+  margins: PageMargins,
+  unit: ViewportLength["unit"],
+): { page: PageSize; svg: string; warnings: readonly string[] } {
+  assertFiniteBounds(bounds);
+  assertMutationSafe(source);
+  const settings = inspectSvgSettings(source);
+  assertResizableViewport(settings);
+  const scaleX = toCssPixels(currentPage.width) / settings.viewBox.width;
+  const scaleY = toCssPixels(currentPage.height) / settings.viewBox.height;
+  const marginLeft = toCssPixels(margins.left);
+  const marginRight = toCssPixels(margins.right);
+  const marginTop = toCssPixels(margins.top);
+  const marginBottom = toCssPixels(margins.bottom);
+  const page = {
+    height: cssPixelsLength(
+      bounds.height * scaleY + marginTop + marginBottom,
+      unit,
+    ),
+    width: cssPixelsLength(
+      bounds.width * scaleX + marginLeft + marginRight,
+      unit,
+    ),
+  };
+  const viewBox = {
+    height: bounds.height + (marginTop + marginBottom) / scaleY,
+    width: bounds.width + (marginLeft + marginRight) / scaleX,
+    x: bounds.x - marginLeft / scaleX,
+    y: bounds.y - marginTop / scaleY,
+  };
+  return writePageGeometry(source, settings, page, viewBox, [
+    "FIT_USED_VISUAL_BOUNDS",
+  ]);
+}
+
+/** Crops or expands a page by physical margins, preserving all object geometry. */
+export function adjustPageMarginsSvg(
+  source: string,
+  currentPage: PageSize,
+  margins: PageMargins,
+  action: "crop" | "expand",
+): { page: PageSize; svg: string; warnings: readonly string[] } {
+  assertMutationSafe(source);
+  const settings = inspectSvgSettings(source);
+  assertResizableViewport(settings);
+  const scaleX = toCssPixels(currentPage.width) / settings.viewBox.width;
+  const scaleY = toCssPixels(currentPage.height) / settings.viewBox.height;
+  const left = toCssPixels(margins.left);
+  const right = toCssPixels(margins.right);
+  const top = toCssPixels(margins.top);
+  const bottom = toCssPixels(margins.bottom);
+  const direction = action === "crop" ? 1 : -1;
+  const targetWidth =
+    toCssPixels(currentPage.width) - direction * (left + right);
+  const targetHeight =
+    toCssPixels(currentPage.height) - direction * (top + bottom);
+  if (targetWidth <= 0 || targetHeight <= 0)
+    throw new Error("Page margins leave no positive page area");
+  const page = {
+    height: cssPixelsLength(targetHeight, currentPage.height.unit),
+    width: cssPixelsLength(targetWidth, currentPage.width.unit),
+  };
+  const viewBox = {
+    height: settings.viewBox.height - (direction * (top + bottom)) / scaleY,
+    width: settings.viewBox.width - (direction * (left + right)) / scaleX,
+    x: settings.viewBox.x + (direction * left) / scaleX,
+    y: settings.viewBox.y + (direction * top) / scaleY,
+  };
+  return writePageGeometry(source, settings, page, viewBox, [
+    action === "crop" ? "PAGE_CROPPED" : "PAGE_EXPANDED",
+  ]);
+}
+
+/** Swaps viewport orientation around the requested anchor without transforming objects. */
+export function changePageOrientationSvg(
+  source: string,
+  currentPage: PageSize,
+  anchor: ResizeAnchor = "top_left",
+): { page: PageSize; svg: string; warnings: readonly string[] } {
+  const targetPage = {
+    height: convertViewportLength(currentPage.width, currentPage.height.unit),
+    width: convertViewportLength(currentPage.height, currentPage.width.unit),
+  };
+  const result = resizePageOnlySvg(source, currentPage, targetPage, anchor);
+  return {
+    page: targetPage,
+    ...result,
+    warnings: [...result.warnings, "PAGE_ORIENTATION_CHANGED"],
+  };
+}
+
 function assertMutationSafe(source: string): void {
   const sanitization = sanitizeSvg(source, {
     maxElements: 100_000,
@@ -281,4 +385,59 @@ function assertResizableViewport(settings: DocumentSettings): void {
     throw new Error(
       "Document viewport percentages require explicit normalization before resizing",
     );
+}
+
+function writePageGeometry(
+  source: string,
+  settings: DocumentSettings,
+  page: PageSize,
+  viewBox: UserRect,
+  warnings: readonly string[],
+): { page: PageSize; svg: string; warnings: readonly string[] } {
+  if (viewBox.width <= 0 || viewBox.height <= 0)
+    throw new Error("Page operation leaves no positive viewBox area");
+  const document = new DOMParser().parseFromString(source, "image/svg+xml");
+  const root = document.documentElement;
+  if (!root) throw new Error("SVG root is missing");
+  root.setAttribute("width", formatLength(page.width));
+  root.setAttribute("height", formatLength(page.height));
+  root.setAttribute(
+    "viewBox",
+    `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`,
+  );
+  return {
+    page,
+    svg: new XMLSerializer().serializeToString(document),
+    warnings: [...settings.warnings, ...warnings],
+  };
+}
+
+function cssPixelsLength(
+  value: number,
+  unit: ViewportLength["unit"],
+): ViewportLength {
+  if (!Number.isFinite(value) || value <= 0)
+    throw new Error("Page dimensions must be finite and positive");
+  if (unit === "px") return { unit, value };
+  return convertPhysical(
+    { unit: "mm", value: toMillimeters({ unit: "px", value }) },
+    unit,
+  );
+}
+function convertViewportLength(
+  source: ViewportLength,
+  unit: ViewportLength["unit"],
+): ViewportLength {
+  return cssPixelsLength(toCssPixels(source), unit);
+}
+function assertFiniteBounds(bounds: UserRect): void {
+  if (
+    !Number.isFinite(bounds.x) ||
+    !Number.isFinite(bounds.y) ||
+    !Number.isFinite(bounds.width) ||
+    !Number.isFinite(bounds.height) ||
+    bounds.width <= 0 ||
+    bounds.height <= 0
+  )
+    throw new Error("Fit bounds must be finite with positive dimensions");
 }

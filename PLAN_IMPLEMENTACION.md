@@ -1580,8 +1580,8 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F03-T13` Implementar `scale_content_contain`.
 - [x] `F03-T14` Implementar `scale_content_cover` y warning de crop.
 - [x] `F03-T15` Implementar stretch solo opt-in.
-- [ ] `F03-T16` Implementar fit page to drawing/selection con márgenes por lado.
-- [ ] `F03-T17` Implementar crop/expand y cambio de orientación.
+- [x] `F03-T16` Implementar fit page to drawing/selection con márgenes por lado.
+- [x] `F03-T17` Implementar crop/expand y cambio de orientación.
 - [x] `F03-T18` Implementar adapter `pages_v14` para root + `inkscape:page` dentro de namedview, con namespaces y round-trip 1.4.4.
 - [ ] `F03-T19` Implementar `dryRun` con tamaño/transform/diff previstos.
 - [x] `F03-T20` Implementar list/add/update/delete/reorder de páginas por ID estable.

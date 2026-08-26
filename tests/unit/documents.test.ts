@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   addSvgPage,
+  adjustPageMarginsSvg,
   arrangeSvgShapes,
   createSvgDocument,
+  changePageOrientationSvg,
   createSvgShapes,
   groupSvgShapes,
+  fitPageToBoundsSvg,
   deleteSvgPage,
   deleteSvgShapes,
   inspectSvgSettings,
@@ -127,6 +130,85 @@ describe("basic SVG documents", () => {
       width: 148,
       height: 210,
     });
+  });
+  it("fits a page to visual bounds with independent margins without moving objects", () => {
+    const source =
+      '<svg width="100mm" height="50mm" viewBox="0 0 100 50"><rect id="keep" x="10" y="5" width="30" height="20"/></svg>';
+    const fitted = fitPageToBoundsSvg(
+      source,
+      { width: mm(100), height: mm(50) },
+      { x: 10, y: 5, width: 30, height: 20 },
+      {
+        bottom: mm(3),
+        left: mm(5),
+        right: mm(5),
+        top: mm(2),
+      },
+      "mm",
+    );
+    expect(fitted.page.width).toMatchObject({ unit: "mm" });
+    expect(fitted.page.width.value).toBeCloseTo(40);
+    expect(fitted.page.height).toMatchObject({ unit: "mm" });
+    expect(fitted.page.height.value).toBeCloseTo(25);
+    const fittedViewBox = inspectSvgSettings(fitted.svg).viewBox;
+    expect(fittedViewBox.x).toBeCloseTo(5);
+    expect(fittedViewBox.y).toBeCloseTo(3);
+    expect(fittedViewBox.width).toBeCloseTo(40);
+    expect(fittedViewBox.height).toBeCloseTo(25);
+    expect(fitted.svg).toContain('id="keep" x="10" y="5" width="30"');
+    expect(fitted.warnings).toContain("FIT_USED_VISUAL_BOUNDS");
+  });
+  it("crops, expands and swaps orientation without transforming objects", () => {
+    const source =
+      '<svg width="100px" height="100px" viewBox="0 0 100 100"><rect id="keep" x="10" y="10" width="20" height="20"/></svg>';
+    const margins = {
+      bottom: { unit: "px" as const, value: 5 },
+      left: { unit: "px" as const, value: 10 },
+      right: { unit: "px" as const, value: 20 },
+      top: { unit: "px" as const, value: 5 },
+    };
+    const cropped = adjustPageMarginsSvg(
+      source,
+      { width: { unit: "px", value: 100 }, height: { unit: "px", value: 100 } },
+      margins,
+      "crop",
+    );
+    expect(cropped.page).toEqual({
+      width: { unit: "px", value: 70 },
+      height: { unit: "px", value: 90 },
+    });
+    expect(inspectSvgSettings(cropped.svg).viewBox).toEqual({
+      x: 10,
+      y: 5,
+      width: 70,
+      height: 90,
+    });
+    expect(cropped.warnings).toContain("PAGE_CROPPED");
+    const expanded = adjustPageMarginsSvg(
+      source,
+      { width: { unit: "px", value: 100 }, height: { unit: "px", value: 100 } },
+      margins,
+      "expand",
+    );
+    expect(inspectSvgSettings(expanded.svg).viewBox).toEqual({
+      x: -10,
+      y: -5,
+      width: 130,
+      height: 110,
+    });
+    const oriented = changePageOrientationSvg(
+      '<svg width="100mm" height="50mm" viewBox="0 0 100 50"><rect id="keep"/></svg>',
+      { width: mm(100), height: mm(50) },
+    );
+    expect(oriented.page).toEqual({ width: mm(50), height: mm(100) });
+    expect(inspectSvgSettings(oriented.svg).viewBox).toEqual({
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 100,
+    });
+    expect(oriented.svg).toContain('id="keep"');
+    expect(oriented.warnings).toContain("PAGE_ORIENTATION_CHANGED");
   });
   it("refuses to resize SVG that needs sanitization", () => {
     expect(() =>

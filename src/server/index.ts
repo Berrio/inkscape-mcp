@@ -8,6 +8,8 @@ import packageMetadata from "../../package.json" with { type: "json" };
 import { assertDocumentWorkspace, type ServerConfig } from "../config/index.js";
 import {
   addSvgPage,
+  adjustPageMarginsSvg,
+  changePageOrientationSvg,
   createSvgDocument,
   createSvgShapes,
   arrangeSvgShapes,
@@ -16,6 +18,7 @@ import {
   transformSvgShapes,
   updateSvgShapes,
   deleteSvgPage,
+  fitPageToBoundsSvg,
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
   inspectSvgSettings,
@@ -82,6 +85,18 @@ const pageSchema = z.object({
   x: z.number().finite(),
   y: z.number().finite(),
 });
+const viewportLengthSchema = z.object({
+  unit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
+  value: z.number().finite().positive(),
+});
+const pageMarginsSchema = z
+  .object({
+    bottom: z.number().finite().nonnegative().max(100_000),
+    left: z.number().finite().nonnegative().max(100_000),
+    right: z.number().finite().nonnegative().max(100_000),
+    top: z.number().finite().nonnegative().max(100_000),
+  })
+  .strict();
 const displaySettingsSchema = z.object({
   borderColor: z.string().regex(/^#[a-f0-9]{6}$/u),
   borderOpacity: z.number().min(0).max(1),
@@ -1402,6 +1417,213 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "document_fit_page",
+    {
+      description:
+        "Fits a page to native visual drawing or selected-object bounds with explicit per-side margins. This never transforms objects.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z.array(shapeIdSchema).min(1).max(100).optional(),
+          margins: pageMarginsSchema.default({
+            bottom: 0,
+            left: 0,
+            right: 0,
+            top: 0,
+          }),
+          path: z.string().min(1).max(1024),
+          scope: z.enum(["drawing", "selection"]),
+          unit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        bounds: z.object({
+          height: z.number().positive(),
+          width: z.number().positive(),
+          x: z.number().finite(),
+          y: z.number().finite(),
+        }),
+        boundsFidelity: z.literal("partial"),
+        page: z.object({
+          height: viewportLengthSchema,
+          width: viewportLengthSchema,
+        }),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        warnings: z.array(z.string()),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({
+      expectedRevision,
+      ids,
+      margins,
+      path,
+      scope,
+      unit,
+      workspaceId,
+    }) => {
+      if (scope === "selection" && ids === undefined)
+        throw new Error("Selection fit requires at least one element ID");
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const settings = inspectSvgSettings(source);
+      const nativeBounds = await queryNativeBounds({
+        config,
+        documentPath: document.absolutePath,
+        expectedRevision,
+        runner,
+        scratch,
+        workspaceRoot: document.workspaceRoot,
+      });
+      const selected =
+        scope === "drawing"
+          ? [...nativeBounds.values()]
+          : ids!.map((id) => {
+              const bounds = nativeBounds.get(id);
+              if (!bounds)
+                throw new Error("Selected element has no native visual bounds");
+              return bounds;
+            });
+      const bounds = unionBounds(selected);
+      const currentPage = {
+        height: parseViewportLength(settings.height),
+        width: parseViewportLength(settings.width),
+      };
+      const marginLengths = {
+        bottom: { unit, value: margins.bottom },
+        left: { unit, value: margins.left },
+        right: { unit, value: margins.right },
+        top: { unit, value: margins.top },
+      } as const;
+      const fitted = fitPageToBoundsSvg(
+        source,
+        currentPage,
+        bounds,
+        marginLengths,
+        unit,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(fitted.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        bounds,
+        boundsFidelity: "partial" as const,
+        page: fitted.page,
+        revision: committed.revision,
+        warnings: fitted.warnings,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_page_adjust",
+    {
+      description:
+        "Crops, expands or changes page orientation with explicit physical margins, preserving object geometry.",
+      inputSchema: z
+        .object({
+          action: z.enum(["crop", "expand", "toggle_orientation"]),
+          anchor: z
+            .enum([
+              "top_left",
+              "top_center",
+              "top_right",
+              "center_left",
+              "center",
+              "center_right",
+              "bottom_left",
+              "bottom_center",
+              "bottom_right",
+            ])
+            .default("top_left"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          margins: pageMarginsSchema.optional(),
+          path: z.string().min(1).max(1024),
+          unit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        page: z.object({
+          height: viewportLengthSchema,
+          width: viewportLengthSchema,
+        }),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        warnings: z.array(z.string()),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({
+      action,
+      anchor,
+      expectedRevision,
+      margins,
+      path,
+      unit,
+      workspaceId,
+    }) => {
+      if (action !== "toggle_orientation" && margins === undefined)
+        throw new Error("Crop or expand requires explicit margins");
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const settings = inspectSvgSettings(source);
+      const currentPage = {
+        height: parseViewportLength(settings.height),
+        width: parseViewportLength(settings.width),
+      };
+      const adjusted =
+        action === "toggle_orientation"
+          ? changePageOrientationSvg(source, currentPage, anchor)
+          : adjustPageMarginsSvg(
+              source,
+              currentPage,
+              {
+                bottom: { unit, value: margins!.bottom },
+                left: { unit, value: margins!.left },
+                right: { unit, value: margins!.right },
+                top: { unit, value: margins!.top },
+              },
+              action,
+            );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(adjusted.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        page: adjusted.page,
+        revision: committed.revision,
+        warnings: adjusted.warnings,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
     "document_pages",
     {
       description:
@@ -2179,6 +2401,24 @@ function resourceVariable(
   value: string | string[] | undefined,
 ): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function unionBounds(bounds: readonly InkscapeBounds[]): InkscapeBounds {
+  const first = bounds[0];
+  if (!first) throw new Error("No native visual bounds are available for fit");
+  let left = first.x;
+  let top = first.y;
+  let right = first.x + first.width;
+  let bottom = first.y + first.height;
+  for (const bound of bounds.slice(1)) {
+    left = Math.min(left, bound.x);
+    top = Math.min(top, bound.y);
+    right = Math.max(right, bound.x + bound.width);
+    bottom = Math.max(bottom, bound.y + bound.height);
+  }
+  if (right <= left || bottom <= top)
+    throw new Error("Native visual bounds have no positive area");
+  return { height: bottom - top, width: right - left, x: left, y: top };
 }
 
 async function queryNativeBounds(request: {

@@ -236,6 +236,15 @@ describe("basic SVG documents", () => {
         r: 10,
       },
       {
+        cx: 40,
+        cy: 40,
+        id: "star_1",
+        kind: "star",
+        points: 5,
+        r1: 10,
+        r2: 5,
+      },
+      {
         d: "M 0 0 L 10 20 A 5 5 0 0 1 20 20 Z",
         id: "path_1",
         kind: "path",
@@ -264,12 +273,14 @@ describe("basic SVG documents", () => {
       "layer_main",
       "rect_1",
       "circle_1",
+      "star_1",
       "path_1",
       "text_1",
       "polyline_1",
     ]);
     expect(created.svg).toContain('id="rect_1" fill="#ff0000"');
     expect(created.svg).toContain('points="0,0 10,20"');
+    expect(created.svg).toContain('id="star_1"');
     expect(created.svg).toContain('d="M 0 0 L 10 20 A 5 5 0 0 1 20 20 Z"');
     expect(created.svg).toContain('font-family="Arial"');
     expect(created.svg).toContain(

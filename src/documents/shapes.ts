@@ -115,6 +115,23 @@ export type ShapeSpec =
       kind: "polygon" | "polyline";
       points: readonly { x: number; y: number }[];
     })
+  | (ShapeBase & {
+      cx: number;
+      cy: number;
+      kind: "regular_polygon";
+      points: number;
+      r: number;
+      rotation?: number | undefined;
+    })
+  | (ShapeBase & {
+      cx: number;
+      cy: number;
+      kind: "star";
+      points: number;
+      r1: number;
+      r2: number;
+      rotation?: number | undefined;
+    })
   | (ShapeBase & { d: string; kind: "path" })
   | (ShapeBase & {
       kind: "text";
@@ -428,7 +445,11 @@ function createShapeElement(
 ): XmlElement {
   const element = document.createElementNS(
     "http://www.w3.org/2000/svg",
-    shape.kind === "layer" ? "g" : shape.kind,
+    shape.kind === "layer"
+      ? "g"
+      : shape.kind === "regular_polygon" || shape.kind === "star"
+        ? "polygon"
+        : shape.kind,
   );
   switch (shape.kind) {
     case "rect":
@@ -471,6 +492,30 @@ function createShapeElement(
             return `${point.x},${point.y}`;
           })
           .join(" "),
+      );
+      break;
+    case "regular_polygon":
+      element.setAttribute(
+        "points",
+        generatedPolygonPoints(
+          shape.cx,
+          shape.cy,
+          [shape.r],
+          shape.points,
+          shape.rotation,
+        ),
+      );
+      break;
+    case "star":
+      element.setAttribute(
+        "points",
+        generatedPolygonPoints(
+          shape.cx,
+          shape.cy,
+          [shape.r1, shape.r2],
+          shape.points,
+          shape.rotation,
+        ),
       );
       break;
     case "path":
@@ -692,6 +737,28 @@ function previousElementSibling(element: XmlElement): XmlElement | undefined {
 function setFinite(element: XmlElement, name: string, value: number): void {
   assertFinite(value, name);
   element.setAttribute(name, String(value));
+}
+function generatedPolygonPoints(
+  cx: number,
+  cy: number,
+  radii: readonly number[],
+  count: number,
+  rotation: number | undefined,
+): string {
+  assertFinite(cx, "cx");
+  assertFinite(cy, "cy");
+  for (const radius of radii)
+    assertRange(radius, "radius", Number.MIN_VALUE, Number.POSITIVE_INFINITY);
+  if (!Number.isInteger(count) || count < 3 || count > 1_000)
+    throw new Error("Polygon point count is out of range");
+  const angle = rotation ?? -90;
+  assertFinite(angle, "rotation");
+  return Array.from({ length: count * radii.length }, (_, index) => {
+    const radians =
+      ((angle + (360 * index) / (count * radii.length)) * Math.PI) / 180;
+    const radius = radii[index % radii.length]!;
+    return `${cx + Math.cos(radians) * radius},${cy + Math.sin(radians) * radius}`;
+  }).join(" ");
 }
 function setOptionalFinite(
   element: XmlElement,

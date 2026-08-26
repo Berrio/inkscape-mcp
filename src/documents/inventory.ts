@@ -26,6 +26,14 @@ export type DocumentInventory = {
     visibility: "hidden" | "visible";
   }[];
   namespaces: readonly string[];
+  paintUsage: {
+    fills: number;
+    filters: number;
+    gradients: number;
+    opacities: number;
+    patterns: number;
+    strokes: number;
+  };
   typeCounts: Readonly<Record<string, number>>;
   truncated: boolean;
   unknownNamespaces: readonly string[];
@@ -54,6 +62,13 @@ export function inspectSvgInventory(
     "image/svg+xml",
   ).documentElement;
   if (!root || root.localName !== "svg") throw new Error("SVG root is missing");
+  const elements = [...walk(root)];
+  const definitionKinds = new Map(
+    elements.flatMap((element) => {
+      const id = element.getAttribute("id");
+      return id === null ? [] : ([[id, element.localName ?? ""]] as const);
+    }),
+  );
   const typeCounts: Record<string, number> = {};
   const ids = new Set<string>();
   const inspectedIds: string[] = [];
@@ -62,14 +77,53 @@ export function inspectSvgInventory(
   const namespaces = new Set<string>();
   const layers: DocumentInventory["layers"][number][] = [];
   const images: DocumentInventory["images"][number][] = [];
+  const paintUsage: DocumentInventory["paintUsage"] = {
+    fills: 0,
+    filters: 0,
+    gradients: 0,
+    opacities: 0,
+    patterns: 0,
+    strokes: 0,
+  };
   let elementCount = 0;
   let externalResourceCount = 0;
   let truncated = false;
-  for (const element of walk(root)) {
+  for (const element of elements) {
     elementCount += 1;
     const name = element.localName ?? "unknown";
     typeCounts[name] = (typeCounts[name] ?? 0) + 1;
     const id = element.getAttribute("id");
+    const style = parseInlineStyle(element.getAttribute("style") ?? "");
+    const fill = element.getAttribute("fill") ?? style.fill;
+    const stroke = element.getAttribute("stroke") ?? style.stroke;
+    const filter = element.getAttribute("filter") ?? style.filter;
+    const opacity = element.getAttribute("opacity") ?? style.opacity;
+    if (fill !== undefined) {
+      paintUsage.fills += 1;
+      if (
+        isPaintReference(fill, definitionKinds, [
+          "linearGradient",
+          "radialGradient",
+        ])
+      )
+        paintUsage.gradients += 1;
+      if (isPaintReference(fill, definitionKinds, ["pattern"]))
+        paintUsage.patterns += 1;
+    }
+    if (stroke !== undefined) {
+      paintUsage.strokes += 1;
+      if (
+        isPaintReference(stroke, definitionKinds, [
+          "linearGradient",
+          "radialGradient",
+        ])
+      )
+        paintUsage.gradients += 1;
+      if (isPaintReference(stroke, definitionKinds, ["pattern"]))
+        paintUsage.patterns += 1;
+    }
+    if (filter !== undefined && filter !== "none") paintUsage.filters += 1;
+    if (opacity !== undefined) paintUsage.opacities += 1;
     if (id) {
       if (ids.has(id)) duplicateIds.add(id);
       ids.add(id);
@@ -121,6 +175,7 @@ export function inspectSvgInventory(
     ids: inspectedIds,
     layers,
     namespaces: [...namespaces].sort(),
+    paintUsage,
     typeCounts,
     truncated,
     unknownNamespaces: [...namespaces]
@@ -128,6 +183,25 @@ export function inspectSvgInventory(
       .sort(),
     unresolvedReferences: [...references].filter((id) => !ids.has(id)).sort(),
   };
+}
+function isPaintReference(
+  value: string,
+  definitionKinds: ReadonlyMap<string, string>,
+  kinds: readonly string[],
+): boolean {
+  const match = /^url\(\s*#([^\s)]+)\s*\)$/u.exec(value);
+  return match !== null && kinds.includes(definitionKinds.get(match[1]!) ?? "");
+}
+function parseInlineStyle(value: string): Readonly<Record<string, string>> {
+  const styles: Record<string, string> = {};
+  for (const declaration of value.split(";")) {
+    const separator = declaration.indexOf(":");
+    if (separator < 1) continue;
+    const property = declaration.slice(0, separator).trim().toLowerCase();
+    const styleValue = declaration.slice(separator + 1).trim();
+    if (property && styleValue) styles[property] = styleValue;
+  }
+  return styles;
 }
 
 function* walk(root: XmlElement): Generator<XmlElement> {

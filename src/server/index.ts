@@ -704,6 +704,7 @@ const designOperationSchema = z.discriminatedUnion("kind", [
     ids: z.array(shapeIdSchema).min(1).max(100),
   }),
 ]);
+type DesignOperation = z.infer<typeof designOperationSchema>;
 const semanticDiffSchema = z.object({
   addedIds: z.array(shapeIdSchema),
   afterElementCount: z.number().int().nonnegative(),
@@ -1766,6 +1767,7 @@ export function buildServer(config: ServerConfig): McpServer {
         backupCreated: z.boolean(),
         diff: semanticDiffSchema,
         dryRun: z.boolean(),
+        estimatedCost: z.number().int().positive(),
         operations: z.number().int().positive(),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
         version: z.literal(1),
@@ -1784,6 +1786,7 @@ export function buildServer(config: ServerConfig): McpServer {
       const workspace = await workspaces();
       const document = await workspace.resolveExisting(workspaceId, path);
       const source = await readFile(document.absolutePath, "utf8");
+      const estimatedCost = estimateDesignOperationCost(operations);
       let svg = source;
       for (const operation of operations) {
         switch (operation.kind) {
@@ -1839,6 +1842,7 @@ export function buildServer(config: ServerConfig): McpServer {
           backupCreated: false,
           diff,
           dryRun: true,
+          estimatedCost,
           operations: operations.length,
           revision: expectedRevision,
           version,
@@ -1859,6 +1863,7 @@ export function buildServer(config: ServerConfig): McpServer {
         backupCreated: committed.backupPath !== undefined,
         diff,
         dryRun: false,
+        estimatedCost,
         operations: operations.length,
         revision: committed.revision,
         version,
@@ -4964,6 +4969,37 @@ function hasControlCharacters(value: string): boolean {
     const code = character.codePointAt(0) ?? 0;
     return code < 32 || code === 127;
   });
+}
+
+/**
+ * Conservative, deterministic work units for clients to budget a transaction.
+ * It is not a timing promise: SVG complexity and native rendering are excluded.
+ */
+function estimateDesignOperationCost(
+  operations: readonly DesignOperation[],
+): number {
+  return operations.reduce((total, operation) => {
+    switch (operation.kind) {
+      case "create":
+      case "update":
+        return total + operation.elements.length;
+      case "transform":
+      case "reparent":
+      case "delete":
+        return total + operation.ids.length;
+      case "arrange":
+        return total + operation.request.ids.length;
+      case "group":
+        return (
+          total +
+          (operation.request.action === "group"
+            ? operation.request.ids.length
+            : 1)
+        );
+      case "duplicate":
+        return total + 1;
+    }
+  }, 0);
 }
 
 /** Resolves public image requests before the DOM-only shape constructor runs. */

@@ -724,6 +724,7 @@ try {
   if (
     transactionPreview.isError ||
     transactionPreview.structuredContent?.dryRun !== true ||
+    transactionPreview.structuredContent?.estimatedCost !== 2 ||
     !transactionPreview.structuredContent?.diff?.addedIds?.includes(
       "tx_preview",
     ) ||
@@ -758,6 +759,7 @@ try {
   if (
     transaction.isError ||
     transaction.structuredContent?.dryRun !== false ||
+    transaction.structuredContent?.estimatedCost !== 2 ||
     !transaction.structuredContent?.diff?.addedIds?.includes("tx_rect") ||
     typeof transactionRevision !== "string"
   ) {

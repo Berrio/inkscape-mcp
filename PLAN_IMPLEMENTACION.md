@@ -1623,7 +1623,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F04-T09` Perfil `web`: externos, scripts, fonts, raster grande, viewBox, IDs y accesibilidad básica.
 - [ ] `F04-T10` Perfil `print`: tamaño físico, `BleedSpec` explícito por lado y separado de margen/crop marks, fuentes, filtros rasterizados, imágenes efectivas y warnings de color.
 - [ ] `F04-T11` Perfil `interchange`: plain SVG, features Inkscape, flow text, LPE, external refs y compatibilidad.
-- [ ] `F04-T12` Códigos/severidad/remediation estables y documentados.
+- [x] `F04-T12` Códigos/severidad/remediation estables y documentados.
 - [x] `F04-T13` Tool `document_preflight` sin mutar documento.
 
 #### Preview

@@ -350,6 +350,9 @@ export function buildServer(config: ServerConfig): McpServer {
         "Checks an SVG for active content, external references and invalid document settings without modifying it.",
       inputSchema: z.object({
         path: z.string().min(1).max(1024),
+        profile: z
+          .enum(["basic", "web", "print", "interchange"])
+          .default("basic"),
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
@@ -357,23 +360,27 @@ export function buildServer(config: ServerConfig): McpServer {
           z.object({
             code: z.string(),
             message: z.string(),
+            remediation: z.string(),
             severity: z.enum(["error", "warning"]),
           }),
         ),
+        profile: z.enum(["basic", "web", "print", "interchange"]),
         valid: z.boolean(),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ path, workspaceId }) => {
+    async ({ path, profile, workspaceId }) => {
       assertDocumentWorkspace(config);
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const preflight = preflightSvg(
         await readFile(document.absolutePath, "utf8"),
+        profile,
       );
       const output = {
         issues: preflight.issues,
+        profile: preflight.profile,
         valid: !preflight.issues.some((issue) => issue.severity === "error"),
       };
       return {

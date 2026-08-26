@@ -110,11 +110,17 @@ describe("basic SVG documents", () => {
   it("reports active content and external resources without mutating SVG", () => {
     const result = preflightSvg(
       '<svg width="1mm" height="1mm" viewBox="0 0 1 1"><script/><image href="https://example.test/a.png"/></svg>',
+      "web",
     );
     expect(result.issues.map((issue) => issue.code)).toEqual([
       "SVG_ACTIVE_CONTENT",
       "SVG_EXTERNAL_RESOURCE",
+      "SVG_MISSING_TITLE",
     ]);
+    expect(result.profile).toBe("web");
+    expect(result.issues.every((issue) => issue.remediation.length > 0)).toBe(
+      true,
+    );
   });
   it("summarizes IDs, layers, images and unresolved references without paths", () => {
     const inventory = inspectSvgInventory(

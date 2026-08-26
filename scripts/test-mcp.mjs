@@ -119,11 +119,15 @@ try {
     throw new Error("document_inspect did not report the resized viewBox");
   }
   const preflight = await workspaceClient.callTool({
-    arguments: { path: "a4.svg", workspaceId: workspace.id },
+    arguments: { path: "a4.svg", profile: "web", workspaceId: workspace.id },
     name: "document_preflight",
   });
-  if (preflight.isError || preflight.structuredContent?.valid !== true) {
-    throw new Error("document_preflight did not validate the generated SVG");
+  if (
+    preflight.isError ||
+    preflight.structuredContent?.valid !== true ||
+    preflight.structuredContent?.profile !== "web"
+  ) {
+    throw new Error("document_preflight did not run the requested profile");
   }
   const pageAdded = await workspaceClient.callTool({
     arguments: {

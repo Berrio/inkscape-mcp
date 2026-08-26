@@ -1700,7 +1700,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F05-G04` SVG y plain SVG reabren en Inkscape y pasan validación estructural/visual.
 - [ ] `F05-G05` Batch all-or-nothing no publica commit marker/directorio final cuando una variante falla; un crash simulado deja como máximo staging no direccionable que se limpia al reiniciar.
 - [ ] `F05-G06` Timeout/cancelación no dejan output parcial ni proceso huérfano.
-- [ ] `F05-G07` Paths con espacios/Unicode/metacarácteres no alteran argv.
+- [x] `F05-G07` Paths con espacios/Unicode/metacarácteres no alteran argv. — La prueba MCP exporta `salida ñ; & segura.png`, comprueba la firma PNG publicada y confirma que el nombre llega a Inkscape como path, no como shell.
 - [ ] `F05-G08` Inspector MCP ejecuta status/create/resize/preview/export por stdio.
 - [ ] `F05-G09` Evidencia completa en `docs/progress/F05.md`; MVP demostrable de extremo a extremo.
 - [ ] `F05-G10` Un PDF subset (páginas 1 y 3 de un fixture de tres) produce un solo archivo con exactamente dos páginas, orden y boxes correctas; el manifest declara estrategia `direct|prune|merge`.

@@ -809,6 +809,25 @@ try {
       "export_png did not gate and verify advanced 16-bit PNG options",
     );
   }
+  const punctuationPng = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: settingsRevision,
+      outputPath: "salida ñ; & segura.png",
+      path: "a4.svg",
+      width: 64,
+      workspaceId: workspace.id,
+    },
+    name: "export_png",
+  });
+  if (
+    punctuationPng.isError ||
+    punctuationPng.structuredContent?.width !== 64 ||
+    !(await readFile(join(workspaceRoot, "salida ñ; & segura.png")))
+      .subarray(0, 8)
+      .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  ) {
+    throw new Error("export_png did not preserve a Unicode metacharacter path");
+  }
   const unavailableFilterDpi = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,

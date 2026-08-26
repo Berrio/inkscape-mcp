@@ -309,6 +309,44 @@ export function transformSvgShapes(
   };
 }
 
+/**
+ * Bakes an element's own axis-aligned transform into supported primitive
+ * geometry. Ancestor transforms are deliberately rejected: removing them
+ * would also move siblings and silently alter the rest of the document.
+ */
+export function flattenSvgShapeTransforms(
+  source: string,
+  ids: readonly string[],
+): { flattenedIds: readonly string[]; svg: string } {
+  if (ids.length < 1 || ids.length > 100)
+    throw new Error("Flatten batch must contain between one and 100 IDs");
+  if (new Set(ids).size !== ids.length)
+    throw new Error("Flatten IDs must be unique");
+  const document = parseSafeDocument(source);
+  const elements = Array.from(document.getElementsByTagName("*"));
+  const flattenedIds: string[] = [];
+  for (const id of ids) {
+    if (!SAFE_ID.test(id)) throw new Error("Shape ID is invalid");
+    const element = elements.find(
+      (candidate) => candidate.getAttribute("id") === id,
+    );
+    if (!element) throw new Error("Shape ID does not exist");
+    if (hasTransformedAncestor(element))
+      throw new Error(
+        "Flattening an inherited transform requires selecting a self-contained subtree",
+      );
+    const transform = element.getAttribute("transform");
+    if (transform === null) continue;
+    flattenAxisAlignedTransform(element, parseAxisAlignedTransform(transform));
+    element.removeAttribute("transform");
+    flattenedIds.push(id);
+  }
+  return {
+    flattenedIds,
+    svg: new XMLSerializer().serializeToString(document),
+  };
+}
+
 export function updateSvgShapes(
   source: string,
   updates: readonly ElementUpdate[],
@@ -864,6 +902,309 @@ function serializeTransform(transform: ElementTransform): string {
       return `matrix(${transform.a} ${transform.b} ${transform.c} ${transform.d} ${transform.e} ${transform.f})`;
     }
   }
+}
+
+type AxisAlignedMatrix = {
+  a: number;
+  d: number;
+  e: number;
+  f: number;
+};
+
+function parseAxisAlignedTransform(value: string): AxisAlignedMatrix {
+  const matcher = /([A-Za-z]+)\s*\(([^()]*)\)/gu;
+  let cursor = 0;
+  let matrix: AxisAlignedMatrix = { a: 1, d: 1, e: 0, f: 0 };
+  for (const match of value.matchAll(matcher)) {
+    if (!/^\s*,?\s*$/u.test(value.slice(cursor, match.index)))
+      throw new Error("Transform syntax is invalid");
+    cursor = (match.index ?? 0) + match[0].length;
+    const name = match[1]!.toLowerCase();
+    const values = parseTransformNumbers(match[2]!);
+    let next: AxisAlignedMatrix;
+    switch (name) {
+      case "translate":
+        if (values.length !== 1 && values.length !== 2)
+          throw new Error("Translate transform is invalid");
+        next = { a: 1, d: 1, e: values[0]!, f: values[1] ?? 0 };
+        break;
+      case "scale":
+        if (values.length !== 1 && values.length !== 2)
+          throw new Error("Scale transform is invalid");
+        if (values[0] === 0 || (values[1] ?? values[0]) === 0)
+          throw new Error("Scale transform must be invertible");
+        next = { a: values[0]!, d: values[1] ?? values[0]!, e: 0, f: 0 };
+        break;
+      case "matrix":
+        if (values.length !== 6) throw new Error("Matrix transform is invalid");
+        if (values[1] !== 0 || values[2] !== 0)
+          throw new Error(
+            "Flatten currently supports only axis-aligned transforms",
+          );
+        if (values[0] === 0 || values[3] === 0)
+          throw new Error("Transform matrix must be invertible");
+        next = {
+          a: values[0]!,
+          d: values[3]!,
+          e: values[4]!,
+          f: values[5]!,
+        };
+        break;
+      default:
+        throw new Error(
+          "Flatten currently supports only translate, scale and axis-aligned matrix transforms",
+        );
+    }
+    matrix = multiplyAxisAligned(matrix, next);
+  }
+  if (!/^\s*$/u.test(value.slice(cursor)))
+    throw new Error("Transform syntax is invalid");
+  return matrix;
+}
+
+function parseTransformNumbers(value: string): number[] {
+  const number = /[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/gu;
+  const values = [...value.matchAll(number)].map((match) => Number(match[0]));
+  const remainder = value.replace(number, "");
+  if (
+    !/^\s*(?:,\s*)*$/u.test(remainder) ||
+    values.some((item) => !Number.isFinite(item))
+  )
+    throw new Error("Transform contains invalid numbers");
+  return values;
+}
+
+function multiplyAxisAligned(
+  left: AxisAlignedMatrix,
+  right: AxisAlignedMatrix,
+): AxisAlignedMatrix {
+  return {
+    a: left.a * right.a,
+    d: left.d * right.d,
+    e: left.a * right.e + left.e,
+    f: left.d * right.f + left.f,
+  };
+}
+
+function flattenAxisAlignedTransform(
+  element: XmlElement,
+  matrix: AxisAlignedMatrix,
+): void {
+  scaleStrokeForFlatten(element, matrix);
+  switch (element.localName) {
+    case "rect":
+    case "image":
+      flattenRectangle(element, matrix);
+      break;
+    case "circle":
+      flattenCircle(element, matrix);
+      break;
+    case "ellipse":
+      flattenEllipse(element, matrix);
+      break;
+    case "line":
+      flattenLine(element, matrix);
+      break;
+    case "polygon":
+    case "polyline":
+      flattenPoints(element, matrix);
+      break;
+    case "text":
+      if (matrix.a !== 1 || matrix.d !== 1)
+        throw new Error("Flattening scaled text would change its typography");
+      setFinite(
+        element,
+        "x",
+        transformedNumber(element, "x", matrix.a, matrix.e),
+      );
+      setFinite(
+        element,
+        "y",
+        transformedNumber(element, "y", matrix.d, matrix.f),
+      );
+      break;
+    default:
+      throw new Error(
+        "Flatten supports rect, image, circle, ellipse, line, polygon, polyline and translated text",
+      );
+  }
+}
+
+function scaleStrokeForFlatten(
+  element: XmlElement,
+  matrix: AxisAlignedMatrix,
+): void {
+  const horizontal = Math.abs(matrix.a);
+  const vertical = Math.abs(matrix.d);
+  if (horizontal === 1 && vertical === 1) return;
+  const style = element.getAttribute("style") ?? "";
+  if (/\bstroke(?:-width)?\s*:/iu.test(style))
+    throw new Error(
+      "Flattening styled strokes requires CSS-aware stroke conversion",
+    );
+  const stroke = element.getAttribute("stroke");
+  if (
+    stroke === null ||
+    stroke.trim().toLowerCase() === "none" ||
+    element.getAttribute("vector-effect") === "non-scaling-stroke"
+  )
+    return;
+  if (Math.abs(horizontal - vertical) > 1e-12)
+    throw new Error("Flattening a non-uniformly scaled stroke is unsupported");
+  setPositive(
+    element,
+    "stroke-width",
+    horizontal * requiredNumber(element, "stroke-width", 1),
+  );
+}
+
+function flattenRectangle(
+  element: XmlElement,
+  matrix: AxisAlignedMatrix,
+): void {
+  const x = requiredNumber(element, "x", 0);
+  const y = requiredNumber(element, "y", 0);
+  const width = requiredNumber(element, "width");
+  const height = requiredNumber(element, "height");
+  setFinite(
+    element,
+    "x",
+    matrix.a >= 0 ? matrix.a * x + matrix.e : matrix.a * (x + width) + matrix.e,
+  );
+  setFinite(
+    element,
+    "y",
+    matrix.d >= 0
+      ? matrix.d * y + matrix.f
+      : matrix.d * (y + height) + matrix.f,
+  );
+  setPositive(element, "width", Math.abs(matrix.a) * width);
+  setPositive(element, "height", Math.abs(matrix.d) * height);
+  scaleOptionalNonNegative(element, "rx", Math.abs(matrix.a));
+  scaleOptionalNonNegative(element, "ry", Math.abs(matrix.d));
+}
+
+function flattenCircle(element: XmlElement, matrix: AxisAlignedMatrix): void {
+  if (Math.abs(Math.abs(matrix.a) - Math.abs(matrix.d)) > 1e-12)
+    throw new Error(
+      "Flattening a non-uniformly scaled circle requires ellipse conversion",
+    );
+  setFinite(
+    element,
+    "cx",
+    transformedNumber(element, "cx", matrix.a, matrix.e),
+  );
+  setFinite(
+    element,
+    "cy",
+    transformedNumber(element, "cy", matrix.d, matrix.f),
+  );
+  setPositive(element, "r", Math.abs(matrix.a) * requiredNumber(element, "r"));
+}
+
+function flattenEllipse(element: XmlElement, matrix: AxisAlignedMatrix): void {
+  setFinite(
+    element,
+    "cx",
+    transformedNumber(element, "cx", matrix.a, matrix.e),
+  );
+  setFinite(
+    element,
+    "cy",
+    transformedNumber(element, "cy", matrix.d, matrix.f),
+  );
+  setPositive(
+    element,
+    "rx",
+    Math.abs(matrix.a) * requiredNumber(element, "rx"),
+  );
+  setPositive(
+    element,
+    "ry",
+    Math.abs(matrix.d) * requiredNumber(element, "ry"),
+  );
+}
+
+function flattenLine(element: XmlElement, matrix: AxisAlignedMatrix): void {
+  setFinite(
+    element,
+    "x1",
+    transformedNumber(element, "x1", matrix.a, matrix.e),
+  );
+  setFinite(
+    element,
+    "x2",
+    transformedNumber(element, "x2", matrix.a, matrix.e),
+  );
+  setFinite(
+    element,
+    "y1",
+    transformedNumber(element, "y1", matrix.d, matrix.f),
+  );
+  setFinite(
+    element,
+    "y2",
+    transformedNumber(element, "y2", matrix.d, matrix.f),
+  );
+}
+
+function flattenPoints(element: XmlElement, matrix: AxisAlignedMatrix): void {
+  const raw = element.getAttribute("points");
+  if (raw === null) throw new Error("Polygon points are missing");
+  const numbers = parseTransformNumbers(raw);
+  if (numbers.length < 4 || numbers.length % 2 !== 0)
+    throw new Error("Polygon points are invalid");
+  element.setAttribute(
+    "points",
+    Array.from({ length: numbers.length / 2 }, (_, index) => {
+      const x = matrix.a * numbers[index * 2]! + matrix.e;
+      const y = matrix.d * numbers[index * 2 + 1]! + matrix.f;
+      return `${x},${y}`;
+    }).join(" "),
+  );
+}
+
+function requiredNumber(
+  element: XmlElement,
+  name: string,
+  fallback?: number,
+): number {
+  const raw = element.getAttribute(name);
+  if (raw === null && fallback !== undefined) return fallback;
+  if (raw === null) throw new Error(`Element ${name} is missing`);
+  const value = Number(raw);
+  if (!Number.isFinite(value))
+    throw new Error(`Element ${name} must be finite`);
+  return value;
+}
+
+function transformedNumber(
+  element: XmlElement,
+  name: string,
+  scale: number,
+  offset: number,
+): number {
+  return scale * requiredNumber(element, name, 0) + offset;
+}
+
+function scaleOptionalNonNegative(
+  element: XmlElement,
+  name: string,
+  scale: number,
+): void {
+  const raw = element.getAttribute(name);
+  if (raw === null) return;
+  setOptionalNonNegative(element, name, scale * requiredNumber(element, name));
+}
+
+function hasTransformedAncestor(element: XmlElement): boolean {
+  for (
+    let parent = parentElement(element);
+    parent;
+    parent = parentElement(parent)
+  )
+    if (parent.hasAttribute("transform")) return true;
+  return false;
 }
 function isWithinDeletedTree(
   element: XmlElement,

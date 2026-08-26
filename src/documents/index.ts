@@ -32,6 +32,7 @@ export {
 } from "./elements.js";
 export {
   createSvgShapes,
+  flattenSvgShapeTransforms,
   duplicateSvgShape,
   reparentSvgShapes,
   arrangeSvgShapes,

@@ -7,6 +7,7 @@ import {
   createSvgDocument,
   changePageOrientationSvg,
   createSvgShapes,
+  flattenSvgShapeTransforms,
   duplicateSvgShape,
   reparentSvgShapes,
   groupSvgShapes,
@@ -644,6 +645,50 @@ describe("basic SVG documents", () => {
       y: -2,
     });
     expect(transformed.svg).toContain('transform="translate(4 -2)"');
+    const flattened = flattenSvgShapeTransforms(
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect id="card" x="2" y="3" width="4" height="5" rx="1" transform="translate(10 20) scale(-2 3)"/></svg>',
+      ["card"],
+    );
+    expect(flattened.flattenedIds).toEqual(["card"]);
+    expect(flattened.svg).toContain(
+      '<rect id="card" x="-2" y="29" width="8" height="15" rx="2"',
+    );
+    expect(flattened.svg).not.toContain("transform=");
+    const translatedText = flattenSvgShapeTransforms(
+      '<svg xmlns="http://www.w3.org/2000/svg"><text id="label" x="2" y="3" transform="matrix(1 0 0 1 5 -1)">Hi</text></svg>',
+      ["label"],
+    );
+    expect(translatedText.svg).toContain('x="7" y="2"');
+    const mirroredImage = flattenSvgShapeTransforms(
+      '<svg xmlns="http://www.w3.org/2000/svg"><image id="photo" href="data:image/png;base64,AA==" x="1" y="2" width="3" height="4" transform="scale(2 -2)"/></svg>',
+      ["photo"],
+    );
+    expect(mirroredImage.svg).toContain(
+      '<image id="photo" href="data:image/png;base64,AA==" x="2" y="-12" width="6" height="8"',
+    );
+    const scaledStroke = flattenSvgShapeTransforms(
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect id="stroke" x="0" y="0" width="2" height="2" stroke="#000000" stroke-width="2" transform="scale(3)"/></svg>',
+      ["stroke"],
+    );
+    expect(scaledStroke.svg).toContain('stroke-width="6"');
+    expect(() =>
+      flattenSvgShapeTransforms(
+        '<svg xmlns="http://www.w3.org/2000/svg"><rect id="nonuniform-stroke" x="0" y="0" width="2" height="2" stroke="#000000" transform="scale(2 3)"/></svg>',
+        ["nonuniform-stroke"],
+      ),
+    ).toThrow("non-uniformly scaled stroke");
+    expect(() =>
+      flattenSvgShapeTransforms(
+        '<svg xmlns="http://www.w3.org/2000/svg"><g transform="translate(2 0)"><rect id="nested" x="0" y="0" width="2" height="2" transform="scale(2)"/></g></svg>',
+        ["nested"],
+      ),
+    ).toThrow("inherited transform");
+    expect(() =>
+      flattenSvgShapeTransforms(
+        '<svg xmlns="http://www.w3.org/2000/svg"><rect id="rotated" x="0" y="0" width="2" height="2" transform="rotate(45)"/></svg>',
+        ["rotated"],
+      ),
+    ).toThrow("only translate, scale and axis-aligned matrix");
     expect(() =>
       transformSvgShapes(created.svg, ["rect_1"], {
         a: 1,

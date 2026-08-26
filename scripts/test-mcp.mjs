@@ -627,6 +627,23 @@ try {
       "elements_transform did not apply an allowlisted transform",
     );
   }
+  const flattened = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: transformedRevision,
+      ids: ["demo_rect"],
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_flatten_transform",
+  });
+  const flattenedRevision = flattened.structuredContent?.revision;
+  if (
+    flattened.isError ||
+    flattened.structuredContent?.flattenedIds?.[0] !== "demo_rect" ||
+    typeof flattenedRevision !== "string"
+  ) {
+    throw new Error("elements_flatten_transform did not bake a safe transform");
+  }
   const boundsWithoutRevision = await workspaceClient.callTool({
     arguments: {
       includeBounds: true,
@@ -643,7 +660,7 @@ try {
   const queried = await workspaceClient.callTool({
     arguments: {
       ids: ["demo_rect", "temporary_circle"],
-      expectedRevision: transformedRevision,
+      expectedRevision: flattenedRevision,
       includeBounds: true,
       includeComputedStyle: true,
       layerId: "layer_main",
@@ -685,7 +702,7 @@ try {
         },
         { id: "demo_text", text: "Updated from MCP" },
       ],
-      expectedRevision: transformedRevision,
+      expectedRevision: flattenedRevision,
       path: "a4.svg",
       workspaceId: workspace.id,
     },

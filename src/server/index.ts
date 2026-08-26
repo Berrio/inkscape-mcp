@@ -14,6 +14,7 @@ import {
   changePageOrientationSvg,
   createSvgDocument,
   createSvgShapes,
+  flattenSvgShapeTransforms,
   arrangeSvgShapes,
   groupSvgShapes,
   deleteSvgShapes,
@@ -2197,6 +2198,54 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         backupCreated: committed.backupPath !== undefined,
         ids: transformed.ids,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_flatten_transform",
+    {
+      description:
+        "Bakes each selected element's own axis-aligned translate/scale/matrix transform into safe primitive geometry. It rejects rotation, skew, paths and inherited transforms rather than changing SVG semantics.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z.array(shapeIdSchema).min(1).max(100),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        flattenedIds: z.array(shapeIdSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, ids, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const flattened = flattenSvgShapeTransforms(
+        await readFile(document.absolutePath, "utf8"),
+        ids,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(flattened.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        flattenedIds: flattened.flattenedIds,
         revision: committed.revision,
       };
       return {

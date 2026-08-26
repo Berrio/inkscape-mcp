@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeSvgIds } from "../../src/svg/index.js";
+import {
+  normalizeSvgIds,
+  remapSvgIdsForNativeQuery,
+} from "../../src/svg/index.js";
 
 describe("SVG ID normalization", () => {
   it("rewrites unsafe IDs and their local href/url/ARIA/CSS references", () => {
@@ -44,5 +47,18 @@ describe("SVG ID normalization", () => {
     expect(() => normalizeSvgIds("<svg/>", { prefix: "1bad" })).toThrow(
       "prefix",
     );
+  });
+
+  it("remaps every unique native query ID and withholds duplicate mappings", () => {
+    const result = remapSvgIdsForNativeQuery(
+      '<svg><defs><linearGradient id="gradient, unsafe"/></defs><rect id="public" fill="url(\'#gradient, unsafe\')"/><rect id="same"/><circle id="same"/></svg>',
+    );
+    const remappedGradient = [...result.originalIdByNativeId].find(
+      ([, original]) => original === "gradient, unsafe",
+    )?.[0];
+    expect(remappedGradient).toMatch(/^inkscape_mcp_query_linearGradient_/u);
+    expect(result.svg).toContain(`url(#${remappedGradient})`);
+    expect(result.originalIdByNativeId.get("public")).toBe("public");
+    expect([...result.originalIdByNativeId.values()]).not.toContain("same");
   });
 });

@@ -7,7 +7,7 @@ import {
 import { sanitizeSvg } from "./safe-dom.js";
 
 const PUBLIC_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u;
-const URL_FRAGMENT = /url\(\s*#([^\s)]+)\s*\)/giu;
+const URL_FRAGMENT = /url\(\s*(?:(['"])#([^'"]+)\1|#([^)]*?))\s*\)/giu;
 const DIRECT_REFERENCE_ATTRIBUTES = new Set(["href", "xlink:href"]);
 const ID_LIST_ATTRIBUTES = new Set(["aria-describedby", "aria-labelledby"]);
 
@@ -22,6 +22,11 @@ export type SvgIdRename = {
 };
 export type SvgIdNormalization = {
   renamed: readonly SvgIdRename[];
+  svg: string;
+};
+export type SvgNativeQueryIdRemap = {
+  /** Maps safe IDs emitted by the native query back to unique source IDs. */
+  originalIdByNativeId: ReadonlyMap<string, string>;
   svg: string;
 };
 
@@ -74,6 +79,42 @@ export function normalizeSvgIds(
     renamed,
     svg: new XMLSerializer().serializeToString(document),
   };
+}
+
+/**
+ * Produces a private, safe-ID copy for a native `--query-all` invocation.
+ * IDs duplicated in the original SVG deliberately have no reverse mapping:
+ * returning no bound is safer than assigning one object's bound to another.
+ */
+export function remapSvgIdsForNativeQuery(
+  source: string,
+): SvgNativeQueryIdRemap {
+  const safe = sanitizeSvg(source, {
+    maxElements: 100_000,
+    maxInputBytes: 50 * 1024 * 1024,
+    mode: "preserve-local",
+  });
+  const document = new DOMParser().parseFromString(safe.svg, "image/svg+xml");
+  const counts = new Map<string, number>();
+  for (const element of Array.from(document.getElementsByTagName("*"))) {
+    const id = element.getAttribute("id");
+    if (id !== null) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  const normalized = normalizeSvgIds(safe.svg, {
+    prefix: "inkscape_mcp_query",
+  });
+  const renamedByOriginal = new Map(
+    normalized.renamed.flatMap((rename) =>
+      rename.from === undefined ? [] : [[rename.from, rename.to] as const],
+    ),
+  );
+  const originalIdByNativeId = new Map<string, string>();
+  for (const [original, count] of counts) {
+    if (count !== 1) continue;
+    const native = renamedByOriginal.get(original) ?? original;
+    originalIdByNativeId.set(native, original);
+  }
+  return { originalIdByNativeId, svg: normalized.svg };
 }
 
 function rewriteElementReferences(
@@ -139,10 +180,19 @@ function rewriteUrlFragments(
   value: string,
   renames: ReadonlyMap<string, string>,
 ): string {
-  return value.replace(URL_FRAGMENT, (full, id: string) => {
-    const replacement = renames.get(id);
-    return replacement === undefined ? full : `url(#${replacement})`;
-  });
+  return value.replace(
+    URL_FRAGMENT,
+    (
+      full,
+      _quote: string | undefined,
+      quotedId: string | undefined,
+      bareId: string | undefined,
+    ) => {
+      const id = (quotedId ?? bareId ?? "").trim();
+      const replacement = renames.get(id);
+      return replacement === undefined ? full : `url(#${replacement})`;
+    },
+  );
 }
 
 function normalizePrefix(value: string): string {

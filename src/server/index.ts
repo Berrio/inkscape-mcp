@@ -40,7 +40,11 @@ import {
   validateSvgPageLayout,
 } from "../documents/index.js";
 import { nativeVisualBoundsDescriptor } from "../geometry/index.js";
-import { sanitizeSvg, summarizeSvgDiff } from "../svg/index.js";
+import {
+  remapSvgIdsForNativeQuery,
+  sanitizeSvg,
+  summarizeSvgDiff,
+} from "../svg/index.js";
 import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import {
@@ -4670,8 +4674,13 @@ async function queryNativeBounds(request: {
         maximumSanitizeMode: request.config.maximumSanitizeMode,
       },
     );
+    const remapped = remapSvgIdsForNativeQuery(
+      await readFile(nativeInput.path, "utf8"),
+    );
+    const queryInputPath = join(directory, "query.svg");
+    await writeFile(queryInputPath, remapped.svg, "utf8");
     const result = await request.runner.run(candidate.executablePath, {
-      args: [nativeInput.path, "--query-all"],
+      args: [queryInputPath, "--query-all"],
       cwd: directory,
       maxStderrBytes: request.config.maxStderrBytes,
       maxStdoutBytes: request.config.maxStdoutBytes,
@@ -4680,6 +4689,15 @@ async function queryNativeBounds(request: {
     if (result.exitCode !== 0 || result.terminationReason !== "completed")
       throw new Error("Inkscape bounds query failed");
     await nativeInput.assertCurrent();
-    return parseInkscapeQueryAll(result.stdout.toString("utf8"));
+    return new Map(
+      [...parseInkscapeQueryAll(result.stdout.toString("utf8"))].flatMap(
+        ([nativeId, bounds]) => {
+          const originalId = remapped.originalIdByNativeId.get(nativeId);
+          return originalId === undefined
+            ? []
+            : [[originalId, bounds] as const];
+        },
+      ),
+    );
   });
 }

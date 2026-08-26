@@ -7,7 +7,9 @@ export {
 } from "./safe-dom.js";
 export {
   normalizeSvgIds,
+  remapSvgIdsForNativeQuery,
   type SvgIdNormalization,
+  type SvgNativeQueryIdRemap,
   type SvgIdNormalizationOptions,
   type SvgIdRename,
 } from "./ids.js";

@@ -131,6 +131,32 @@ try {
     /<script|onclick=/iu.test(importedText)
   )
     throw new Error("document_import_svg published unsafe SVG content");
+  await writeFile(
+    join(workspaceRoot, "id-delimiters.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="20"><rect id="with,comma" x="0" y="0" width="10" height="10"/><rect id="with;semicolon" x="20" y="0" width="10" height="10"/><rect id="with space" x="40" y="0" width="10" height="10"/><rect id="mañana" x="60" y="0" width="10" height="10"/><rect id="public_rect" x="80" y="0" width="10" height="10"/></svg>',
+  );
+  const delimiterRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "id-delimiters.svg")))
+    .digest("hex");
+  const delimiterBounds = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: delimiterRevision,
+      includeBounds: true,
+      path: "id-delimiters.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_query",
+  });
+  if (
+    delimiterBounds.isError ||
+    delimiterBounds.structuredContent?.elements?.filter(
+      (element) => typeof element.bounds?.width === "number",
+    ).length !== 5 ||
+    !delimiterBounds.structuredContent?.elements?.some(
+      (element) => element.id === "public_rect" && element.bounds !== undefined,
+    )
+  )
+    throw new Error("elements_query did not remap delimiter IDs safely");
   const packageTexture = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg==",
     "base64",

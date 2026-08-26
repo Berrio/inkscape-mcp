@@ -1049,6 +1049,41 @@ try {
       "export_svg did not publish the expected plain SVG warning",
     );
   }
+  await writeFile(
+    join(workspaceRoot, "viewbox-512.svg"),
+    await readFile(
+      join(process.cwd(), "tests", "fixtures", "svg-viewbox-512.svg"),
+    ),
+  );
+  const viewboxInspection = await workspaceClient.callTool({
+    arguments: {
+      level: "summary",
+      path: "viewbox-512.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_inspect",
+  });
+  const viewboxRevision = viewboxInspection.structuredContent?.revision;
+  if (viewboxInspection.isError || typeof viewboxRevision !== "string")
+    throw new Error("document_inspect did not prepare the 512 viewBox fixture");
+  const viewboxPlain = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: viewboxRevision,
+      flavor: "plain",
+      outputPath: "viewbox-512-plain.svg",
+      path: "viewbox-512.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_svg",
+  });
+  if (
+    viewboxPlain.isError ||
+    viewboxPlain.structuredContent?.viewBox !== "0 0 512 512" ||
+    typeof viewboxPlain.structuredContent?.hash !== "string" ||
+    (viewboxPlain.structuredContent?.byteLength ?? 0) < 1
+  ) {
+    throw new Error("export_svg did not preserve the 512 viewBox");
+  }
   const contained = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,

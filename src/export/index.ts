@@ -1,6 +1,6 @@
 export { verifyPng, type PngMetadata } from "./png.js";
 export { verifyPdf, type PdfMetadata } from "./pdf.js";
-export { verifySvg } from "./svg.js";
+export { verifySvg, type SvgMetadata } from "./svg.js";
 export {
   buildExportArgv,
   PDF_OPTION_CAPABILITY_FLAGS,

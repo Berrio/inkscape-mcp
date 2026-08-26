@@ -3323,8 +3323,11 @@ export function buildServer(config: ServerConfig): McpServer {
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
+        byteLength: z.number().int().positive(),
         flavor: z.enum(["inkscape", "plain"]),
+        hash: z.string().regex(/^[a-f0-9]{64}$/u),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        viewBox: z.string().min(1).max(256),
         warnings: z.array(z.string()),
       }),
       annotations: { destructiveHint: false },
@@ -3358,6 +3361,21 @@ export function buildServer(config: ServerConfig): McpServer {
       );
       if (!("version" in probe))
         throw new Error("Inkscape executable could not be validated");
+      const svgSpec = parseExportSpec({
+        area: { kind: "document" },
+        format: flavor === "plain" ? "plain-svg" : "svg",
+        resourcePolicy: "preserve-local",
+        source: { expectedRevision, path },
+        target: {
+          ...(expectedOutputRevision === undefined
+            ? {}
+            : { expectedOutputRevision }),
+          kind: "file",
+          overwrite: expectedOutputRevision !== undefined,
+          path: outputPath,
+        },
+        text: textToPath ? "paths" : "preserve",
+      });
       const svg = await scratch.withDirectory("staging", async (directory) => {
         const nativeInput = await createNativeInputBundle(
           input.absolutePath,
@@ -3371,13 +3389,12 @@ export function buildServer(config: ServerConfig): McpServer {
         );
         const temporaryOutput = join(directory, "export.svg");
         const run = await runner.run(candidate.executablePath, {
-          args: [
-            nativeInput.path,
-            "--export-type=svg",
-            `--export-filename=${temporaryOutput}`,
-            ...(flavor === "plain" ? ["--export-plain-svg"] : []),
-            ...(textToPath ? ["--export-text-to-path"] : []),
-          ],
+          args: buildExportArgv({
+            area: normalizeExportArea({ kind: "document" }, []),
+            inputPath: nativeInput.path,
+            outputPath: temporaryOutput,
+            spec: svgSpec,
+          }),
           cwd: directory,
           maxStderrBytes: config.maxStderrBytes,
           maxStdoutBytes: config.maxStdoutBytes,
@@ -3385,12 +3402,12 @@ export function buildServer(config: ServerConfig): McpServer {
         });
         if (run.exitCode !== 0 || run.terminationReason !== "completed")
           throw new Error("Inkscape SVG export failed");
-        await verifySvg(temporaryOutput);
+        const metadata = await verifySvg(temporaryOutput);
         await nativeInput.assertCurrent();
-        return readFile(temporaryOutput);
+        return { bytes: await readFile(temporaryOutput), metadata };
       });
       const committed = await fileStore.commit({
-        contents: svg,
+        contents: svg.bytes,
         ...(expectedOutputRevision === undefined
           ? {}
           : { expectedOutputRevision }),
@@ -3399,8 +3416,11 @@ export function buildServer(config: ServerConfig): McpServer {
         targetPath: output.absolutePath,
       });
       const result = {
+        byteLength: svg.metadata.byteLength,
         flavor,
+        hash: svg.metadata.hash,
         revision: committed.revision,
+        viewBox: svg.metadata.viewBox,
         warnings: textToPath ? ["TEXT_CONVERTED_TO_PATHS"] : [],
       };
       return {

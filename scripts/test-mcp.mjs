@@ -137,6 +137,71 @@ try {
   )
     throw new Error("paths_boolean did not run Inkscape path union");
   await writeFile(
+    join(workspaceRoot, "gradients.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect id="gradient_target" width="10" height="5"/></svg>',
+  );
+  const gradientsRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "gradients.svg")))
+    .digest("hex");
+  const gradientCreated = await workspaceClient.callTool({
+    arguments: {
+      action: "create",
+      expectedRevision: gradientsRevision,
+      path: "gradients.svg",
+      spec: {
+        id: "sunset",
+        kind: "linear",
+        stops: [
+          { color: "#ff0000", offset: 0 },
+          { color: "#0000ff", offset: 1 },
+        ],
+      },
+      workspaceId: workspace.id,
+    },
+    name: "gradients_manage",
+  });
+  const gradientCreatedRevision = gradientCreated.structuredContent?.revision;
+  if (gradientCreated.isError || typeof gradientCreatedRevision !== "string")
+    throw new Error("gradients_manage did not create a gradient");
+  const gradientApplied = await workspaceClient.callTool({
+    arguments: {
+      action: "apply",
+      expectedRevision: gradientCreatedRevision,
+      id: "sunset",
+      paint: "fill",
+      path: "gradients.svg",
+      targetIds: ["gradient_target"],
+      workspaceId: workspace.id,
+    },
+    name: "gradients_manage",
+  });
+  const gradientAppliedRevision = gradientApplied.structuredContent?.revision;
+  if (gradientApplied.isError || typeof gradientAppliedRevision !== "string")
+    throw new Error("gradients_manage did not apply a gradient");
+  const gradientUpdated = await workspaceClient.callTool({
+    arguments: {
+      action: "update",
+      expectedRevision: gradientAppliedRevision,
+      path: "gradients.svg",
+      spec: {
+        id: "sunset",
+        kind: "radial",
+        r: 1,
+        stops: [
+          { color: "#00ff00", offset: 0 },
+          { color: "#0000ff", offset: 1, opacity: 0.5 },
+        ],
+      },
+      workspaceId: workspace.id,
+    },
+    name: "gradients_manage",
+  });
+  if (
+    gradientUpdated.isError ||
+    gradientUpdated.structuredContent?.id !== "sunset"
+  )
+    throw new Error("gradients_manage did not update a gradient");
+  await writeFile(
     join(workspaceRoot, "percentage.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="50%" viewBox="0 0 20 10"/>',
   );

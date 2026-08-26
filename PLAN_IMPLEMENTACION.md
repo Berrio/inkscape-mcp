@@ -1801,7 +1801,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Defs y pintura avanzada
 
-- [ ] `F07-T10` CRUD de linear/radial gradients y stops.
+- [x] `F07-T10` CRUD de linear/radial gradients y stops. — `gradients_manage` crea, actualiza, aplica o borra gradientes lineales/radiales con 2–64 stops ordenados y colores tipados. La eliminación rechaza referencias vivas; las pruebas unitarias y MCP cubren create/apply/update.
 - [ ] `F07-T11` Gradient units/transforms/spread y reutilización.
 - [ ] `F07-T12` CRUD de patterns y aplicación con transforms.
 - [ ] `F07-T13` CRUD de markers start/mid/end.

@@ -55,6 +55,14 @@ export {
   type ShapeStyle,
 } from "./shapes.js";
 export {
+  applySvgGradient,
+  createSvgGradient,
+  deleteSvgGradient,
+  updateSvgGradient,
+  type GradientSpec,
+  type GradientStop,
+} from "./gradients.js";
+export {
   parseSvgPathData,
   reverseLinearSvgPathData,
   serializeSvgPathData,

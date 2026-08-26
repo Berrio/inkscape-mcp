@@ -14,6 +14,9 @@ import {
   changePageOrientationSvg,
   createSvgDocument,
   createSvgShapes,
+  applySvgGradient,
+  createSvgGradient,
+  deleteSvgGradient,
   combineSvgPaths,
   breakApartSvgPath,
   flattenSvgShapeTransforms,
@@ -38,6 +41,7 @@ import {
   reorderSvgPages,
   reparentSvgShapes,
   reverseSvgPath,
+  updateSvgGradient,
   resizeContentSvg,
   resizePageOnlySvg,
   rewriteStagedAssetReferences,
@@ -547,6 +551,46 @@ const transformSchema = z.discriminatedUnion("kind", [
     kind: z.literal("matrix"),
   }),
 ]);
+const gradientStopSchema = z.object({
+  color: z.string().regex(/^#[a-fA-F0-9]{6}$/u),
+  offset: z.number().finite().min(0).max(1),
+  opacity: z.number().finite().min(0).max(1).optional(),
+});
+const gradientSpecSchema = z
+  .object({
+    cx: z.number().finite().optional(),
+    cy: z.number().finite().optional(),
+    fx: z.number().finite().optional(),
+    fy: z.number().finite().optional(),
+    id: shapeIdSchema,
+    kind: z.enum(["linear", "radial"]),
+    r: z.number().finite().positive().optional(),
+    spread: z.enum(["pad", "reflect", "repeat"]).optional(),
+    stops: z.array(gradientStopSchema).min(2).max(64),
+    transform: z
+      .tuple([
+        z.number().finite(),
+        z.number().finite(),
+        z.number().finite(),
+        z.number().finite(),
+        z.number().finite(),
+        z.number().finite(),
+      ])
+      .optional(),
+    units: z.enum(["objectBoundingBox", "userSpaceOnUse"]).optional(),
+    x1: z.number().finite().optional(),
+    x2: z.number().finite().optional(),
+    y1: z.number().finite().optional(),
+    y2: z.number().finite().optional(),
+  })
+  .refine(
+    (value) =>
+      value.stops.every(
+        (stop, index) =>
+          index === 0 || stop.offset >= value.stops[index - 1]!.offset,
+      ),
+    "Gradient stops must be ordered by offset",
+  );
 const layoutAnchorSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("selection") }),
   z.object({ kind: z.literal("page"), pageId: shapeIdSchema.optional() }),
@@ -2251,6 +2295,101 @@ export function buildServer(config: ServerConfig): McpServer {
         backupCreated: committed.backupPath !== undefined,
         id: result.id,
         removedIds: result.removedIds,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "gradients_manage",
+    {
+      description:
+        "Creates, replaces, applies or deletes typed SVG linear/radial gradients in <defs> without accepting free XML or CSS.",
+      inputSchema: z.discriminatedUnion("action", [
+        z.object({
+          action: z.literal("create"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          spec: gradientSpecSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("update"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          spec: gradientSpecSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("delete"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("apply"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          paint: z.enum(["fill", "stroke"]),
+          path: z.string().min(1).max(1024),
+          targetIds: z.array(shapeIdSchema).min(1).max(100),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+      ]),
+      outputSchema: z.object({
+        action: z.enum(["create", "update", "delete", "apply"]),
+        backupCreated: z.boolean(),
+        id: shapeIdSchema,
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        targetIds: z.array(shapeIdSchema).optional(),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(input.workspaceId, input.path);
+      const source = await readFile(document.absolutePath, "utf8");
+      let changed: string;
+      let id: string;
+      let targetIds: readonly string[] | undefined;
+      if (input.action === "create" || input.action === "update") {
+        changed =
+          input.action === "create"
+            ? createSvgGradient(source, input.spec)
+            : updateSvgGradient(source, input.spec);
+        id = input.spec.id;
+      } else if (input.action === "delete") {
+        changed = deleteSvgGradient(source, input.id);
+        id = input.id;
+      } else {
+        changed = applySvgGradient(
+          source,
+          input.id,
+          input.targetIds,
+          input.paint,
+        );
+        id = input.id;
+        targetIds = input.targetIds;
+      }
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: input.expectedRevision,
+        expectedRevision: input.expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        action: input.action,
+        backupCreated: committed.backupPath !== undefined,
+        id,
+        ...(targetIds === undefined ? {} : { targetIds }),
         revision: committed.revision,
       };
       return {

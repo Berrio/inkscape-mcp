@@ -1252,6 +1252,34 @@ try {
   if (!rejectedAtomicBatch.isError || atomicOutputExists) {
     throw new Error("all_or_nothing batch published a variant after failure");
   }
+  const timedOutBatch = await workspaceClient.callTool({
+    arguments: {
+      mode: "all_or_nothing",
+      specs: [
+        {
+          area: { kind: "drawing" },
+          background: { mode: "transparent" },
+          format: "png",
+          source: { expectedRevision: settingsRevision, path: "a4.svg" },
+          target: {
+            kind: "file",
+            overwrite: false,
+            path: "must-not-publish-after-timeout.png",
+          },
+        },
+      ],
+      timeoutMs: 1,
+      workspaceId: workspace.id,
+    },
+    name: "document_export_batch",
+  });
+  const timeoutOutputExists = await readFile(
+    join(workspaceRoot, "must-not-publish-after-timeout.png"),
+  )
+    .then(() => true)
+    .catch(() => false);
+  if (!timedOutBatch.isError || timeoutOutputExists)
+    throw new Error("batch timeout published a partial output");
   const bestEffortBatch = await workspaceClient.callTool({
     arguments: {
       mode: "best_effort",

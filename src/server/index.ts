@@ -2453,6 +2453,12 @@ export function buildServer(config: ServerConfig): McpServer {
           mode: z.enum(["all_or_nothing", "best_effort"]),
           preset: exportPresetSchema.optional(),
           specs: z.array(exportSpecSchema).min(1).max(50).optional(),
+          timeoutMs: z
+            .number()
+            .int()
+            .min(1)
+            .max(config.processTimeoutMs)
+            .optional(),
           workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
         })
         .strict()
@@ -2500,7 +2506,7 @@ export function buildServer(config: ServerConfig): McpServer {
       }),
       annotations: { destructiveHint: false },
     },
-    async ({ mode, preset, specs, workspaceId }) => {
+    async ({ mode, preset, specs, timeoutMs, workspaceId }) => {
       assertDocumentWorkspace(config);
       const startedAt = Date.now();
       const expandedSpecs =
@@ -2546,6 +2552,7 @@ export function buildServer(config: ServerConfig): McpServer {
               ExportSpec,
               { format: "pdf" | "plain-svg" | "png" | "svg" }
             >,
+            ...(timeoutMs === undefined ? {} : { timeoutMs }),
           });
           return { ...rendered, variant };
         },
@@ -4031,6 +4038,7 @@ async function renderGenericExport(request: {
   runner: ProcessRunner;
   scratch: ScratchManager;
   spec: Extract<ExportSpec, { format: "pdf" | "plain-svg" | "png" | "svg" }>;
+  timeoutMs?: number;
 }): Promise<{ bytes: Buffer; inkscapeVersion: string }> {
   const source = await readFile(request.inputPath, "utf8");
   const area = normalizeExportArea(
@@ -4106,7 +4114,7 @@ async function renderGenericExport(request: {
       cwd: directory,
       maxStderrBytes: request.config.maxStderrBytes,
       maxStdoutBytes: request.config.maxStdoutBytes,
-      timeoutMs: request.config.processTimeoutMs,
+      timeoutMs: request.timeoutMs ?? request.config.processTimeoutMs,
     });
     if (run.exitCode !== 0 || run.terminationReason !== "completed")
       throw new Error("Inkscape document export failed");

@@ -1699,7 +1699,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F05-G03` PDF multipágina conserva el número y tamaños de páginas esperados.
 - [ ] `F05-G04` SVG y plain SVG reabren en Inkscape y pasan validación estructural/visual.
 - [ ] `F05-G05` Parcialmente: la prueba MCP real fuerza una segunda variante inválida tras renderizar la primera y confirma que `all_or_nothing` no publica el archivo previo. Falta simular crash, marker/directorio final y limpieza al reiniciar.
-- [ ] `F05-G06` Timeout/cancelación no dejan output parcial ni proceso huérfano.
+- [~] `F05-G06` Timeout/cancelación no dejan output parcial ni proceso huérfano. — `document_export_batch.timeoutMs` se propaga al runner nativo y la prueba MCP real fuerza 1 ms, comprueba error y ausencia de output publicado. Falta cancelación pública por job y auditoría de procesos huérfanos.
 - [x] `F05-G07` Paths con espacios/Unicode/metacarácteres no alteran argv. — La prueba MCP exporta `salida ñ; & segura.png`, comprueba la firma PNG publicada y confirma que el nombre llega a Inkscape como path, no como shell.
 - [ ] `F05-G08` Inspector MCP ejecuta status/create/resize/preview/export por stdio.
 - [ ] `F05-G09` Evidencia completa en `docs/progress/F05.md`; MVP demostrable de extremo a extremo.

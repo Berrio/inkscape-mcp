@@ -101,9 +101,36 @@ try {
   if (typeof resizedRevision !== "string") {
     throw new Error("document_resize did not return a revision");
   }
+  const elements = await workspaceClient.callTool({
+    arguments: {
+      elements: [
+        {
+          height: 50,
+          id: "demo_rect",
+          kind: "rect",
+          style: { fill: "#ff0000" },
+          width: 50,
+          x: 20,
+          y: 20,
+        },
+      ],
+      expectedRevision: resizedRevision,
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_create",
+  });
+  const elementsRevision = elements.structuredContent?.revision;
+  if (
+    elements.isError ||
+    elements.structuredContent?.ids?.[0] !== "demo_rect" ||
+    typeof elementsRevision !== "string"
+  ) {
+    throw new Error("elements_create did not publish a typed rectangle");
+  }
   const inspected = await workspaceClient.callTool({
     arguments: {
-      expectedRevision: resizedRevision,
+      expectedRevision: elementsRevision,
       path: "a4.svg",
       workspaceId: workspace.id,
     },
@@ -132,7 +159,7 @@ try {
   const pageAdded = await workspaceClient.callTool({
     arguments: {
       action: "add",
-      expectedRevision: resizedRevision,
+      expectedRevision: elementsRevision,
       page: { height: 210, id: "page_back", width: 148, x: 160, y: 0 },
       path: "a4.svg",
       workspaceId: workspace.id,
@@ -203,7 +230,7 @@ try {
   }
   const solidPng = await workspaceClient.callTool({
     arguments: {
-      area: "page",
+      area: "drawing",
       background: "solid",
       backgroundColor: "#ff0000",
       expectedRevision: settingsRevision,
@@ -216,7 +243,7 @@ try {
   if (
     solidPng.isError ||
     solidPng.structuredContent?.background !== "solid" ||
-    solidPng.structuredContent?.area !== "page"
+    solidPng.structuredContent?.area !== "drawing"
   ) {
     throw new Error("export_png did not apply area and background requests");
   }

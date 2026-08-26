@@ -55,6 +55,7 @@ tools de documentos.
 | `document_pages`                                         | Listar o mutar paginas explicitas de Inkscape 1.4.                                                                                                             |
 | `document_settings`                                      | Leer o editar fondo de pagina, escritorio y borde.                                                                                                             |
 | `document_preflight`                                     | Detectar contenido activo, recursos externos y errores con perfiles basic/web/print/interchange.                                                               |
+| `elements_create`                                        | Crear formas tipadas: rect, circle, ellipse, line, polyline y polygon.                                                                                         |
 | `export_png`, `export_pdf`, `export_svg`                 | Exportar por Inkscape mediante staging y validar el artefacto; PNG acepta area/DPI/fondo, PDF informa paginas y MediaBox, y SVG puede convertir texto a paths. |
 
 Las mutaciones y exportaciones exigen `expectedRevision`. Si un archivo cambia

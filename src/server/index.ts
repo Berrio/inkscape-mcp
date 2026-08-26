@@ -8,6 +8,7 @@ import { assertDocumentWorkspace, type ServerConfig } from "../config/index.js";
 import {
   addSvgPage,
   createSvgDocument,
+  createSvgShapes,
   deleteSvgPage,
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
@@ -97,6 +98,74 @@ const pagePresetSchema = z.enum([
   "a4-portrait",
   "letter-landscape",
   "letter-portrait",
+]);
+const shapeStyleSchema = z.object({
+  fill: z
+    .string()
+    .regex(/^#[a-fA-F0-9]{6}$/u)
+    .optional(),
+  opacity: z.number().finite().min(0).max(1).optional(),
+  stroke: z
+    .string()
+    .regex(/^#[a-fA-F0-9]{6}$/u)
+    .optional(),
+  strokeWidth: z.number().finite().nonnegative().optional(),
+});
+const pointSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+});
+const shapeIdSchema = z.string().regex(/^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u);
+const shapeSchema = z.discriminatedUnion("kind", [
+  z.object({
+    height: z.number().finite().positive(),
+    id: shapeIdSchema.optional(),
+    kind: z.literal("rect"),
+    rx: z.number().finite().nonnegative().optional(),
+    ry: z.number().finite().nonnegative().optional(),
+    style: shapeStyleSchema.optional(),
+    width: z.number().finite().positive(),
+    x: z.number().finite(),
+    y: z.number().finite(),
+  }),
+  z.object({
+    cx: z.number().finite(),
+    cy: z.number().finite(),
+    id: shapeIdSchema.optional(),
+    kind: z.literal("circle"),
+    r: z.number().finite().positive(),
+    style: shapeStyleSchema.optional(),
+  }),
+  z.object({
+    cx: z.number().finite(),
+    cy: z.number().finite(),
+    id: shapeIdSchema.optional(),
+    kind: z.literal("ellipse"),
+    rx: z.number().finite().positive(),
+    ry: z.number().finite().positive(),
+    style: shapeStyleSchema.optional(),
+  }),
+  z.object({
+    id: shapeIdSchema.optional(),
+    kind: z.literal("line"),
+    style: shapeStyleSchema.optional(),
+    x1: z.number().finite(),
+    x2: z.number().finite(),
+    y1: z.number().finite(),
+    y2: z.number().finite(),
+  }),
+  z.object({
+    id: shapeIdSchema.optional(),
+    kind: z.literal("polygon"),
+    points: z.array(pointSchema).min(2).max(1_000),
+    style: shapeStyleSchema.optional(),
+  }),
+  z.object({
+    id: shapeIdSchema.optional(),
+    kind: z.literal("polyline"),
+    points: z.array(pointSchema).min(2).max(1_000),
+    style: shapeStyleSchema.optional(),
+  }),
 ]);
 
 export function buildServer(config: ServerConfig): McpServer {
@@ -271,6 +340,52 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         documentPath: target.relativePath,
         revision: result.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_create",
+    {
+      description:
+        "Creates a bounded batch of typed SVG basic shapes without accepting XML or arbitrary attributes.",
+      inputSchema: z.object({
+        elements: z.array(shapeSchema).min(1).max(100),
+        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        ids: z.array(shapeIdSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ elements, expectedRevision, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const created = createSvgShapes(
+        await readFile(document.absolutePath, "utf8"),
+        elements,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(created.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        ids: created.ids,
+        revision: committed.revision,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],

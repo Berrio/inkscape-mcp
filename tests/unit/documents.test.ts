@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addSvgPage,
   createSvgDocument,
+  createSvgShapes,
   deleteSvgPage,
   inspectSvgSettings,
   inspectDocumentDisplaySettings,
@@ -193,5 +194,38 @@ describe("basic SVG documents", () => {
       pageColor: "#abcdef",
       pageOpacity: 0.5,
     });
+  });
+  it("creates a bounded batch of typed basic SVG shapes", () => {
+    const source = createSvgDocument({
+      page: { width: mm(210), height: mm(297) },
+    });
+    const created = createSvgShapes(source, [
+      {
+        height: 20,
+        id: "rect_1",
+        kind: "rect",
+        style: { fill: "#ff0000", stroke: "#000000", strokeWidth: 2 },
+        width: 30,
+        x: 10,
+        y: 15,
+      },
+      { cx: 50, cy: 60, id: "circle_1", kind: "circle", r: 10 },
+      {
+        id: "polyline_1",
+        kind: "polyline",
+        points: [
+          { x: 0, y: 0 },
+          { x: 10, y: 20 },
+        ],
+      },
+    ]);
+    expect(created.ids).toEqual(["rect_1", "circle_1", "polyline_1"]);
+    expect(created.svg).toContain('id="rect_1" fill="#ff0000"');
+    expect(created.svg).toContain('points="0,0 10,20"');
+    expect(() =>
+      createSvgShapes(created.svg, [
+        { height: 1, id: "rect_1", kind: "rect", width: 1, x: 0, y: 0 },
+      ]),
+    ).toThrow("already exists");
   });
 });

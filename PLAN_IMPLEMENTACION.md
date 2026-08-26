@@ -1766,11 +1766,11 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Transacción multioperación
 
-- [ ] `F06-T36` Definir unión discriminada versionada `DesignOperation`.
-- [ ] `F06-T37` Implementar `document_apply_operations` all-or-nothing.
+- [x] `F06-T36` Definir unión discriminada versionada `DesignOperation`. — `document_apply_operations` acepta una unión estricta y acotada de create/update/transform/arrange/group/duplicate/reparent/delete, sin XML, CSS, paths ni comandos arbitrarios.
+- [x] `F06-T37` Implementar `document_apply_operations` all-or-nothing. — Cada operación transforma el SVG en memoria y hay un único commit con revisión esperada tras completar todas; una operación inválida no escribe el resultado parcial.
 - [ ] `F06-T38` Permitir referencias a IDs creados antes dentro de la misma transacción mediante aliases locales.
-- [ ] `F06-T39` Implementar `dryRun` que valida y resume sin escribir.
-- [ ] `F06-T40` Limitar operaciones, matches y costo estimado.
+- [x] `F06-T39` Implementar `dryRun` que valida y resume sin escribir. — `dryRun` ejecuta el mismo pipeline y retorna diff semántico, número de operaciones y la revisión original sin commit.
+- [~] `F06-T40` Limitar operaciones, matches y costo estimado. — Límite estricto de 50 operaciones y 100 objetivos por operación; falta exponer estimación de costo antes de cerrar la tarea.
 
 #### Puerta F06
 

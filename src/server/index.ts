@@ -647,6 +647,71 @@ const elementUpdateSchema = z
       value.text !== undefined,
     "Element update requires at least one patch",
   );
+const arrangeOperationSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.enum(["back", "front", "lower", "raise"]),
+    ids: z.array(shapeIdSchema).min(1).max(100),
+  }),
+  z.object({
+    action: z.literal("index"),
+    ids: z.array(shapeIdSchema).min(1).max(100),
+    index: z.number().int().min(0).max(100_000),
+  }),
+  z.object({
+    action: z.enum(["before", "after"]),
+    ids: z.array(shapeIdSchema).min(1).max(100),
+    relativeTo: shapeIdSchema,
+  }),
+]);
+const groupOperationSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("group"),
+    groupId: shapeIdSchema,
+    ids: z.array(shapeIdSchema).min(1).max(100),
+  }),
+  z.object({ action: z.literal("ungroup"), groupId: shapeIdSchema }),
+]);
+const designOperationSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("create"),
+    elements: z.array(shapeSchema).min(1).max(100),
+  }),
+  z.object({
+    kind: z.literal("update"),
+    elements: z.array(elementUpdateSchema).min(1).max(100),
+  }),
+  z.object({
+    kind: z.literal("transform"),
+    ids: z.array(shapeIdSchema).min(1).max(100),
+    transform: transformSchema,
+  }),
+  z.object({ kind: z.literal("arrange"), request: arrangeOperationSchema }),
+  z.object({ kind: z.literal("group"), request: groupOperationSchema }),
+  z.object({
+    kind: z.literal("duplicate"),
+    id: shapeIdSchema,
+    mode: z.enum(["copy", "use"]),
+    newId: shapeIdSchema,
+    parentId: shapeIdSchema.optional(),
+  }),
+  z.object({
+    kind: z.literal("reparent"),
+    ids: z.array(shapeIdSchema).min(1).max(100),
+    parentId: shapeIdSchema,
+  }),
+  z.object({
+    kind: z.literal("delete"),
+    ids: z.array(shapeIdSchema).min(1).max(100),
+  }),
+]);
+const semanticDiffSchema = z.object({
+  addedIds: z.array(shapeIdSchema),
+  afterElementCount: z.number().int().nonnegative(),
+  ambiguousIds: z.array(shapeIdSchema),
+  beforeElementCount: z.number().int().nonnegative(),
+  changedIds: z.array(shapeIdSchema),
+  removedIds: z.array(shapeIdSchema),
+});
 const elementSummarySchema = z.object({
   attributes: z.record(z.string(), z.string()),
   bounds: z
@@ -1674,6 +1739,129 @@ export function buildServer(config: ServerConfig): McpServer {
         backupCreated: committed.backupPath !== undefined,
         ids: created.ids,
         revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_apply_operations",
+    {
+      description:
+        "Applies a bounded ordered design transaction to an SVG. Every operation is validated against the preceding in-memory result; a failure leaves the source untouched.",
+      inputSchema: z
+        .object({
+          dryRun: z.boolean().default(false),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          operations: z.array(designOperationSchema).min(1).max(50),
+          path: z.string().min(1).max(1024),
+          version: z.literal(1).default(1),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        diff: semanticDiffSchema,
+        dryRun: z.boolean(),
+        operations: z.number().int().positive(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        version: z.literal(1),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({
+      dryRun,
+      expectedRevision,
+      operations,
+      path,
+      version,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const document = await workspace.resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      let svg = source;
+      for (const operation of operations) {
+        switch (operation.kind) {
+          case "create": {
+            const prepared = await prepareShapeSpecs(
+              operation.elements,
+              document,
+              workspace,
+              config,
+            );
+            svg = createSvgShapes(svg, prepared).svg;
+            break;
+          }
+          case "update":
+            svg = updateSvgShapes(svg, operation.elements).svg;
+            break;
+          case "transform":
+            svg = transformSvgShapes(
+              svg,
+              operation.ids,
+              operation.transform,
+            ).svg;
+            break;
+          case "arrange": {
+            const { action, ids, ...options } = operation.request;
+            svg = arrangeSvgShapes(svg, ids, action, options).svg;
+            break;
+          }
+          case "group":
+            svg = groupSvgShapes(svg, operation.request).svg;
+            break;
+          case "duplicate":
+            svg = duplicateSvgShape(svg, {
+              id: operation.id,
+              mode: operation.mode,
+              newId: operation.newId,
+              ...(operation.parentId === undefined
+                ? {}
+                : { parentId: operation.parentId }),
+            }).svg;
+            break;
+          case "reparent":
+            svg = reparentSvgShapes(svg, operation).svg;
+            break;
+          case "delete":
+            svg = deleteSvgShapes(svg, operation.ids).svg;
+            break;
+        }
+      }
+      const diff = summarizeSvgDiff(source, svg);
+      if (dryRun) {
+        const output = {
+          backupCreated: false,
+          diff,
+          dryRun: true,
+          operations: operations.length,
+          revision: expectedRevision,
+          version,
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(output) }],
+          structuredContent: output,
+        };
+      }
+      const committed = await fileStore.commit({
+        contents: Buffer.from(svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        diff,
+        dryRun: false,
+        operations: operations.length,
+        revision: committed.revision,
+        version,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],

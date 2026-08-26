@@ -699,10 +699,105 @@ try {
   ) {
     throw new Error("elements_update did not apply typed patches");
   }
+  const transactionPreview = await workspaceClient.callTool({
+    arguments: {
+      dryRun: true,
+      expectedRevision: updatedRevision,
+      operations: [
+        {
+          elements: [
+            { height: 4, id: "tx_preview", kind: "rect", width: 4, x: 1, y: 1 },
+          ],
+          kind: "create",
+        },
+        {
+          ids: ["tx_preview"],
+          kind: "transform",
+          transform: { kind: "translate", x: 2, y: 3 },
+        },
+      ],
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_apply_operations",
+  });
+  if (
+    transactionPreview.isError ||
+    transactionPreview.structuredContent?.dryRun !== true ||
+    !transactionPreview.structuredContent?.diff?.addedIds?.includes(
+      "tx_preview",
+    ) ||
+    transactionPreview.structuredContent?.revision !== updatedRevision
+  ) {
+    throw new Error(
+      "document_apply_operations dry run did not return a semantic plan",
+    );
+  }
+  const transaction = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: updatedRevision,
+      operations: [
+        {
+          elements: [
+            { height: 4, id: "tx_rect", kind: "rect", width: 4, x: 1, y: 1 },
+          ],
+          kind: "create",
+        },
+        {
+          ids: ["tx_rect"],
+          kind: "transform",
+          transform: { kind: "translate", x: 2, y: 3 },
+        },
+      ],
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_apply_operations",
+  });
+  const transactionRevision = transaction.structuredContent?.revision;
+  if (
+    transaction.isError ||
+    transaction.structuredContent?.dryRun !== false ||
+    !transaction.structuredContent?.diff?.addedIds?.includes("tx_rect") ||
+    typeof transactionRevision !== "string"
+  ) {
+    throw new Error(
+      "document_apply_operations did not atomically commit a design transaction",
+    );
+  }
+  const failedTransaction = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: transactionRevision,
+      operations: [
+        {
+          elements: [
+            {
+              height: 4,
+              id: "tx_rollback",
+              kind: "rect",
+              width: 4,
+              x: 1,
+              y: 1,
+            },
+          ],
+          kind: "create",
+        },
+        { ids: ["missing_shape"], kind: "delete" },
+      ],
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_apply_operations",
+  });
+  if (!failedTransaction.isError) {
+    throw new Error(
+      "document_apply_operations published a partial failed transaction",
+    );
+  }
   const arranged = await workspaceClient.callTool({
     arguments: {
       action: "front",
-      expectedRevision: updatedRevision,
+      expectedRevision: transactionRevision,
       ids: ["demo_rect"],
       path: "a4.svg",
       workspaceId: workspace.id,

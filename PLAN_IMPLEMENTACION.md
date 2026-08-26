@@ -1682,7 +1682,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F05-T21` Exportar SVG Inkscape y plain SVG; probar el `viewBox` grande/512 del problema conocido 6317 y aplicar solo una corrección temporal validada si la build lo reproduce. — Ambos modos usan el builder allowlisted, el artefacto valida XML/seguridad/viewBox/hash/bytes y la integración MCP confirma que plain SVG preserva `0 0 512 512`; esta build no reproduce 6317.
 - [ ] `F05-T22` Implementar selection-only como documento autónomo mediante cierre transitivo de `defs`, `href`, CSS heredado/calculado, fuentes e imágenes; detectar ciclos, remapear IDs/refs y declarar pérdidas si se opta por aplanar estilos.
 - [x] `F05-T23` Implementar text-to-path opcional con warning.
-- [ ] `F05-T24` Verificar XML, namespaces, refs, IDs y política externa.
+- [x] `F05-T24` Verificar XML, namespaces, refs, IDs y política externa. — `verifySvg` exige namespace SVG explícito, `viewBox` válido, IDs públicos únicos y cierre de `href`, ARIA y `url(#id)` tanto en atributos como CSS; la sanitización preserve-local rechaza recursos externos antes de publicar.
 - [ ] `F05-T25` Evaluar SVGZ real; gatear si no existe soporte validado.
 
 #### Batch

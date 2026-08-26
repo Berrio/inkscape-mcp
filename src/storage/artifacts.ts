@@ -4,13 +4,44 @@ import { join, resolve } from "node:path";
 import { RevisionConflictError, sha256File } from "./revisions.js";
 
 type ArtifactRecord = {
+  batchId?: string;
   expiresAt: number;
   hash: string;
+  metadata?: ArtifactMetadata;
   owner: string;
   path: string;
   size: number;
 };
-export type Artifact = { hash: string; id: string; size: number; uri: string };
+export type ArtifactMetadata = {
+  contentType?: string;
+  export?: {
+    format:
+      | "emf"
+      | "eps"
+      | "pdf"
+      | "plain-svg"
+      | "png"
+      | "ps"
+      | "svg"
+      | "svgz"
+      | "wmf"
+      | "xaml";
+    verified: boolean;
+  };
+};
+export type Artifact = {
+  batchId?: string;
+  hash: string;
+  id: string;
+  metadata?: ArtifactMetadata;
+  size: number;
+  uri: string;
+};
+export type ArtifactPublishRequest = {
+  metadata?: ArtifactMetadata;
+  sourcePath: string;
+};
+export type ArtifactBatch = { artifacts: readonly Artifact[]; id: string };
 
 export class ArtifactStore {
   private readonly records = new Map<string, ArtifactRecord>();
@@ -24,9 +55,12 @@ export class ArtifactStore {
     sourcePath: string,
     owner: string,
     ttlMs: number,
+    metadata?: ArtifactMetadata,
   ): Promise<Artifact> {
-    const metadata = await stat(sourcePath);
-    if (!metadata.isFile() || metadata.size > this.maxArtifactBytes)
+    const safeMetadata =
+      metadata === undefined ? undefined : sanitizeMetadata(metadata);
+    const sourceMetadata = await stat(sourcePath);
+    if (!sourceMetadata.isFile() || sourceMetadata.size > this.maxArtifactBytes)
       throw new RevisionConflictError("Artifact exceeds allowed size");
     if (!Number.isInteger(ttlMs) || ttlMs < 1)
       throw new Error("ttlMs must be a positive integer");
@@ -43,11 +77,51 @@ export class ArtifactStore {
     this.records.set(id, {
       expiresAt: Date.now() + ttlMs,
       hash,
+      ...(safeMetadata === undefined ? {} : { metadata: safeMetadata }),
       owner,
       path,
       size: staged.size,
     });
-    return { hash, id, size: staged.size, uri: `inkscape://artifact/${id}` };
+    return {
+      hash,
+      id,
+      ...(safeMetadata === undefined ? {} : { metadata: safeMetadata }),
+      size: staged.size,
+      uri: `inkscape://artifact/${id}`,
+    };
+  }
+
+  /** Publishes a logical batch and rolls back already published copies if any
+   * member fails. It is not advertised as crash-atomic; F05's final publisher
+   * chooses directory rename or a manifest commit strategy. */
+  public async publishBatch(
+    requests: readonly ArtifactPublishRequest[],
+    owner: string,
+    ttlMs: number,
+  ): Promise<ArtifactBatch> {
+    if (requests.length < 1 || requests.length > 1_000)
+      throw new Error("Artifact batch size is out of range");
+    const id = `batch_${crypto.randomUUID().replaceAll("-", "")}`;
+    const published: Artifact[] = [];
+    try {
+      for (const request of requests) {
+        const artifact = await this.publish(
+          request.sourcePath,
+          owner,
+          ttlMs,
+          request.metadata,
+        );
+        const record = this.records.get(artifact.id);
+        if (!record)
+          throw new Error("Published artifact record is unavailable");
+        record.batchId = id;
+        published.push({ ...artifact, batchId: id });
+      }
+      return { artifacts: published, id };
+    } catch (error) {
+      await Promise.all(published.map((artifact) => this.remove(artifact.id)));
+      throw error;
+    }
   }
 
   public async readChunk(
@@ -80,8 +154,7 @@ export class ArtifactStore {
     let removed = 0;
     for (const [id, record] of this.records)
       if (record.expiresAt <= Date.now()) {
-        await rm(record.path, { force: true });
-        this.records.delete(id);
+        await this.remove(id);
         removed += 1;
       }
     return removed;
@@ -96,6 +169,13 @@ export class ArtifactStore {
     )
       throw new RevisionConflictError("Artifact is unavailable");
     return record;
+  }
+
+  private async remove(id: string): Promise<void> {
+    const record = this.records.get(id);
+    if (!record) return;
+    this.records.delete(id);
+    await rm(record.path, { force: true });
   }
 
   private async read(
@@ -123,4 +203,27 @@ export class ArtifactStore {
     }
     return { bytes, hash: record.hash, size: record.size };
   }
+}
+
+function sanitizeMetadata(metadata: ArtifactMetadata): ArtifactMetadata {
+  if (
+    (metadata.contentType !== undefined &&
+      !/^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$/u.test(
+        metadata.contentType,
+      )) ||
+    (metadata.export !== undefined &&
+      (typeof metadata.export.verified !== "boolean" ||
+        !/^(?:emf|eps|pdf|plain-svg|png|ps|svg|svgz|wmf|xaml)$/u.test(
+          metadata.export.format,
+        )))
+  )
+    throw new Error("Artifact metadata is invalid");
+  return {
+    ...(metadata.contentType === undefined
+      ? {}
+      : { contentType: metadata.contentType }),
+    ...(metadata.export === undefined
+      ? {}
+      : { export: { ...metadata.export } }),
+  };
 }

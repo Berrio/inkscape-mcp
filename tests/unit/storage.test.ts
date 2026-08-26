@@ -420,4 +420,57 @@ describe("file revisions and atomic store", () => {
     ).rejects.toBeInstanceOf(RevisionConflictError);
     await expect(artifacts.removeExpired()).resolves.toBe(1);
   });
+  it("publishes verified export metadata in a logical opaque batch", async () => {
+    const root = await temporaryDirectory();
+    const first = join(root, "first.png");
+    const second = join(root, "second.pdf");
+    await writeFile(first, "first");
+    await writeFile(second, "second");
+    const artifacts = new ArtifactStore(join(root, "artifacts"), 100);
+    const batch = await artifacts.publishBatch(
+      [
+        {
+          metadata: {
+            contentType: "image/png",
+            export: { format: "png", verified: true },
+          },
+          sourcePath: first,
+        },
+        {
+          metadata: {
+            contentType: "application/pdf",
+            export: { format: "pdf", verified: true },
+          },
+          sourcePath: second,
+        },
+      ],
+      "owner-a",
+      60_000,
+    );
+    expect(batch.id).toMatch(/^batch_[a-f0-9]{32}$/u);
+    expect(batch.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          batchId: batch.id,
+          metadata: {
+            contentType: "image/png",
+            export: { format: "png", verified: true },
+          },
+        }),
+      ]),
+    );
+    await expect(
+      artifacts.publish(first, "owner-a", 60_000, {
+        contentType: "not a mime type",
+      }),
+    ).rejects.toThrow("metadata is invalid");
+    await expect(
+      artifacts.publishBatch(
+        [{ sourcePath: first }, { sourcePath: join(root, "missing.png") }],
+        "owner-a",
+        60_000,
+      ),
+    ).rejects.toThrow();
+    await expect(readdir(join(root, "artifacts"))).resolves.toHaveLength(2);
+  });
 });

@@ -1,11 +1,23 @@
 export type ExportPageArea = {
   kind: "page";
   pageId?: string | undefined;
+  pageIds?: readonly string[] | undefined;
 };
 export type ExportDrawingArea = { kind: "drawing" };
-export type ExportSelectionArea = { elementId: string; kind: "selection" };
+export type ExportCustomArea = {
+  kind: "custom";
+  rect: { height: number; width: number; x: number; y: number };
+};
+export type ExportSelectionArea =
+  | { elementId: string; kind: "selection" }
+  | {
+      elementIds: readonly string[];
+      kind: "selection";
+      output: "combined" | "each";
+      visibility: "document" | "selected-only";
+    };
 export type ExportAreaRequest =
-  ExportDrawingArea | ExportPageArea | ExportSelectionArea;
+  ExportDrawingArea | ExportPageArea | ExportCustomArea | ExportSelectionArea;
 export type ExportPageRectangle = {
   height: number;
   id: string;
@@ -33,17 +45,45 @@ export function normalizeExportArea(
   if (area.kind === "drawing")
     return { args: ["--export-area-drawing"], kind: "drawing" };
   if (area.kind === "selection") {
-    if (!SAFE_ID.test(area.elementId))
+    const elementId = "elementId" in area ? area.elementId : area.elementIds[0];
+    if (
+      elementId === undefined ||
+      ("elementIds" in area &&
+        (area.elementIds.length !== 1 || area.output !== "combined")) ||
+      !SAFE_ID.test(elementId)
+    )
       throw new Error("Selection ID is not valid for export");
     return {
-      args: ["--export-id-only", `--export-id=${area.elementId}`],
+      args: ["--export-id-only", `--export-id=${elementId}`],
       kind: "selection",
-      selectionId: area.elementId,
+      selectionId: elementId,
     };
   }
-  if (area.pageId === undefined)
+  if (area.kind === "custom") {
+    const right = area.rect.x + area.rect.width;
+    const bottom = area.rect.y + area.rect.height;
+    if (
+      ![area.rect.x, area.rect.y, right, bottom].every(Number.isFinite) ||
+      right <= area.rect.x ||
+      bottom <= area.rect.y
+    )
+      throw new Error("Custom export area has invalid bounds");
+    return {
+      args: [`--export-area=${area.rect.x}:${area.rect.y}:${right}:${bottom}`],
+      kind: "custom",
+    };
+  }
+  const pageId = area.pageId ?? area.pageIds?.[0];
+  if (
+    (area.pageIds !== undefined && area.pageIds.length !== 1) ||
+    (area.pageId !== undefined &&
+      area.pageIds !== undefined &&
+      area.pageIds[0] !== area.pageId)
+  )
+    throw new Error("Multiple export pages require variant planning");
+  if (pageId === undefined)
     return { args: ["--export-area-page"], kind: "page" };
-  const page = pages.find((candidate) => candidate.id === area.pageId);
+  const page = pages.find((candidate) => candidate.id === pageId);
   if (!page) throw new Error("Requested export page does not exist");
   const right = page.x + page.width;
   const bottom = page.y + page.height;

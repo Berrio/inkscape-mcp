@@ -19,4 +19,10 @@ export {
   type Snapshot,
   type SnapshotRestore,
 } from "./snapshots.js";
-export { ArtifactStore, type Artifact } from "./artifacts.js";
+export {
+  ArtifactStore,
+  type Artifact,
+  type ArtifactBatch,
+  type ArtifactMetadata,
+  type ArtifactPublishRequest,
+} from "./artifacts.js";

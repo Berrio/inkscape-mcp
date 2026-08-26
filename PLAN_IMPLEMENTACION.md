@@ -1650,13 +1650,13 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Motor común
 
-- [ ] `F05-T01` Implementar la unión discriminada de §11 por formato: PNG-only sizing/background/custom area; PDF filter DPI/pages; PS/EPS constraints; selection `combined|each|selected-only`; rechazar toda combinación cruzada.
-- [ ] `F05-T02` Extender/reutilizar `ExportAreaNormalizer` y staging/cancelación de F02/F04 para tamaño/margen/páginas; no crear un segundo pipeline PNG.
-- [ ] `F05-T03` Implementar `OutputTarget`, lock de destino, overwrite=false y staging; overwrite exige hash esperado.
-- [ ] `F05-T04` Implementar builders puros de argv.
-- [ ] `F05-T05` Implementar progress stages y cancelación del pipeline.
-- [ ] `F05-T06` Implementar verificadores por formato y manifest común.
-- [ ] `F05-T07` Extender el `ArtifactStore` de F02 con metadata/verificación de export y lifecycle de lotes.
+- [x] `F05-T01` Implementar la unión discriminada de §11 por formato: PNG-only sizing/background/custom area; PDF filter DPI/pages; PS/EPS constraints; selection `combined|each|selected-only`; rechazar toda combinación cruzada. — `exportSpecSchema` discriminado y probado.
+- [x] `F05-T02` Extender/reutilizar `ExportAreaNormalizer` y staging/cancelación de F02/F04 para tamaño/margen/páginas; no crear un segundo pipeline PNG. — Área tipada compartida y pipeline común de etapas/cleanup/cancelación; planificador múltiple se conecta en F05-WP05.
+- [x] `F05-T03` Implementar `OutputTarget`, lock de destino, overwrite=false y staging; overwrite exige hash esperado. — Targets tipados seguros; `AtomicFileStore` existente conserva lock, staging y revisión obligatoria para overwrite.
+- [x] `F05-T04` Implementar builders puros de argv. — Builder común allowlisted por formato/área.
+- [x] `F05-T05` Implementar progress stages y cancelación del pipeline. — Etapas ordenadas y `AbortSignal` propagable al adaptador.
+- [x] `F05-T06` Implementar verificadores por formato y manifest común. — Dispatcher estructural para PNG/PDF/SVG y manifest común; formatos sin verifier quedan gateados.
+- [x] `F05-T07` Extender el `ArtifactStore` de F02 con metadata/verificación de export y lifecycle de lotes. — Metadata validada y batch opaco con rollback best-effort.
 
 #### PNG
 

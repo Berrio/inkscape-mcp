@@ -2818,7 +2818,7 @@ function resourceVariable(
 function previewCacheKey(request: {
   area: {
     args: readonly string[];
-    kind: "drawing" | "page" | "selection";
+    kind: "custom" | "drawing" | "page" | "selection";
     pageId?: string | undefined;
     selectionId?: string | undefined;
   };

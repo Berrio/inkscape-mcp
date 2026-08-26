@@ -132,6 +132,16 @@ try {
           parentId: "layer_main",
           style: { stroke: "#000000", strokeWidth: 1 },
         },
+        {
+          cx: 120,
+          cy: 50,
+          id: "demo_star",
+          kind: "star",
+          points: 5,
+          r1: 10,
+          r2: 5,
+          style: { fill: "#0000ff" },
+        },
       ],
       expectedRevision: resizedRevision,
       path: "a4.svg",
@@ -147,6 +157,7 @@ try {
     elements.structuredContent?.ids?.[2] !== "demo_text" ||
     elements.structuredContent?.ids?.[3] !== "temporary_circle" ||
     elements.structuredContent?.ids?.[4] !== "demo_path" ||
+    elements.structuredContent?.ids?.[5] !== "demo_star" ||
     typeof elementsRevision !== "string"
   ) {
     throw new Error("elements_create did not publish a typed rectangle");

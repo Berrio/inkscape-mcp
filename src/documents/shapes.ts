@@ -6,7 +6,12 @@ import {
 } from "@xmldom/xmldom";
 
 import { sanitizeSvg } from "../svg/index.js";
-import { parseSvgPathData } from "./path-data.js";
+import {
+  parseSvgPathData,
+  reverseLinearSvgPathData,
+  splitSvgPathSubpaths,
+  serializeSvgPathData,
+} from "./path-data.js";
 
 export type ShapeStyle = {
   classes?: readonly string[] | undefined;
@@ -348,6 +353,112 @@ export function flattenSvgShapeTransforms(
   };
 }
 
+/** Combines style-equivalent, same-parent SVG paths without changing geometry. */
+export function combineSvgPaths(
+  source: string,
+  ids: readonly string[],
+): { id: string; removedIds: readonly string[]; svg: string } {
+  if (ids.length < 2 || ids.length > 100)
+    throw new Error("Path combine requires between two and 100 IDs");
+  if (new Set(ids).size !== ids.length)
+    throw new Error("Path combine IDs must be unique");
+  const document = parseSafeDocument(source);
+  const elements = Array.from(document.getElementsByTagName("*"));
+  const paths = ids.map((id) => requirePathElement(elements, id));
+  const first = paths[0]!;
+  const parent = parentElement(first);
+  if (!parent || paths.some((path) => parentElement(path) !== parent))
+    throw new Error("Combined paths must share the same parent");
+  const signature = pathPresentationSignature(first);
+  if (paths.some((path) => pathPresentationSignature(path) !== signature))
+    throw new Error(
+      "Combined paths must have identical presentation attributes",
+    );
+  const removedIds = ids.slice(1);
+  assertIdsUnreferencedOutside(elements, new Set(paths.slice(1)), removedIds);
+  first.setAttribute(
+    "d",
+    paths
+      .map((path) => {
+        const data = path.getAttribute("d");
+        if (data === null) throw new Error("Path data is missing");
+        return serializeSvgPathData(parseSvgPathData(data));
+      })
+      .join(" "),
+  );
+  for (const path of paths.slice(1)) path.parentNode?.removeChild(path);
+  return {
+    id: ids[0]!,
+    removedIds,
+    svg: new XMLSerializer().serializeToString(document),
+  };
+}
+
+/** Replaces a compound path with explicitly named path elements per subpath. */
+export function breakApartSvgPath(
+  source: string,
+  id: string,
+  newIds: readonly string[],
+): { ids: readonly string[]; svg: string } {
+  if (!SAFE_ID.test(id)) throw new Error("Shape ID is invalid");
+  if (newIds.length < 2 || newIds.length > 100)
+    throw new Error("Break apart requires between two and 100 new IDs");
+  if (
+    new Set(newIds).size !== newIds.length ||
+    newIds.some((item) => !SAFE_ID.test(item))
+  )
+    throw new Error("Break apart IDs must be unique valid shape IDs");
+  const document = parseSafeDocument(source);
+  const elements = Array.from(document.getElementsByTagName("*"));
+  const path = requirePathElement(elements, id);
+  if (
+    elements.some((element) => {
+      const candidate = element.getAttribute("id");
+      return (
+        candidate !== id && candidate !== null && newIds.includes(candidate)
+      );
+    })
+  )
+    throw new Error("Shape ID already exists");
+  assertIdsUnreferencedOutside(elements, new Set([path]), [id]);
+  const data = path.getAttribute("d");
+  if (data === null) throw new Error("Path data is missing");
+  const subpaths = splitSvgPathSubpaths(parseSvgPathData(data));
+  if (subpaths.length !== newIds.length)
+    throw new Error(
+      "Break apart newIds must match the number of path subpaths",
+    );
+  const parent = parentElement(path);
+  if (!parent) throw new Error("Path parent is missing");
+  for (let index = 0; index < subpaths.length; index += 1) {
+    const part = path.cloneNode(false) as XmlElement;
+    part.setAttribute("id", newIds[index]!);
+    part.setAttribute("d", serializeSvgPathData(subpaths[index]!));
+    parent.insertBefore(part, path);
+  }
+  parent.removeChild(path);
+  return {
+    ids: [...newIds],
+    svg: new XMLSerializer().serializeToString(document),
+  };
+}
+
+/** Reverses line-only path subpaths while retaining element identity and style. */
+export function reverseSvgPath(
+  source: string,
+  id: string,
+): { id: string; svg: string } {
+  const document = parseSafeDocument(source);
+  const path = requirePathElement(
+    Array.from(document.getElementsByTagName("*")),
+    id,
+  );
+  const data = path.getAttribute("d");
+  if (data === null) throw new Error("Path data is missing");
+  path.setAttribute("d", reverseLinearSvgPathData(data));
+  return { id, svg: new XMLSerializer().serializeToString(document) };
+}
+
 export function updateSvgShapes(
   source: string,
   updates: readonly ElementUpdate[],
@@ -648,6 +759,38 @@ export function groupSvgShapes(
     ids: [request.groupId],
     svg: new XMLSerializer().serializeToString(document),
   };
+}
+
+function requirePathElement(
+  elements: readonly XmlElement[],
+  id: string,
+): XmlElement {
+  if (!SAFE_ID.test(id)) throw new Error("Shape ID is invalid");
+  const path = elements.find((element) => element.getAttribute("id") === id);
+  if (!path || path.localName !== "path")
+    throw new Error("Path ID does not name an SVG path");
+  return path;
+}
+
+function pathPresentationSignature(element: XmlElement): string {
+  const attributes = Array.from(element.attributes)
+    .filter((attribute) => attribute.name !== "d" && attribute.name !== "id")
+    .map((attribute) => [attribute.name, attribute.value] as const)
+    .sort(([left], [right]) => left.localeCompare(right));
+  return JSON.stringify(attributes);
+}
+
+function assertIdsUnreferencedOutside(
+  elements: readonly XmlElement[],
+  removedElements: ReadonlySet<XmlElement>,
+  removedIds: readonly string[],
+): void {
+  const ids = new Set(removedIds);
+  for (const element of elements) {
+    if (isWithinDeletedTree(element, removedElements)) continue;
+    if (referencesDeletedId(element, ids))
+      throw new Error("Replacing these paths would break an SVG reference");
+  }
 }
 
 function parseSafeDocument(source: string): XmlDocument {

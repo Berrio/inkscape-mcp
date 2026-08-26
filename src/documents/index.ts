@@ -32,6 +32,9 @@ export {
 } from "./elements.js";
 export {
   createSvgShapes,
+  combineSvgPaths,
+  breakApartSvgPath,
+  reverseSvgPath,
   flattenSvgShapeTransforms,
   duplicateSvgShape,
   reparentSvgShapes,
@@ -53,7 +56,9 @@ export {
 } from "./shapes.js";
 export {
   parseSvgPathData,
+  reverseLinearSvgPathData,
   serializeSvgPathData,
+  splitSvgPathSubpaths,
   type SvgPathSegment,
 } from "./path-data.js";
 export {

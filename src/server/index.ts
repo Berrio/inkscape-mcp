@@ -14,6 +14,8 @@ import {
   changePageOrientationSvg,
   createSvgDocument,
   createSvgShapes,
+  combineSvgPaths,
+  breakApartSvgPath,
   flattenSvgShapeTransforms,
   arrangeSvgShapes,
   groupSvgShapes,
@@ -35,6 +37,7 @@ import {
   querySvgElementTargets,
   reorderSvgPages,
   reparentSvgShapes,
+  reverseSvgPath,
   resizeContentSvg,
   resizePageOnlySvg,
   rewriteStagedAssetReferences,
@@ -2198,6 +2201,154 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         backupCreated: committed.backupPath !== undefined,
         ids: transformed.ids,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "paths_combine",
+    {
+      description:
+        "Combines same-parent SVG paths only when their presentation attributes match exactly and removed IDs have no live SVG references.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z.array(shapeIdSchema).min(2).max(100),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        id: shapeIdSchema,
+        removedIds: z.array(shapeIdSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, ids, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const result = combineSvgPaths(
+        await readFile(document.absolutePath, "utf8"),
+        ids,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(result.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        id: result.id,
+        removedIds: result.removedIds,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "path_break_apart",
+    {
+      description:
+        "Splits a compound SVG path into explicit, caller-supplied IDs. Existing references to the source ID are rejected before mutation.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          newIds: z.array(shapeIdSchema).min(2).max(100),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        ids: z.array(shapeIdSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, id, newIds, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const result = breakApartSvgPath(
+        await readFile(document.absolutePath, "utf8"),
+        id,
+        newIds,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(result.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        ids: result.ids,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "path_reverse",
+    {
+      description:
+        "Reverses line-only SVG path subpaths while retaining the path ID and presentation. Curves and arcs are rejected until their exact reversal is available.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        id: shapeIdSchema,
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, id, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const result = reverseSvgPath(
+        await readFile(document.absolutePath, "utf8"),
+        id,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(result.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        id: result.id,
         revision: committed.revision,
       };
       return {

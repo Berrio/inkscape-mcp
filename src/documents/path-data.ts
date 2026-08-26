@@ -118,6 +118,107 @@ export function serializeSvgPathData(
     .join(" ");
 }
 
+/** Splits a path command stream at each explicit SVG moveto. */
+export function splitSvgPathSubpaths(
+  segments: readonly SvgPathSegment[],
+): SvgPathSegment[][] {
+  const result: SvgPathSegment[][] = [];
+  let current: SvgPathSegment[] | undefined;
+  for (const segment of segments) {
+    if (segment.command === "M" || segment.command === "m") {
+      current = [segment];
+      result.push(current);
+      continue;
+    }
+    if (current === undefined)
+      throw new Error("Path data must start with a moveto command");
+    current.push(segment);
+  }
+  if (result.length === 0)
+    throw new Error("Path must contain a moveto command");
+  return result;
+}
+
+/** Reverses simple line-only subpaths without changing their fill closure. */
+export function reverseLinearSvgPathData(value: string): string {
+  const subpaths = splitSvgPathSubpaths(parseSvgPathData(value));
+  return subpaths
+    .map((subpath) => serializeReversedLinearSubpath(subpath))
+    .join(" ");
+}
+
+function serializeReversedLinearSubpath(
+  subpath: readonly SvgPathSegment[],
+): string {
+  if (subpath[0]?.command === "m")
+    throw new Error(
+      "Path reverse currently requires absolute moveto commands for each subpath",
+    );
+  let current = { x: 0, y: 0 };
+  let start = { x: 0, y: 0 };
+  let closed = false;
+  const points: { x: number; y: number }[] = [];
+  for (const segment of subpath) {
+    switch (segment.command) {
+      case "M":
+        current = { x: segment.values[0]!, y: segment.values[1]! };
+        start = current;
+        points.push(current);
+        break;
+      case "m":
+        throw new Error(
+          "Path reverse currently requires absolute moveto commands for each subpath",
+        );
+      case "L":
+        current = { x: segment.values[0]!, y: segment.values[1]! };
+        points.push(current);
+        break;
+      case "l":
+        current = {
+          x: current.x + segment.values[0]!,
+          y: current.y + segment.values[1]!,
+        };
+        points.push(current);
+        break;
+      case "H":
+        current = { x: segment.values[0]!, y: current.y };
+        points.push(current);
+        break;
+      case "h":
+        current = { x: current.x + segment.values[0]!, y: current.y };
+        points.push(current);
+        break;
+      case "V":
+        current = { x: current.x, y: segment.values[0]! };
+        points.push(current);
+        break;
+      case "v":
+        current = { x: current.x, y: current.y + segment.values[0]! };
+        points.push(current);
+        break;
+      case "Z":
+      case "z":
+        current = start;
+        closed = true;
+        break;
+      default:
+        throw new Error(
+          "Path reverse currently supports only moveto, lineto, horizontal, vertical and close commands",
+        );
+    }
+  }
+  const ordered = closed
+    ? [points[0]!, ...points.slice(1).toReversed()]
+    : [...points].toReversed();
+  const head = ordered[0];
+  if (!head) throw new Error("Path subpath is empty");
+  return [
+    `M ${head.x} ${head.y}`,
+    ...ordered.slice(1).map((point) => `L ${point.x} ${point.y}`),
+    ...(closed ? ["Z"] : []),
+  ].join(" ");
+}
+
 function validatePathValues(
   command: SvgPathSegment["command"],
   values: readonly number[],

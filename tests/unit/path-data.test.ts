@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseSvgPathData,
+  reverseLinearSvgPathData,
   serializeSvgPathData,
+  splitSvgPathSubpaths,
 } from "../../src/documents/index.js";
 
 describe("SVG path AST", () => {
@@ -36,5 +38,16 @@ describe("SVG path AST", () => {
       "arc flags",
     );
     expect(() => parseSvgPathData("M 0 0 R 1 2")).toThrow("invalid syntax");
+  });
+
+  it("splits compound paths and reverses supported linear subpaths", () => {
+    const compound = parseSvgPathData("M 0 0 L 4 0 L 4 3 Z M 8 0 H 10 V 2");
+    expect(splitSvgPathSubpaths(compound)).toHaveLength(2);
+    expect(reverseLinearSvgPathData("M 0 0 L 4 0 L 4 3 Z M 8 0 H 10 V 2")).toBe(
+      "M 0 0 L 4 3 L 4 0 Z M 10 2 L 10 0 L 8 0",
+    );
+    expect(() => reverseLinearSvgPathData("M 0 0 C 1 2 3 4 5 6")).toThrow(
+      "only moveto, lineto, horizontal, vertical and close",
+    );
   });
 });

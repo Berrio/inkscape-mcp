@@ -4,12 +4,15 @@ import {
   adjustPageMarginsSvg,
   expandPdfMarginsSvg,
   arrangeSvgShapes,
+  breakApartSvgPath,
+  combineSvgPaths,
   createSvgDocument,
   changePageOrientationSvg,
   createSvgShapes,
   flattenSvgShapeTransforms,
   duplicateSvgShape,
   reparentSvgShapes,
+  reverseSvgPath,
   groupSvgShapes,
   fitPageToBoundsSvg,
   deleteSvgPage,
@@ -700,6 +703,25 @@ describe("basic SVG documents", () => {
         kind: "matrix",
       }),
     ).toThrow("invertible");
+    const combinedPaths = combineSvgPaths(
+      '<svg xmlns="http://www.w3.org/2000/svg"><path id="left" fill="#ff0000" d="M 0 0 L 1 0"/><path id="right" fill="#ff0000" d="M 2 0 L 3 0"/></svg>',
+      ["left", "right"],
+    );
+    expect(combinedPaths.removedIds).toEqual(["right"]);
+    expect(combinedPaths.svg).toContain(
+      'id="left" fill="#ff0000" d="M 0 0 L 1 0 M 2 0 L 3 0"',
+    );
+    const brokenPaths = breakApartSvgPath(combinedPaths.svg, "left", [
+      "part_one",
+      "part_two",
+    ]);
+    expect(brokenPaths.ids).toEqual(["part_one", "part_two"]);
+    expect(brokenPaths.svg).toContain('id="part_one"');
+    const reversedPath = reverseSvgPath(
+      '<svg xmlns="http://www.w3.org/2000/svg"><path id="line" d="M 0 0 H 2 V 3"/></svg>',
+      "line",
+    );
+    expect(reversedPath.svg).toContain('d="M 2 3 L 2 0 L 0 0"');
     const updated = updateSvgShapes(created.svg, [
       {
         geometry: { kind: "rect", width: 35, x: 12 },

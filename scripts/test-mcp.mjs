@@ -64,6 +64,61 @@ try {
     throw new Error("workspace_list did not return an opaque workspace ID");
   }
   await writeFile(
+    join(workspaceRoot, "paths.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><path id="path_left" fill="#ff0000" d="M 0 0 L 2 0"/><path id="path_right" fill="#ff0000" d="M 4 0 L 6 0"/></svg>',
+  );
+  const pathsRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "paths.svg")))
+    .digest("hex");
+  const combinedPaths = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: pathsRevision,
+      ids: ["path_left", "path_right"],
+      path: "paths.svg",
+      workspaceId: workspace.id,
+    },
+    name: "paths_combine",
+  });
+  const combinedPathsRevision = combinedPaths.structuredContent?.revision;
+  if (
+    combinedPaths.isError ||
+    combinedPaths.structuredContent?.id !== "path_left" ||
+    combinedPaths.structuredContent?.removedIds?.[0] !== "path_right" ||
+    typeof combinedPathsRevision !== "string"
+  )
+    throw new Error("paths_combine did not preserve its target path");
+  const brokenPaths = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: combinedPathsRevision,
+      id: "path_left",
+      newIds: ["path_first", "path_second"],
+      path: "paths.svg",
+      workspaceId: workspace.id,
+    },
+    name: "path_break_apart",
+  });
+  const brokenPathsRevision = brokenPaths.structuredContent?.revision;
+  if (
+    brokenPaths.isError ||
+    brokenPaths.structuredContent?.ids?.length !== 2 ||
+    typeof brokenPathsRevision !== "string"
+  )
+    throw new Error("path_break_apart did not publish explicit new IDs");
+  const reversedPath = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: brokenPathsRevision,
+      id: "path_first",
+      path: "paths.svg",
+      workspaceId: workspace.id,
+    },
+    name: "path_reverse",
+  });
+  if (
+    reversedPath.isError ||
+    reversedPath.structuredContent?.id !== "path_first"
+  )
+    throw new Error("path_reverse did not preserve the path identity");
+  await writeFile(
     join(workspaceRoot, "percentage.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="50%" viewBox="0 0 20 10"/>',
   );

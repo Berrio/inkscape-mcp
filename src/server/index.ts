@@ -40,7 +40,9 @@ import { summarizeSvgDiff } from "../svg/index.js";
 import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import {
+  buildExportArgv,
   normalizeExportArea,
+  parseExportSpec,
   verifyPdf,
   verifyPng,
   verifySvg,
@@ -2390,50 +2392,129 @@ export function buildServer(config: ServerConfig): McpServer {
     {
       description:
         "Exports an SVG document to PNG through Inkscape using only bounded, allowlisted options.",
-      inputSchema: z.object({
-        area: z.enum(["drawing", "page"]).default("page"),
-        background: z
-          .enum(["document", "solid", "transparent"])
-          .default("document"),
-        backgroundColor: z
-          .string()
-          .regex(/^#[a-fA-F0-9]{6}$/u)
-          .optional(),
-        backgroundOpacity: z.number().finite().min(0).max(1).optional(),
-        expectedOutputRevision: z
-          .string()
-          .regex(/^[a-f0-9]{64}$/u)
-          .optional(),
-        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
-        dpi: z.number().finite().positive().max(9_600).optional(),
-        height: z.number().int().positive().max(100_000).optional(),
-        outputPath: z.string().min(1).max(1024),
-        path: z.string().min(1).max(1024),
-        width: z.number().int().positive().max(100_000).optional(),
-        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
-      }),
+      inputSchema: z
+        .object({
+          allowDistortion: z.boolean().default(false),
+          area: z
+            .enum(["custom", "drawing", "page", "selection"])
+            .default("page"),
+          background: z
+            .enum(["document", "solid", "transparent"])
+            .default("document"),
+          backgroundColor: z
+            .string()
+            .regex(/^#[a-fA-F0-9]{6}$/u)
+            .optional(),
+          backgroundOpacity: z.number().finite().min(0).max(1).optional(),
+          customArea: z
+            .object({
+              height: z.number().finite().positive(),
+              width: z.number().finite().positive(),
+              x: z.number().finite(),
+              y: z.number().finite(),
+            })
+            .strict()
+            .optional(),
+          expectedOutputRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          dpi: z.number().finite().positive().max(9_600).optional(),
+          height: z.number().int().positive().max(100_000).optional(),
+          outputPath: z.string().min(1).max(1024),
+          pageId: shapeIdSchema.optional(),
+          path: z.string().min(1).max(1024),
+          selectionId: shapeIdSchema.optional(),
+          width: z.number().int().positive().max(100_000).optional(),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .superRefine((value, context) => {
+          if (value.area === "custom" && value.customArea === undefined)
+            context.addIssue({
+              code: "custom",
+              message: "Custom PNG area requires customArea",
+              path: ["customArea"],
+            });
+          if (value.area !== "custom" && value.customArea !== undefined)
+            context.addIssue({
+              code: "custom",
+              message: "customArea is only valid for a custom PNG area",
+              path: ["customArea"],
+            });
+          if (value.area === "selection" && value.selectionId === undefined)
+            context.addIssue({
+              code: "custom",
+              message: "Selection PNG area requires selectionId",
+              path: ["selectionId"],
+            });
+          if (value.area !== "selection" && value.selectionId !== undefined)
+            context.addIssue({
+              code: "custom",
+              message: "selectionId is only valid for a selection PNG area",
+              path: ["selectionId"],
+            });
+          if (value.area !== "page" && value.pageId !== undefined)
+            context.addIssue({
+              code: "custom",
+              message: "pageId is only valid for a page PNG area",
+              path: ["pageId"],
+            });
+          if (
+            value.width !== undefined &&
+            value.height !== undefined &&
+            !value.allowDistortion
+          )
+            context.addIssue({
+              code: "custom",
+              message: "Exact PNG dimensions require allowDistortion=true",
+              path: ["allowDistortion"],
+            });
+        }),
       outputSchema: z.object({
-        area: z.enum(["drawing", "page"]),
+        area: z.enum(["custom", "drawing", "page", "selection"]),
         background: z.enum(["document", "solid", "transparent"]),
+        bitDepth: z.union([
+          z.literal(1),
+          z.literal(2),
+          z.literal(4),
+          z.literal(8),
+          z.literal(16),
+        ]),
+        byteLength: z.number().int().positive(),
+        colorType: z.union([
+          z.literal(0),
+          z.literal(2),
+          z.literal(3),
+          z.literal(4),
+          z.literal(6),
+        ]),
         dpiX: z.number().positive().optional(),
         dpiY: z.number().positive().optional(),
         height: z.number().int().positive(),
+        hash: z.string().regex(/^[a-f0-9]{64}$/u),
+        pageId: shapeIdSchema.optional(),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        selectionId: shapeIdSchema.optional(),
         width: z.number().int().positive(),
       }),
       annotations: { destructiveHint: false },
     },
     async ({
+      allowDistortion,
       area,
       background,
       backgroundColor,
       backgroundOpacity,
+      customArea,
       expectedOutputRevision,
       expectedRevision,
       dpi,
       height,
       outputPath,
+      pageId,
       path,
+      selectionId,
       width,
       workspaceId,
     }) => {
@@ -2455,6 +2536,72 @@ export function buildServer(config: ServerConfig): McpServer {
         throw new Error(
           "backgroundOpacity is only valid with a solid PNG background",
         );
+      const source = await readFile(input.absolutePath, "utf8");
+      const exportArea =
+        area === "custom"
+          ? { kind: "custom" as const, rect: customArea! }
+          : area === "selection"
+            ? {
+                elementIds: [selectionId!],
+                kind: "selection" as const,
+                output: "combined" as const,
+                visibility: "document" as const,
+              }
+            : area === "page"
+              ? {
+                  kind: "page" as const,
+                  ...(pageId === undefined ? {} : { pageIds: [pageId] }),
+                }
+              : { kind: "drawing" as const };
+      const normalizedArea = normalizeExportArea(
+        exportArea,
+        listSvgPages(source),
+      );
+      if (normalizedArea.selectionId !== undefined) {
+        const selection = querySvgElementTargets(source, {
+          ids: [normalizedArea.selectionId],
+          limit: 1,
+          offset: 0,
+        });
+        if (selection.missingIds.length > 0)
+          throw new Error("PNG selection element does not exist");
+      }
+      const pngSpec = parseExportSpec({
+        area: exportArea,
+        background:
+          background === "solid"
+            ? {
+                color: backgroundColor!,
+                mode: "solid",
+                opacity: backgroundOpacity ?? 1,
+              }
+            : { mode: background },
+        format: "png",
+        size:
+          dpi !== undefined
+            ? { dpi, mode: "dpi" }
+            : width !== undefined && height !== undefined
+              ? {
+                  allowDistortion,
+                  heightPx: height,
+                  mode: "exact",
+                  widthPx: width,
+                }
+              : width !== undefined
+                ? { mode: "width", widthPx: width }
+                : height !== undefined
+                  ? { heightPx: height, mode: "height" }
+                  : undefined,
+        source: { expectedRevision, path },
+        target: {
+          ...(expectedOutputRevision === undefined
+            ? {}
+            : { expectedOutputRevision }),
+          kind: "file",
+          overwrite: expectedOutputRevision !== undefined,
+          path: outputPath,
+        },
+      });
       const discovery = await locateInkscape({
         config,
         cwd: process.cwd(),
@@ -2484,29 +2631,21 @@ export function buildServer(config: ServerConfig): McpServer {
           await readFile(nativeInput.path, "utf8"),
         );
         const backgroundArguments =
-          background === "transparent"
-            ? ["--export-background-opacity=0"]
-            : background === "solid"
-              ? [
-                  `--export-background=${backgroundColor!}`,
-                  `--export-background-opacity=${backgroundOpacity ?? 1}`,
-                ]
-              : [
-                  `--export-background=${displaySettings.pageColor}`,
-                  `--export-background-opacity=${displaySettings.pageOpacity}`,
-                ];
+          background === "document"
+            ? [
+                `--export-background=${displaySettings.pageColor}`,
+                `--export-background-opacity=${displaySettings.pageOpacity}`,
+              ]
+            : [];
         const temporaryOutput = join(directory, "export.png");
+        const exportArgs = buildExportArgv({
+          area: normalizedArea,
+          inputPath: nativeInput.path,
+          outputPath: temporaryOutput,
+          spec: pngSpec,
+        });
         const result = await runner.run(candidate.executablePath, {
-          args: [
-            nativeInput.path,
-            "--export-type=png",
-            `--export-filename=${temporaryOutput}`,
-            area === "drawing" ? "--export-area-drawing" : "--export-area-page",
-            ...backgroundArguments,
-            ...(dpi === undefined ? [] : [`--export-dpi=${dpi}`]),
-            ...(width === undefined ? [] : [`--export-width=${width}`]),
-            ...(height === undefined ? [] : [`--export-height=${height}`]),
-          ],
+          args: [...exportArgs, ...backgroundArguments],
           cwd: directory,
           maxStderrBytes: config.maxStderrBytes,
           maxStdoutBytes: config.maxStdoutBytes,
@@ -2532,9 +2671,15 @@ export function buildServer(config: ServerConfig): McpServer {
       });
       const result = {
         ...png.metadata,
-        area,
+        area: normalizedArea.kind,
         background,
+        ...(normalizedArea.pageId === undefined
+          ? {}
+          : { pageId: normalizedArea.pageId }),
         revision: committed.revision,
+        ...(normalizedArea.selectionId === undefined
+          ? {}
+          : { selectionId: normalizedArea.selectionId }),
       };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],

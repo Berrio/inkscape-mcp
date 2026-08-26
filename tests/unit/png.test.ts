@@ -32,7 +32,14 @@ describe("PNG verification", () => {
     physical.writeUInt32BE(0, 17);
     await writeFile(path, Buffer.concat([header, physical]));
     const metadata = await verifyPng(path, { width: 320, height: 200 });
-    expect(metadata).toMatchObject({ width: 320, height: 200 });
+    expect(metadata).toMatchObject({
+      bitDepth: 8,
+      byteLength: 54,
+      colorType: 6,
+      height: 200,
+      width: 320,
+    });
+    expect(metadata.hash).toMatch(/^[a-f0-9]{64}$/u);
     expect(metadata.dpiX).toBeCloseTo(300);
     expect(metadata.dpiY).toBeCloseTo(300);
     await expect(verifyPng(path, { width: 1 })).rejects.toThrow("dimensions");

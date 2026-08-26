@@ -718,6 +718,38 @@ try {
   ) {
     throw new Error("export_png did not apply area and background requests");
   }
+  const selectionPng = await workspaceClient.callTool({
+    arguments: {
+      area: "selection",
+      expectedRevision: settingsRevision,
+      outputPath: "a4-selection.png",
+      path: "a4.svg",
+      selectionId: "demo_rect",
+      workspaceId: workspace.id,
+    },
+    name: "export_png",
+  });
+  if (
+    selectionPng.isError ||
+    selectionPng.structuredContent?.area !== "selection" ||
+    selectionPng.structuredContent?.selectionId !== "demo_rect"
+  ) {
+    throw new Error("export_png did not export the typed selection area");
+  }
+  const customPng = await workspaceClient.callTool({
+    arguments: {
+      area: "custom",
+      customArea: { height: 20, width: 20, x: 0, y: 0 },
+      expectedRevision: settingsRevision,
+      outputPath: "a4-custom.png",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_png",
+  });
+  if (customPng.isError || customPng.structuredContent?.area !== "custom") {
+    throw new Error("export_png did not export a typed custom area");
+  }
   const pdf = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,

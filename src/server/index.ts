@@ -1,5 +1,6 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
-import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -38,12 +39,18 @@ import { nativeVisualBoundsDescriptor } from "../geometry/index.js";
 import { summarizeSvgDiff } from "../svg/index.js";
 import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
-import { verifyPdf, verifyPng, verifySvg } from "../export/index.js";
+import {
+  normalizeExportArea,
+  verifyPdf,
+  verifyPng,
+  verifySvg,
+} from "../export/index.js";
 import {
   parseInkscapeQueryAll,
   type InkscapeBounds,
 } from "../inkscape/index.js";
 import { ProcessRunner } from "../runner/index.js";
+import { PreviewCache } from "../preview/index.js";
 import {
   AtomicFileStore,
   ArtifactStore,
@@ -559,6 +566,8 @@ const elementSummarySchema = z.object({
   parentId: shapeIdSchema.optional(),
 });
 const nativeVisualBounds = nativeVisualBoundsDescriptor();
+const PREVIEW_CACHE_TTL_MS = 10 * 60 * 1_000;
+const PREVIEW_MAX_AXIS = 2_048;
 
 export function buildServer(config: ServerConfig): McpServer {
   const server = new McpServer({
@@ -583,6 +592,12 @@ export function buildServer(config: ServerConfig): McpServer {
       "inkscape-mcp-artifacts",
     ),
     config.maxArtifactBytes,
+  );
+  const previewCache = new PreviewCache(
+    join(
+      config.scratchRoot === "auto" ? tmpdir() : config.scratchRoot,
+      "inkscape-mcp-preview-cache",
+    ),
   );
   const workspaces = () => WorkspaceService.create(config.workspaceRoots);
 
@@ -2128,26 +2143,57 @@ export function buildServer(config: ServerConfig): McpServer {
     {
       description:
         "Renders a bounded transparent PNG preview through Inkscape without changing the source document. Small results are returned inline and every preview is saved to an authorized workspace path.",
-      inputSchema: z.object({
-        area: z.enum(["drawing", "page"]).default("page"),
-        expectedOutputRevision: z
-          .string()
-          .regex(/^[a-f0-9]{64}$/u)
-          .optional(),
-        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
-        height: z.number().int().positive().max(2_048).optional(),
-        outputPath: z.string().min(1).max(1024),
-        path: z.string().min(1).max(1024),
-        width: z.number().int().positive().max(2_048).default(1_024),
-        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
-      }),
+      inputSchema: z
+        .object({
+          area: z.enum(["drawing", "page", "selection"]).default("page"),
+          expectedOutputRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          height: z.number().int().positive().max(PREVIEW_MAX_AXIS).optional(),
+          outputPath: z.string().min(1).max(1024),
+          pageId: shapeIdSchema.optional(),
+          path: z.string().min(1).max(1024),
+          selectionId: shapeIdSchema.optional(),
+          width: z
+            .number()
+            .int()
+            .positive()
+            .max(PREVIEW_MAX_AXIS)
+            .default(1_024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .superRefine((value, context) => {
+          if (value.area === "selection" && value.selectionId === undefined)
+            context.addIssue({
+              code: "custom",
+              message: "Selection preview requires selectionId",
+              path: ["selectionId"],
+            });
+          if (value.area !== "selection" && value.selectionId !== undefined)
+            context.addIssue({
+              code: "custom",
+              message: "selectionId is only valid for a selection preview",
+              path: ["selectionId"],
+            });
+          if (value.area !== "page" && value.pageId !== undefined)
+            context.addIssue({
+              code: "custom",
+              message: "pageId is only valid for a page preview",
+              path: ["pageId"],
+            });
+        }),
       outputSchema: z.object({
-        area: z.enum(["drawing", "page"]),
+        area: z.enum(["drawing", "page", "selection"]),
         artifact: artifactSchema,
+        cache: z.enum(["hit", "miss"]),
         documentPath: z.string(),
         height: z.number().int().positive(),
         inline: z.boolean(),
+        pageId: shapeIdSchema.optional(),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        selectionId: shapeIdSchema.optional(),
         width: z.number().int().positive(),
       }),
       annotations: { destructiveHint: false },
@@ -2158,7 +2204,9 @@ export function buildServer(config: ServerConfig): McpServer {
       expectedRevision,
       height,
       outputPath,
+      pageId,
       path,
+      selectionId,
       width,
       workspaceId,
     }) => {
@@ -2168,6 +2216,26 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = await workspace.resolveNewOutput(workspaceId, outputPath);
       if (!/\.png$/iu.test(output.relativePath))
         throw new Error("document_render_preview requires a .png output path");
+      if ((await sha256File(input.absolutePath)) !== expectedRevision)
+        throw new Error("Document revision no longer matches");
+      const source = await readFile(input.absolutePath, "utf8");
+      const normalizedArea = normalizeExportArea(
+        area === "selection"
+          ? { elementId: selectionId!, kind: "selection" }
+          : area === "page"
+            ? { kind: "page", ...(pageId === undefined ? {} : { pageId }) }
+            : { kind: "drawing" },
+        listSvgPages(source),
+      );
+      if (normalizedArea.selectionId !== undefined) {
+        const selection = querySvgElementTargets(source, {
+          ids: [normalizedArea.selectionId],
+          limit: 1,
+          offset: 0,
+        });
+        if (selection.missingIds.length > 0)
+          throw new Error("Preview selection element does not exist");
+      }
       const discovery = await locateInkscape({
         config,
         cwd: process.cwd(),
@@ -2182,46 +2250,80 @@ export function buildServer(config: ServerConfig): McpServer {
       );
       if (!("version" in probe))
         throw new Error("Inkscape executable could not be validated");
-      const preview = await scratch.withDirectory(
-        "staging",
-        async (directory) => {
-          const nativeInput = await createNativeInputBundle(
-            input.absolutePath,
-            expectedRevision,
-            directory,
-            {
-              allowedRoot: input.workspaceRoot,
-              maxDependencyBytes: config.maxInputBytes,
-              maximumSanitizeMode: config.maximumSanitizeMode,
-            },
-          );
-          const temporaryOutput = join(directory, "preview.png");
-          const result = await runner.run(candidate.executablePath, {
-            args: [
-              nativeInput.path,
-              "--export-type=png",
-              `--export-filename=${temporaryOutput}`,
-              area === "drawing"
-                ? "--export-area-drawing"
-                : "--export-area-page",
-              "--export-background-opacity=0",
-              `--export-width=${width}`,
-              ...(height === undefined ? [] : [`--export-height=${height}`]),
-            ],
-            cwd: directory,
-            maxStderrBytes: config.maxStderrBytes,
-            maxStdoutBytes: config.maxStdoutBytes,
-            timeoutMs: config.processTimeoutMs,
-          });
-          if (result.exitCode !== 0 || result.terminationReason !== "completed")
-            throw new Error("Inkscape preview render failed");
-          const bytes = await readFile(temporaryOutput);
-          if (bytes.byteLength > config.maxArtifactBytes)
-            throw new Error("Preview exceeds configured artifact size limit");
-          await nativeInput.assertCurrent();
-          return { bytes, metadata: await verifyPng(temporaryOutput) };
-        },
-      );
+      const cacheKey = previewCacheKey({
+        area: normalizedArea,
+        expectedRevision,
+        height,
+        inkscapeVersion: probe.version,
+        width,
+      });
+      await previewCache.removeExpired();
+      const cached = await previewCache.get(cacheKey);
+      const preview =
+        cached === undefined
+          ? await scratch.withDirectory("staging", async (directory) => {
+              const nativeInput = await createNativeInputBundle(
+                input.absolutePath,
+                expectedRevision,
+                directory,
+                {
+                  allowedRoot: input.workspaceRoot,
+                  maxDependencyBytes: config.maxInputBytes,
+                  maximumSanitizeMode: config.maximumSanitizeMode,
+                },
+              );
+              const temporaryOutput = join(directory, "preview.png");
+              const result = await runner.run(candidate.executablePath, {
+                args: [
+                  nativeInput.path,
+                  "--export-type=png",
+                  `--export-filename=${temporaryOutput}`,
+                  ...normalizedArea.args,
+                  "--export-background-opacity=0",
+                  `--export-width=${width}`,
+                  ...(height === undefined
+                    ? []
+                    : [`--export-height=${height}`]),
+                ],
+                cwd: directory,
+                maxStderrBytes: config.maxStderrBytes,
+                maxStdoutBytes: config.maxStdoutBytes,
+                timeoutMs: config.processTimeoutMs,
+              });
+              if (
+                result.exitCode !== 0 ||
+                result.terminationReason !== "completed"
+              )
+                throw new Error("Inkscape preview render failed");
+              const temporaryMetadata = await stat(temporaryOutput);
+              if (temporaryMetadata.size > config.maxArtifactBytes)
+                throw new Error(
+                  "Preview exceeds configured artifact size limit",
+                );
+              const metadata = await verifyPng(temporaryOutput);
+              if (
+                metadata.width > PREVIEW_MAX_AXIS ||
+                metadata.height > PREVIEW_MAX_AXIS
+              )
+                throw new Error("Preview exceeds configured dimension limit");
+              await nativeInput.assertCurrent();
+              await previewCache.put(
+                cacheKey,
+                temporaryOutput,
+                metadata,
+                PREVIEW_CACHE_TTL_MS,
+              );
+              return {
+                bytes: await readFile(temporaryOutput),
+                cache: "miss" as const,
+                metadata,
+              };
+            })
+          : {
+              bytes: await readFile(cached.path),
+              cache: "hit" as const,
+              metadata: cached.metadata,
+            };
       const committed = await fileStore.commit({
         contents: preview.bytes,
         ...(expectedOutputRevision === undefined
@@ -2240,12 +2342,19 @@ export function buildServer(config: ServerConfig): McpServer {
       if (artifact.hash !== committed.revision)
         throw new Error("Preview output changed before artifact publication");
       const result = {
-        area,
+        area: normalizedArea.kind,
         artifact,
+        cache: preview.cache,
         documentPath: output.relativePath,
         height: preview.metadata.height,
         inline: preview.bytes.byteLength <= config.maxInlineBytes,
+        ...(normalizedArea.pageId === undefined
+          ? {}
+          : { pageId: normalizedArea.pageId }),
         revision: committed.revision,
+        ...(normalizedArea.selectionId === undefined
+          ? {}
+          : { selectionId: normalizedArea.selectionId }),
         width: preview.metadata.width,
       };
       return {
@@ -2257,6 +2366,16 @@ export function buildServer(config: ServerConfig): McpServer {
                   data: preview.bytes.toString("base64"),
                   mimeType: "image/png",
                   type: "image" as const,
+                },
+              ]
+            : []),
+          ...(!result.inline
+            ? [
+                {
+                  mimeType: "image/png",
+                  name: "Preview PNG",
+                  type: "resource_link" as const,
+                  uri: artifact.uri,
                 },
               ]
             : []),
@@ -2694,6 +2813,32 @@ function resourceVariable(
   value: string | string[] | undefined,
 ): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function previewCacheKey(request: {
+  area: {
+    args: readonly string[];
+    kind: "drawing" | "page" | "selection";
+    pageId?: string | undefined;
+    selectionId?: string | undefined;
+  };
+  expectedRevision: string;
+  height?: number | undefined;
+  inkscapeVersion: string;
+  width: number;
+}): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        area: request.area,
+        expectedRevision: request.expectedRevision,
+        height: request.height ?? null,
+        inkscapeVersion: request.inkscapeVersion,
+        transparentBackground: true,
+        width: request.width,
+      }),
+    )
+    .digest("hex");
 }
 
 function inventoryVisualBounds(

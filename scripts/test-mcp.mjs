@@ -612,6 +612,45 @@ try {
   ) {
     throw new Error("document_render_preview did not render a bounded PNG");
   }
+  const cachedPreview = await workspaceClient.callTool({
+    arguments: {
+      area: "drawing",
+      expectedRevision: settingsRevision,
+      outputPath: "a4-preview-cached.png",
+      path: "a4.svg",
+      width: 256,
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  if (
+    cachedPreview.isError ||
+    cachedPreview.structuredContent?.cache !== "hit" ||
+    cachedPreview.structuredContent?.area !== "drawing"
+  ) {
+    throw new Error("document_render_preview did not reuse its revision cache");
+  }
+  const selectionPreview = await workspaceClient.callTool({
+    arguments: {
+      area: "selection",
+      expectedRevision: settingsRevision,
+      outputPath: "a4-preview-selection.png",
+      path: "a4.svg",
+      selectionId: "demo_rect",
+      width: 128,
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  if (
+    selectionPreview.isError ||
+    selectionPreview.structuredContent?.area !== "selection" ||
+    selectionPreview.structuredContent?.selectionId !== "demo_rect"
+  ) {
+    throw new Error(
+      "document_render_preview did not render the typed selection",
+    );
+  }
   const artifactUri = preview.structuredContent.artifact.uri;
   const resourceTemplates = await workspaceClient.listResourceTemplates();
   if (

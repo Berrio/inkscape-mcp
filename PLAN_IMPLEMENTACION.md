@@ -1628,11 +1628,11 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Preview
 
-- [ ] `F04-T14` Implementar `ExportAreaNormalizer` reutilizable y render PNG a scratch por page/drawing/selection; F05 debe extender este pipeline, no duplicarlo.
-- [ ] `F04-T15` Limitar dimensiones, bytes, duración y transparencia.
-- [ ] `F04-T16` Inline solo por debajo de `maxInlineBytes`; si no, devolver resource link.
-- [ ] `F04-T17` Cache por revision + spec, con invalidación y TTL.
-- [ ] `F04-T18` Tool/resource de preview y metadatos.
+- [x] `F04-T14` Implementar `ExportAreaNormalizer` reutilizable y render PNG a scratch por page/drawing/selection; F05 debe extender este pipeline, no duplicarlo. — Módulo puro con áreas tipadas y preview nativo de página, drawing o una selección validada.
+- [x] `F04-T15` Limitar dimensiones, bytes, duración y transparencia. — PNG transparente, máximo 2048 por eje solicitado/verificado, tamaño de artefacto, runner con timeout y staging.
+- [x] `F04-T16` Inline solo por debajo de `maxInlineBytes`; si no, devolver resource link. — Devuelve `resource_link` opaco para previews grandes; los chunks del artefacto mantienen sus límites.
+- [x] `F04-T17` Cache por revision + spec, con invalidación y TTL. — Caché controlada de 10 minutos por revisión, área normalizada, dimensiones, transparencia y versión Inkscape.
+- [x] `F04-T18` Tool/resource de preview y metadatos. — `document_render_preview` incluye área, cache, metadatos PNG y artefacto/recurso opaco.
 
 #### Puerta F04
 

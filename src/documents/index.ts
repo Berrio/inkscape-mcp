@@ -13,7 +13,15 @@ export {
   type PageMargins,
   type ViewportDimensionSource,
 } from "./basic.js";
-export { preflightSvg, type PreflightIssue } from "./preflight.js";
+export {
+  preflightSvg,
+  type BleedAssessment,
+  type BleedSpec,
+  type PreflightIssue,
+  type PreflightOptions,
+  type PreflightProfile,
+  type PrintPreflightDetails,
+} from "./preflight.js";
 export { inspectSvgInventory, type DocumentInventory } from "./inventory.js";
 export {
   querySvgElements,

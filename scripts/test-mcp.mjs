@@ -505,6 +505,30 @@ try {
   ) {
     throw new Error("document_preflight did not run the requested profile");
   }
+  const printPreflight = await workspaceClient.callTool({
+    arguments: {
+      bleed: {
+        behavior: "metadata-only",
+        bottom: { unit: "mm", value: 3 },
+        left: { unit: "mm", value: 3 },
+        right: { unit: "mm", value: 3 },
+        top: { unit: "mm", value: 3 },
+      },
+      path: "a4.svg",
+      profile: "print",
+      workspaceId: workspace.id,
+    },
+    name: "document_preflight",
+  });
+  if (
+    printPreflight.isError ||
+    printPreflight.structuredContent?.print?.bleed?.requiredMm?.top !== 3 ||
+    printPreflight.structuredContent?.print?.bleed?.presentMm?.top !== 0
+  ) {
+    throw new Error(
+      "document_preflight did not return a typed print bleed report",
+    );
+  }
   const pageAdded = await workspaceClient.callTool({
     arguments: {
       action: "add",

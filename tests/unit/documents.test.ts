@@ -275,11 +275,78 @@ describe("basic SVG documents", () => {
       "SVG_ACTIVE_CONTENT",
       "SVG_EXTERNAL_RESOURCE",
       "SVG_MISSING_TITLE",
+      "SVG_MISSING_DESCRIPTION",
+      "WEB_IMAGE_ACCESSIBLE_NAME_MISSING",
+      "WEB_EXTERNAL_REFERENCE",
     ]);
     expect(result.profile).toBe("web");
     expect(result.issues.every((issue) => issue.remediation.length > 0)).toBe(
       true,
     );
+  });
+  it("reports four-sided print bleed, conservative DPI, fonts, filters and color limits", () => {
+    const result = preflightSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100"><defs><filter id="blur"><feGaussianBlur/></filter></defs><text style="font-family: Forte">Label</text><image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ" width="100" height="100" filter="url(#blur)"/></svg>',
+      "print",
+      {
+        bleed: {
+          behavior: "expand-temporary-page",
+          bottom: mm(2),
+          left: mm(4),
+          right: mm(3),
+          top: mm(1),
+        },
+      },
+    );
+    expect(result.print).toEqual({
+      bleed: {
+        behavior: "expand-temporary-page",
+        missingMm: { bottom: 2, left: 4, right: 3, top: 1 },
+        presentMm: { bottom: 0, left: 0, right: 0, top: 0 },
+        requiredMm: { bottom: 2, left: 4, right: 3, top: 1 },
+      },
+      images: { lowDpiCount: 1, measuredCount: 1, unavailableCount: 0 },
+    });
+    expect(result.issues.map((issue) => issue.code)).toEqual([
+      "SVG_EXTERNAL_RESOURCE",
+      "PRINT_FONT_RESOLUTION_UNAVAILABLE",
+      "PRINT_FILTER_RASTERIZATION_RISK",
+      "PRINT_IMAGE_LOW_EFFECTIVE_DPI",
+      "PRINT_COLOR_MANAGEMENT_UNVERIFIED",
+    ]);
+    expect(
+      preflightSvg('<svg width="1px" height="1px"/>', "print").issues,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "PRINT_PHYSICAL_SIZE_UNSPECIFIED" }),
+        expect.objectContaining({ code: "PRINT_BLEED_SPEC_REQUIRED" }),
+      ]),
+    );
+    expect(
+      preflightSvg('<svg width="1mm" height="1mm"/>', "print", {
+        bleed: {
+          behavior: "metadata-only",
+          bottom: mm(0),
+          left: mm(0),
+          right: mm(0),
+          top: mm(0),
+        },
+      }).print?.bleed?.requiredMm,
+    ).toEqual({ bottom: 0, left: 0, right: 0, top: 0 });
+  });
+  it("detects Inkscape interchange features without opening external resources", () => {
+    const result = preflightSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="10mm" height="10mm" viewBox="0 0 10 10"><flowRoot/><path inkscape:path-effect="#effect"/><inkscape:path-effect id="effect"/><image href="https://example.test/image.png"/><meshgradient/></svg>',
+      "interchange",
+    );
+    expect(result.issues.map((issue) => issue.code)).toEqual([
+      "SVG_EXTERNAL_RESOURCE",
+      "SVG_INKSCAPE_FEATURES",
+      "INTERCHANGE_FLOW_TEXT",
+      "INTERCHANGE_LIVE_PATH_EFFECT",
+      "INTERCHANGE_EXTERNAL_REFERENCE",
+      "INTERCHANGE_ADVANCED_SVG_FEATURE",
+    ]);
   });
   it("summarizes IDs, layers, images and unresolved references without paths", () => {
     const inventory = inspectSvgInventory(

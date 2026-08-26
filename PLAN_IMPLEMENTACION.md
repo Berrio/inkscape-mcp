@@ -1620,9 +1620,9 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Preflight
 
-- [ ] `F04-T09` Perfil `web`: externos, scripts, fonts, raster grande, viewBox, IDs y accesibilidad básica.
-- [ ] `F04-T10` Perfil `print`: tamaño físico, `BleedSpec` explícito por lado y separado de margen/crop marks, fuentes, filtros rasterizados, imágenes efectivas y warnings de color.
-- [ ] `F04-T11` Perfil `interchange`: plain SVG, features Inkscape, flow text, LPE, external refs y compatibilidad.
+- [x] `F04-T09` Perfil `web`: externos, scripts, fonts, raster grande, viewBox, IDs y accesibilidad básica. — Inspección segura de recursos, a11y básica, fuentes no resolubles, raster PNG embebido y referencias/IDs sin abrir links.
+- [x] `F04-T10` Perfil `print`: tamaño físico, `BleedSpec` explícito por lado y separado de margen/crop marks, fuentes, filtros rasterizados, imágenes efectivas y warnings de color. — Bleed físico tipado por lado, DPI conservador de PNG embebido y warnings explícitos de fuentes/filtros/color.
+- [x] `F04-T11` Perfil `interchange`: plain SVG, features Inkscape, flow text, LPE, external refs y compatibilidad. — Advierte características Inkscape, flow text, LPE, refs y SVG avanzado sin convertir ni prometer portabilidad.
 - [x] `F04-T12` Códigos/severidad/remediation estables y documentados.
 - [x] `F04-T13` Tool `document_preflight` sin mutar documento.
 

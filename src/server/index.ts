@@ -91,6 +91,40 @@ const viewportLengthSchema = z.object({
   unit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
   value: z.number().finite().positive(),
 });
+const physicalLengthSchema = z.object({
+  unit: z.enum(["mm", "cm", "in", "pt", "pc", "q"]),
+  value: z.number().finite().nonnegative(),
+});
+const bleedSpecSchema = z
+  .object({
+    behavior: z.enum(["metadata-only", "expand-temporary-page"]),
+    bottom: physicalLengthSchema,
+    left: physicalLengthSchema,
+    right: physicalLengthSchema,
+    top: physicalLengthSchema,
+  })
+  .strict();
+const edgeMillimetersSchema = z.object({
+  bottom: z.number().finite().nonnegative(),
+  left: z.number().finite().nonnegative(),
+  right: z.number().finite().nonnegative(),
+  top: z.number().finite().nonnegative(),
+});
+const printPreflightSchema = z.object({
+  bleed: z
+    .object({
+      behavior: z.enum(["metadata-only", "expand-temporary-page"]),
+      missingMm: edgeMillimetersSchema,
+      presentMm: edgeMillimetersSchema,
+      requiredMm: edgeMillimetersSchema,
+    })
+    .optional(),
+  images: z.object({
+    lowDpiCount: z.number().int().nonnegative(),
+    measuredCount: z.number().int().nonnegative(),
+    unavailableCount: z.number().int().nonnegative(),
+  }),
+});
 const pageMarginsSchema = z
   .object({
     bottom: z.number().finite().nonnegative().max(100_000),
@@ -1399,8 +1433,9 @@ export function buildServer(config: ServerConfig): McpServer {
     "document_preflight",
     {
       description:
-        "Checks an SVG for active content, external references and invalid document settings without modifying it.",
+        "Runs a read-only basic, web, print, or interchange preflight without opening linked resources.",
       inputSchema: z.object({
+        bleed: bleedSpecSchema.optional(),
         path: z.string().min(1).max(1024),
         profile: z
           .enum(["basic", "web", "print", "interchange"])
@@ -1416,12 +1451,13 @@ export function buildServer(config: ServerConfig): McpServer {
             severity: z.enum(["error", "warning"]),
           }),
         ),
+        print: printPreflightSchema.optional(),
         profile: z.enum(["basic", "web", "print", "interchange"]),
         valid: z.boolean(),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ path, profile, workspaceId }) => {
+    async ({ bleed, path, profile, workspaceId }) => {
       assertDocumentWorkspace(config);
       const document = await (
         await workspaces()
@@ -1429,9 +1465,14 @@ export function buildServer(config: ServerConfig): McpServer {
       const preflight = preflightSvg(
         await readFile(document.absolutePath, "utf8"),
         profile,
+        {
+          ...(bleed === undefined ? {} : { bleed }),
+          rasterMegapixelThreshold: config.maxRasterMegapixels,
+        },
       );
       const output = {
         issues: preflight.issues,
+        ...(preflight.print === undefined ? {} : { print: preflight.print }),
         profile: preflight.profile,
         valid: !preflight.issues.some((issue) => issue.severity === "error"),
       };

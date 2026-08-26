@@ -5,7 +5,9 @@ export {
   resizeContentSvg,
   resizePageOnlySvg,
   type DocumentSettings,
+  type DocumentViewportWarning,
   type DocumentSpec,
+  type ViewportDimensionSource,
 } from "./basic.js";
 export { preflightSvg, type PreflightIssue } from "./preflight.js";
 export { inspectSvgInventory, type DocumentInventory } from "./inventory.js";

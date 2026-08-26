@@ -45,6 +45,14 @@ export function preflightSvg(
   try {
     const settings = inspectSvgSettings(source);
     const inventory = inspectSvgInventory(source);
+    for (const warning of settings.warnings)
+      issues.push({
+        code: warning,
+        message: viewportWarningMessage(warning),
+        remediation:
+          "Set concrete width, height and viewBox values before final layout or export.",
+        severity: "warning",
+      });
     if (inventory.duplicateIds.length > 0)
       issues.push({
         code: "SVG_DUPLICATE_ID",
@@ -97,4 +105,16 @@ export function preflightSvg(
     });
     return { issues, profile };
   }
+}
+
+function viewportWarningMessage(
+  warning: ReturnType<typeof inspectSvgSettings>["warnings"][number],
+): string {
+  if (warning.includes("PERCENTAGE"))
+    return "Viewport percentage cannot be resolved without an embedding context";
+  if (warning.includes("DEFAULTED"))
+    return "Viewport dimension is absent and uses the SVG default viewport";
+  if (warning.includes("UNITLESS"))
+    return "Unitless viewport dimension was normalized to CSS pixels";
+  return "viewBox is absent and was inferred from the effective viewport";
 }

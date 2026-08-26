@@ -1195,10 +1195,22 @@ export function buildServer(config: ServerConfig): McpServer {
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
+        ambiguousViewport: z.boolean(),
         height: z.string(),
         heightUnit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
         inspectionLevel: z.enum(["summary", "standard", "deep"]),
         inventory: inventorySchema.optional(),
+        normalization: z.object({
+          height: z.object({
+            raw: z.string().optional(),
+            source: z.enum(["defaulted", "explicit", "percentage_fallback"]),
+          }),
+          viewBox: z.enum(["explicit", "inferred_from_viewport"]),
+          width: z.object({
+            raw: z.string().optional(),
+            source: z.enum(["defaulted", "explicit", "percentage_fallback"]),
+          }),
+        }),
         pages: z.array(pageSchema),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
         viewBox: z.object({
@@ -1209,6 +1221,17 @@ export function buildServer(config: ServerConfig): McpServer {
         }),
         width: z.string(),
         widthUnit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
+        warnings: z.array(
+          z.enum([
+            "VIEWBOX_MISSING_INFERRED_FROM_VIEWPORT",
+            "VIEWPORT_HEIGHT_DEFAULTED",
+            "VIEWPORT_HEIGHT_PERCENTAGE_UNRESOLVED",
+            "VIEWPORT_HEIGHT_UNITLESS_NORMALIZED",
+            "VIEWPORT_WIDTH_DEFAULTED",
+            "VIEWPORT_WIDTH_PERCENTAGE_UNRESOLVED",
+            "VIEWPORT_WIDTH_UNITLESS_NORMALIZED",
+          ]),
+        ),
       }),
       annotations: { readOnlyHint: true },
     },

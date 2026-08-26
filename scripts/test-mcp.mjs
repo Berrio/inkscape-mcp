@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { Buffer } from "node:buffer";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -57,6 +57,45 @@ try {
   const workspace = workspaceResult.structuredContent?.workspaces?.[0];
   if (!workspace || typeof workspace.id !== "string") {
     throw new Error("workspace_list did not return an opaque workspace ID");
+  }
+  await writeFile(
+    join(workspaceRoot, "percentage.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="50%" viewBox="0 0 20 10"/>',
+  );
+  const percentageInspection = await workspaceClient.callTool({
+    arguments: {
+      level: "summary",
+      path: "percentage.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_inspect",
+  });
+  const percentageRevision = percentageInspection.structuredContent?.revision;
+  if (
+    percentageInspection.isError ||
+    percentageInspection.structuredContent?.ambiguousViewport !== true ||
+    !percentageInspection.structuredContent?.warnings?.includes(
+      "VIEWPORT_WIDTH_PERCENTAGE_UNRESOLVED",
+    ) ||
+    typeof percentageRevision !== "string"
+  ) {
+    throw new Error("document_inspect did not expose ambiguous percentages");
+  }
+  const percentageResize = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: percentageRevision,
+      height: 100,
+      path: "percentage.svg",
+      unit: "px",
+      width: 200,
+      workspaceId: workspace.id,
+    },
+    name: "document_resize",
+  });
+  if (!percentageResize.isError) {
+    throw new Error(
+      "document_resize accepted an ambiguous percentage viewport",
+    );
   }
   const created = await workspaceClient.callTool({
     arguments: {

@@ -38,10 +38,78 @@ describe("basic SVG documents", () => {
       page: { width: mm(210), height: mm(297) },
     });
     expect(inspectSvgSettings(svg)).toEqual({
+      ambiguousViewport: false,
       width: "210mm",
       height: "297mm",
+      normalization: {
+        height: { raw: "297mm", source: "explicit" },
+        viewBox: "explicit",
+        width: { raw: "210mm", source: "explicit" },
+      },
       viewBox: { x: 0, y: 0, width: 210, height: 297 },
+      warnings: [],
     });
+  });
+  it("normalizes missing dimensions and viewBox with explicit warnings", () => {
+    expect(inspectSvgSettings('<svg viewBox="-5 2 40 30"/>')).toEqual({
+      ambiguousViewport: false,
+      height: "150px",
+      normalization: {
+        height: { source: "defaulted" },
+        viewBox: "explicit",
+        width: { source: "defaulted" },
+      },
+      viewBox: { x: -5, y: 2, width: 40, height: 30 },
+      warnings: ["VIEWPORT_WIDTH_DEFAULTED", "VIEWPORT_HEIGHT_DEFAULTED"],
+      width: "300px",
+    });
+    const inferred = inspectSvgSettings('<svg width="25.4mm" height="96"/>');
+    expect(inferred).toMatchObject({
+      ambiguousViewport: false,
+      height: "96px",
+      normalization: {
+        height: { raw: "96", source: "explicit" },
+        viewBox: "inferred_from_viewport",
+        width: { raw: "25.4mm", source: "explicit" },
+      },
+      width: "25.4mm",
+    });
+    expect(inferred.viewBox).toMatchObject({ x: 0, y: 0 });
+    expect(inferred.viewBox.width).toBeCloseTo(96);
+    expect(inferred.viewBox.height).toBeCloseTo(96);
+    expect(inferred.warnings).toEqual([
+      "VIEWPORT_HEIGHT_UNITLESS_NORMALIZED",
+      "VIEWBOX_MISSING_INFERRED_FROM_VIEWPORT",
+    ]);
+  });
+  it("reports percentage viewport dimensions as ambiguous and refuses resize", () => {
+    const source = '<svg width="100%" height="50%" viewBox="0 0 20 10"/>';
+    expect(inspectSvgSettings(source)).toMatchObject({
+      ambiguousViewport: true,
+      height: "150px",
+      normalization: {
+        height: { raw: "50%", source: "percentage_fallback" },
+        width: { raw: "100%", source: "percentage_fallback" },
+      },
+      width: "300px",
+    });
+    expect(preflightSvg(source).issues.map((issue) => issue.code)).toEqual([
+      "VIEWPORT_WIDTH_PERCENTAGE_UNRESOLVED",
+      "VIEWPORT_HEIGHT_PERCENTAGE_UNRESOLVED",
+    ]);
+    expect(() =>
+      resizePageOnlySvg(
+        source,
+        {
+          width: { unit: "px", value: 300 },
+          height: { unit: "px", value: 150 },
+        },
+        {
+          width: { unit: "px", value: 200 },
+          height: { unit: "px", value: 100 },
+        },
+      ),
+    ).toThrow("percentages require explicit normalization");
   });
   it("changes page/viewBox without transforming document elements", () => {
     const source = `${createSvgDocument({ page: { width: mm(210), height: mm(297) } }).replace("</svg>", '<rect id="keep" x="10" y="20" width="30" height="40"/></svg>')}`;

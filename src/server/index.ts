@@ -188,6 +188,23 @@ export function buildServer(config: ServerConfig): McpServer {
       inputSchema: z.object({
         height: z.number().finite().positive().optional(),
         outputPath: z.string().min(1).max(1024),
+        pages: z
+          .array(
+            z.object({
+              height: z.number().finite().positive(),
+              id: z
+                .string()
+                .regex(/^page_[A-Za-z0-9_-]{1,120}$/u)
+                .optional(),
+              label: z.string().min(1).max(256).optional(),
+              width: z.number().finite().positive(),
+              x: z.number().finite(),
+              y: z.number().finite(),
+            }),
+          )
+          .min(1)
+          .max(100)
+          .optional(),
         preset: pagePresetSchema.optional(),
         unit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]).optional(),
         width: z.number().finite().positive().optional(),
@@ -199,7 +216,7 @@ export function buildServer(config: ServerConfig): McpServer {
       }),
       annotations: { destructiveHint: false },
     },
-    async ({ height, outputPath, preset, unit, width, workspaceId }) => {
+    async ({ height, outputPath, pages, preset, unit, width, workspaceId }) => {
       assertDocumentWorkspace(config);
       const workspace = await workspaces();
       const target = await workspace.resolveNewOutput(workspaceId, outputPath);
@@ -220,7 +237,9 @@ export function buildServer(config: ServerConfig): McpServer {
           height: { unit, value: height },
         };
       }
-      const svg = createSvgDocument({ page });
+      let svg = createSvgDocument({ page });
+      for (const initialPage of pages ?? [])
+        svg = addSvgPage(svg, initialPage).svg;
       const result = await fileStore.commit({
         contents: Buffer.from(svg),
         targetPath: target.absolutePath,

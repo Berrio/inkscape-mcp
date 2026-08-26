@@ -60,6 +60,7 @@ try {
   const created = await workspaceClient.callTool({
     arguments: {
       outputPath: "a4.svg",
+      pages: [{ height: 297, id: "page_front", width: 210, x: 0, y: 0 }],
       preset: "a4-portrait",
       workspaceId: workspace.id,
     },
@@ -131,8 +132,8 @@ try {
     },
     name: "document_pages",
   });
-  if (pageAdded.isError || pageAdded.structuredContent?.pages?.length !== 1) {
-    throw new Error("document_pages did not add an explicit Inkscape page");
+  if (pageAdded.isError || pageAdded.structuredContent?.pages?.length !== 2) {
+    throw new Error("document_pages did not create and add explicit pages");
   }
   const pagesRevision = pageAdded.structuredContent?.revision;
   if (typeof pagesRevision !== "string") {
@@ -144,7 +145,7 @@ try {
   });
   if (
     pages.isError ||
-    pages.structuredContent?.pages?.[0]?.id !== "page_back"
+    pages.structuredContent?.pages?.[1]?.id !== "page_back"
   ) {
     throw new Error("document_pages did not list its stable page ID");
   }

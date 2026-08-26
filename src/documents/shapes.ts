@@ -80,6 +80,7 @@ export type ElementUpdate = {
   text?: string | undefined;
 };
 export type ElementArrangeAction = "back" | "front" | "lower" | "raise";
+export type ElementGroupAction = "group" | "ungroup";
 type ShapeBase = {
   id?: string | undefined;
   parentId?: string | undefined;
@@ -328,6 +329,74 @@ export function arrangeSvgShapes(
   }
   return {
     ids: [...ids],
+    svg: new XMLSerializer().serializeToString(document),
+  };
+}
+
+export function groupSvgShapes(
+  source: string,
+  request:
+    | { action: "group"; groupId: string; ids: readonly string[] }
+    | { action: "ungroup"; groupId: string },
+): { ids: readonly string[]; svg: string } {
+  const document = parseSafeDocument(source);
+  const elements = Array.from(document.getElementsByTagName("*"));
+  if (!SAFE_ID.test(request.groupId)) throw new Error("Shape ID is invalid");
+  if (request.action === "group") {
+    if (request.ids.length < 1 || request.ids.length > 100)
+      throw new Error("Group batch must contain between one and 100 IDs");
+    if (new Set(request.ids).size !== request.ids.length)
+      throw new Error("Group IDs must be unique");
+    if (
+      elements.some((element) => element.getAttribute("id") === request.groupId)
+    )
+      throw new Error("Shape ID already exists");
+    const targets = request.ids.map((id) => {
+      if (!SAFE_ID.test(id)) throw new Error("Shape ID is invalid");
+      const target = elements.find(
+        (element) => element.getAttribute("id") === id,
+      );
+      if (!target) throw new Error("Shape ID does not exist");
+      return target;
+    });
+    const parent = parentElement(targets[0]!);
+    if (!parent || targets.some((target) => parentElement(target) !== parent))
+      throw new Error("Group targets must share the same parent");
+    const ordered = childElements(parent).filter((element) =>
+      targets.includes(element),
+    );
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.setAttribute("id", request.groupId);
+    parent.insertBefore(group, ordered[0]!);
+    for (const target of ordered) group.appendChild(target);
+    return {
+      ids: [...request.ids, request.groupId],
+      svg: new XMLSerializer().serializeToString(document),
+    };
+  }
+  const group = elements.find(
+    (element) => element.getAttribute("id") === request.groupId,
+  );
+  if (!group || group.localName !== "g" || isLayer(group))
+    throw new Error("Ungroup requires a non-layer SVG group");
+  const parent = parentElement(group);
+  if (!parent) throw new Error("SVG group parent is missing");
+  for (const element of elements) {
+    if (isWithinDeletedTree(element, new Set([group]))) continue;
+    for (let index = 0; index < element.attributes.length; index += 1) {
+      const attribute = element.attributes.item(index);
+      if (
+        attribute &&
+        (attribute.name === "href" || attribute.name === "xlink:href") &&
+        attribute.value.trim() === `#${request.groupId}`
+      )
+        throw new Error("Ungrouping this group would break an SVG reference");
+    }
+  }
+  while (group.firstChild) parent.insertBefore(group.firstChild, group);
+  parent.removeChild(group);
+  return {
+    ids: [request.groupId],
     svg: new XMLSerializer().serializeToString(document),
   };
 }

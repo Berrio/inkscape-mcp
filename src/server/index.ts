@@ -10,6 +10,7 @@ import {
   createSvgDocument,
   createSvgShapes,
   arrangeSvgShapes,
+  groupSvgShapes,
   deleteSvgShapes,
   transformSvgShapes,
   updateSvgShapes,
@@ -506,6 +507,71 @@ export function buildServer(config: ServerConfig): McpServer {
         action,
         backupCreated: committed.backupPath !== undefined,
         ids: arranged.ids,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_group",
+    {
+      description:
+        "Groups same-parent SVG elements or ungroups one non-layer group while preserving child order and rejecting broken href references.",
+      inputSchema: z.discriminatedUnion("action", [
+        z.object({
+          action: z.literal("group"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          groupId: shapeIdSchema,
+          ids: z.array(shapeIdSchema).min(1).max(100),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("ungroup"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          groupId: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+      ]),
+      outputSchema: z.object({
+        action: z.enum(["group", "ungroup"]),
+        backupCreated: z.boolean(),
+        ids: z.array(shapeIdSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async (request) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(request.workspaceId, request.path);
+      const grouped = groupSvgShapes(
+        await readFile(document.absolutePath, "utf8"),
+        request.action === "group"
+          ? {
+              action: "group",
+              groupId: request.groupId,
+              ids: request.ids,
+            }
+          : { action: "ungroup", groupId: request.groupId },
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(grouped.svg),
+        expectedOutputRevision: request.expectedRevision,
+        expectedRevision: request.expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        action: request.action,
+        backupCreated: committed.backupPath !== undefined,
+        ids: grouped.ids,
         revision: committed.revision,
       };
       return {

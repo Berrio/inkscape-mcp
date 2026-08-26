@@ -17,11 +17,13 @@ export {
 export {
   createSvgShapes,
   arrangeSvgShapes,
+  groupSvgShapes,
   deleteSvgShapes,
   transformSvgShapes,
   updateSvgShapes,
   type ElementGeometryPatch,
   type ElementArrangeAction,
+  type ElementGroupAction,
   type ElementTransform,
   type ElementUpdate,
   type ShapeSpec,

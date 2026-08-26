@@ -238,9 +238,24 @@ try {
   ) {
     throw new Error("elements_arrange did not apply a typed z-order change");
   }
+  const grouped = await workspaceClient.callTool({
+    arguments: {
+      action: "group",
+      expectedRevision: arrangedRevision,
+      groupId: "demo_group",
+      ids: ["demo_rect", "demo_text"],
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_group",
+  });
+  const groupedRevision = grouped.structuredContent?.revision;
+  if (grouped.isError || typeof groupedRevision !== "string") {
+    throw new Error("elements_group did not create a typed SVG group");
+  }
   const inspected = await workspaceClient.callTool({
     arguments: {
-      expectedRevision: arrangedRevision,
+      expectedRevision: groupedRevision,
       path: "a4.svg",
       workspaceId: workspace.id,
     },
@@ -269,7 +284,7 @@ try {
   const pageAdded = await workspaceClient.callTool({
     arguments: {
       action: "add",
-      expectedRevision: arrangedRevision,
+      expectedRevision: groupedRevision,
       page: { height: 210, id: "page_back", width: 148, x: 160, y: 0 },
       path: "a4.svg",
       workspaceId: workspace.id,

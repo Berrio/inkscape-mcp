@@ -57,6 +57,7 @@ tools de documentos.
 | `document_preflight`                                     | Detectar contenido activo, recursos externos y errores con perfiles basic/web/print/interchange.                                                               |
 | `elements_update`                                        | Actualizar geometría, estilo básico, texto o label de capa mediante patches tipados.                                                                           |
 | `elements_arrange`                                       | Cambiar orden Z de hermanos: front/back/raise/lower, sin índices u orden XML arbitrarios.                                                                      |
+| `elements_group`                                         | Agrupar hermanos o desagrupar un grupo SVG sin romper referencias `href` externas.                                                                             |
 | `elements_query`                                         | Consultar resúmenes acotados por ID, tipo o capa, con paginación y `missingIds`.                                                                               |
 | `elements_create`                                        | Crear formas, texto, grupos y capas tipados; soporta parentId dentro del batch.                                                                                |
 | `elements_delete`                                        | Borrar IDs seleccionados sin dejar referencias fragmentarias rotas.                                                                                            |

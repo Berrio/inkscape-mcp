@@ -4,6 +4,7 @@ import {
   arrangeSvgShapes,
   createSvgDocument,
   createSvgShapes,
+  groupSvgShapes,
   deleteSvgPage,
   deleteSvgShapes,
   inspectSvgSettings,
@@ -316,6 +317,16 @@ describe("basic SVG documents", () => {
     expect(() =>
       arrangeSvgShapes(created.svg, ["rect_1", "circle_1"], "raise"),
     ).toThrow("exactly one ID");
+    const grouped = groupSvgShapes(created.svg, {
+      action: "group",
+      groupId: "shape_group",
+      ids: ["rect_1", "circle_1"],
+    });
+    expect(grouped.svg).toContain('<g id="shape_group"><rect');
+    expect(
+      groupSvgShapes(grouped.svg, { action: "ungroup", groupId: "shape_group" })
+        .svg,
+    ).not.toContain('id="shape_group"');
   });
   it("queries typed element summaries by layer, kind, and bounded offset", () => {
     const source = createSvgShapes(

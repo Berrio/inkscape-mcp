@@ -2261,6 +2261,69 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "paths_boolean",
+    {
+      description:
+        "Runs Inkscape's native union, difference, intersection or exclusion on exactly two safe SVG path IDs in a staged copy, then atomically publishes the sanitized result.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z.array(shapeIdSchema).length(2),
+          operation: z.enum([
+            "union",
+            "difference",
+            "intersection",
+            "exclusion",
+          ]),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        diff: semanticDiffSchema,
+        operation: z.enum(["union", "difference", "intersection", "exclusion"]),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, ids, operation, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const result = await runNativePathBoolean({
+        config,
+        document,
+        expectedRevision,
+        ids,
+        operation,
+        runner,
+        scratch,
+      });
+      const diff = summarizeSvgDiff(source, result);
+      const committed = await fileStore.commit({
+        contents: Buffer.from(result),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        diff,
+        operation,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
     "path_break_apart",
     {
       description:
@@ -5824,6 +5887,72 @@ function assertNoNestedLayoutSelection(
       parentId = parentById.get(parentId);
     }
   }
+}
+
+async function runNativePathBoolean(request: {
+  config: ServerConfig;
+  document: ResolvedWorkspacePath;
+  expectedRevision: string;
+  ids: readonly [string, string] | readonly string[];
+  operation: "difference" | "exclusion" | "intersection" | "union";
+  runner: ProcessRunner;
+  scratch: ScratchManager;
+}): Promise<string> {
+  const discovery = await locateInkscape({
+    config: request.config,
+    cwd: process.cwd(),
+    runner: request.runner,
+  });
+  const candidate = discovery.candidates[0];
+  if (!candidate) throw new Error("Inkscape executable is unavailable");
+  const probe = await probeInkscapeCandidate(
+    request.runner,
+    candidate,
+    process.cwd(),
+  );
+  if (!("version" in probe))
+    throw new Error("Inkscape executable could not be validated");
+  return request.scratch.withDirectory("staging", async (directory) => {
+    const nativeInput = await createNativeInputBundle(
+      request.document.absolutePath,
+      request.expectedRevision,
+      directory,
+      {
+        allowedRoot: request.document.workspaceRoot,
+        maxDependencyBytes: request.config.maxInputBytes,
+        maximumSanitizeMode: request.config.maximumSanitizeMode,
+      },
+    );
+    const outputPath = join(directory, "result.svg");
+    const actions = [
+      `select-by-id:${request.ids.join(",")}`,
+      `path-${request.operation}`,
+      `export-filename:${outputPath}`,
+      "export-plain-svg",
+      "export-do",
+    ].join(";");
+    const run = await request.runner.run(candidate.executablePath, {
+      args: [nativeInput.path, `--actions=${actions}`],
+      cwd: directory,
+      maxStderrBytes: request.config.maxStderrBytes,
+      maxStdoutBytes: request.config.maxStdoutBytes,
+      timeoutMs: request.config.processTimeoutMs,
+    });
+    if (run.exitCode !== 0 || run.terminationReason !== "completed")
+      throw new Error("Inkscape path boolean operation failed");
+    const exported = await readFile(outputPath, "utf8");
+    const sanitized = sanitizeSvg(exported, {
+      maxElements: 100_000,
+      maxInputBytes: request.config.maxInputBytes,
+      mode: request.config.maximumSanitizeMode,
+    });
+    if (sanitized.removed.length > 0)
+      throw new Error(
+        "Inkscape path boolean result did not meet SVG safety policy",
+      );
+    await nativeInput.assertCurrent();
+    return sanitized.svg;
+  });
 }
 
 async function queryNativeBounds(request: {

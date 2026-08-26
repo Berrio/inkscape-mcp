@@ -1792,7 +1792,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [~] `F07-T01` Extender el parser de F06 a AST mutable preservando comandos relativos/absolutos, subpaths y precisión documentada. — `parseSvgPathData` produce un AST mutable y `serializeSvgPathData` lo serializa establemente para M/L/H/V/C/S/Q/T/A/Z, incluyendo comandos relativos, moveto implícito y subpaths. Falta documentar la precisión y exponer las mutaciones públicas de nodos.
 - [ ] `F07-T02` Añadir límites/tolerancias avanzados para edición, booleanas y serialización estable.
 - [~] `F07-T03` Implementar combine/break-apart/reverse. — `paths_combine` concatena paths del mismo padre sólo si sus atributos de presentación son idénticos y no rompe refs; `path_break_apart` exige IDs nuevos explícitos; `path_reverse` conserva ID/estilo y revierte subpaths lineales. Reversión exacta de curvas y arcos queda pendiente.
-- [ ] `F07-T04` Implementar union/difference/intersection/exclusion.
+- [~] `F07-T04` Implementar union/difference/intersection/exclusion. — `paths_boolean` ejecuta las acciones nativas headless `path-union`, `path-difference`, `path-intersection` y `path-exclusion` sobre exactamente dos IDs validados en un staging aislado; exporta, sanitiza y comitea atómicamente. Faltan fixtures geométricos/visuales para cada operación y el contrato explícito de dirección de difference.
 - [ ] `F07-T05` Implementar division/cut/split/fracture donde capabilities lo confirmen.
 - [ ] `F07-T06` Implementar simplify, flatten, inset/outset/dynamic offset como operaciones diferenciadas y gateadas.
 - [ ] `F07-T07` Implementar object-to-path y stroke-to-path con snapshot y warning irreversible.

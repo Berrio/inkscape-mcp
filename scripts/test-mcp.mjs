@@ -113,11 +113,29 @@ try {
     },
     name: "path_reverse",
   });
+  const reversedPathRevision = reversedPath.structuredContent?.revision;
   if (
     reversedPath.isError ||
-    reversedPath.structuredContent?.id !== "path_first"
+    reversedPath.structuredContent?.id !== "path_first" ||
+    typeof reversedPathRevision !== "string"
   )
     throw new Error("path_reverse did not preserve the path identity");
+  const booleanPaths = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: reversedPathRevision,
+      ids: ["path_first", "path_second"],
+      operation: "union",
+      path: "paths.svg",
+      workspaceId: workspace.id,
+    },
+    name: "paths_boolean",
+  });
+  if (
+    booleanPaths.isError ||
+    booleanPaths.structuredContent?.operation !== "union" ||
+    (booleanPaths.structuredContent?.diff?.removedIds?.length ?? 0) < 1
+  )
+    throw new Error("paths_boolean did not run Inkscape path union");
   await writeFile(
     join(workspaceRoot, "percentage.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="50%" viewBox="0 0 20 10"/>',

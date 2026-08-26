@@ -274,6 +274,8 @@ try {
     queried.structuredContent?.elements?.[0]?.id !== "demo_rect" ||
     typeof queried.structuredContent?.elements?.[0]?.bounds?.width !==
       "number" ||
+    queried.structuredContent?.elements?.[0]?.bounds?.kind !== "visual" ||
+    queried.structuredContent?.elements?.[0]?.bounds?.fidelity !== "partial" ||
     queried.structuredContent?.missingIds?.[0] !== "temporary_circle"
   ) {
     throw new Error("elements_query did not return a bounded SVG summary");

@@ -70,7 +70,10 @@ export type ElementQuery = {
 export type ElementSummary = {
   attributes: Readonly<Record<string, string>>;
   bounds?: {
+    fidelity: "partial";
     height: number;
+    kind: "visual";
+    limitations: readonly ["GEOMETRIC_ENGINE_UNAVAILABLE"];
     source: "inkscape-query-all";
     width: number;
     x: number;

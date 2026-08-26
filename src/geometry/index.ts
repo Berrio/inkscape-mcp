@@ -18,3 +18,13 @@ export {
   type UserRect,
   type ViewportLength,
 } from "./units.js";
+export {
+  assessSvgBounds,
+  nativeVisualBoundsDescriptor,
+  type BoundsAssessment,
+  type BoundsDescriptor,
+  type BoundsFidelity,
+  type BoundsKind,
+  type BoundsLimitation,
+  type NativeVisualBoundsDescriptor,
+} from "./bounds.js";

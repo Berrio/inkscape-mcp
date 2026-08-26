@@ -30,6 +30,7 @@ import {
   updateSvgPage,
   updateDocumentDisplaySettings,
 } from "../documents/index.js";
+import { nativeVisualBoundsDescriptor } from "../geometry/index.js";
 import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import { verifyPdf, verifyPng, verifySvg } from "../export/index.js";
@@ -428,7 +429,10 @@ const elementSummarySchema = z.object({
   attributes: z.record(z.string(), z.string()),
   bounds: z
     .object({
+      fidelity: z.literal("partial"),
       height: z.number().finite().nonnegative(),
+      kind: z.literal("visual"),
+      limitations: z.tuple([z.literal("GEOMETRIC_ENGINE_UNAVAILABLE")]),
       source: z.literal("inkscape-query-all"),
       width: z.number().finite().nonnegative(),
       x: z.number().finite(),
@@ -440,6 +444,7 @@ const elementSummarySchema = z.object({
   layerId: shapeIdSchema.optional(),
   parentId: shapeIdSchema.optional(),
 });
+const nativeVisualBounds = nativeVisualBoundsDescriptor();
 
 export function buildServer(config: ServerConfig): McpServer {
   const server = new McpServer({
@@ -1066,6 +1071,9 @@ export function buildServer(config: ServerConfig): McpServer {
                       ...element.summary,
                       bounds: {
                         ...bound,
+                        fidelity: nativeVisualBounds.fidelity,
+                        kind: nativeVisualBounds.kind,
+                        limitations: nativeVisualBounds.limitations,
                         source: "inkscape-query-all" as const,
                       },
                     };

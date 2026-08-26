@@ -18,7 +18,10 @@ export {
   createSvgShapes,
   deleteSvgShapes,
   transformSvgShapes,
+  updateSvgShapes,
+  type ElementGeometryPatch,
   type ElementTransform,
+  type ElementUpdate,
   type ShapeSpec,
   type ShapeStyle,
 } from "./shapes.js";

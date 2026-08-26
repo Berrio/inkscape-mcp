@@ -55,6 +55,7 @@ tools de documentos.
 | `document_pages`                                         | Listar o mutar paginas explicitas de Inkscape 1.4.                                                                                                             |
 | `document_settings`                                      | Leer o editar fondo de pagina, escritorio y borde.                                                                                                             |
 | `document_preflight`                                     | Detectar contenido activo, recursos externos y errores con perfiles basic/web/print/interchange.                                                               |
+| `elements_update`                                        | Actualizar geometría, estilo básico, texto o label de capa mediante patches tipados.                                                                           |
 | `elements_query`                                         | Consultar resúmenes acotados por ID, tipo o capa, con paginación y `missingIds`.                                                                               |
 | `elements_create`                                        | Crear formas, texto, grupos y capas tipados; soporta parentId dentro del batch.                                                                                |
 | `elements_delete`                                        | Borrar IDs seleccionados sin dejar referencias fragmentarias rotas.                                                                                            |

@@ -37,6 +37,48 @@ export type ElementTransform =
       f: number;
       kind: "matrix";
     };
+export type ElementGeometryPatch =
+  | {
+      height?: number | undefined;
+      kind: "rect";
+      rx?: number | undefined;
+      ry?: number | undefined;
+      width?: number | undefined;
+      x?: number | undefined;
+      y?: number | undefined;
+    }
+  | {
+      cx?: number | undefined;
+      cy?: number | undefined;
+      kind: "circle";
+      r?: number | undefined;
+    }
+  | {
+      cx?: number | undefined;
+      cy?: number | undefined;
+      kind: "ellipse";
+      rx?: number | undefined;
+      ry?: number | undefined;
+    }
+  | {
+      kind: "line";
+      x1?: number | undefined;
+      x2?: number | undefined;
+      y1?: number | undefined;
+      y2?: number | undefined;
+    }
+  | {
+      kind: "polygon" | "polyline";
+      points?: readonly { x: number; y: number }[] | undefined;
+    }
+  | { kind: "text"; x?: number | undefined; y?: number | undefined };
+export type ElementUpdate = {
+  geometry?: ElementGeometryPatch | undefined;
+  id: string;
+  label?: string | undefined;
+  style?: ShapeStyle | undefined;
+  text?: string | undefined;
+};
 type ShapeBase = {
   id?: string | undefined;
   parentId?: string | undefined;
@@ -183,6 +225,59 @@ export function transformSvgShapes(
   };
 }
 
+export function updateSvgShapes(
+  source: string,
+  updates: readonly ElementUpdate[],
+): { ids: readonly string[]; svg: string } {
+  if (updates.length < 1 || updates.length > 100)
+    throw new Error("Update batch must contain between one and 100 elements");
+  if (new Set(updates.map((update) => update.id)).size !== updates.length)
+    throw new Error("Update IDs must be unique");
+  const document = parseSafeDocument(source);
+  const elements = Array.from(document.getElementsByTagName("*"));
+  for (const update of updates) {
+    if (!SAFE_ID.test(update.id)) throw new Error("Shape ID is invalid");
+    if (
+      update.geometry === undefined &&
+      update.label === undefined &&
+      update.style === undefined &&
+      update.text === undefined
+    )
+      throw new Error("Element update requires at least one patch");
+    const element = elements.find(
+      (candidate) => candidate.getAttribute("id") === update.id,
+    );
+    if (!element) throw new Error("Shape ID does not exist");
+    if (update.geometry !== undefined)
+      applyGeometryPatch(element, update.geometry);
+    if (update.style !== undefined) applyStyle(element, update.style);
+    if (update.text !== undefined) {
+      if (element.localName !== "text")
+        throw new Error("Text content can only update a text element");
+      validateText(update.text);
+      element.textContent = update.text;
+    }
+    if (update.label !== undefined) {
+      if (!isLayer(element)) throw new Error("Label can only update a layer");
+      if (
+        update.label.length < 1 ||
+        update.label.length > 256 ||
+        hasControlCharacters(update.label)
+      )
+        throw new Error("Layer label is invalid");
+      element.setAttributeNS(
+        "http://www.inkscape.org/namespaces/inkscape",
+        "inkscape:label",
+        update.label,
+      );
+    }
+  }
+  return {
+    ids: updates.map((update) => update.id),
+    svg: new XMLSerializer().serializeToString(document),
+  };
+}
+
 function parseSafeDocument(source: string): XmlDocument {
   const sanitization = sanitizeSvg(source, {
     maxElements: 100_000,
@@ -248,8 +343,7 @@ function createShapeElement(
       );
       break;
     case "text":
-      if (shape.text.length > 10_000 || hasControlCharacters(shape.text))
-        throw new Error("Text content is invalid or too long");
+      validateText(shape.text);
       setFinite(element, "x", shape.x);
       setFinite(element, "y", shape.y);
       element.textContent = shape.text;
@@ -270,6 +364,48 @@ function createShapeElement(
       break;
   }
   return element;
+}
+function applyGeometryPatch(
+  element: XmlElement,
+  patch: ElementGeometryPatch,
+): void {
+  if (element.localName !== patch.kind)
+    throw new Error("Geometry patch kind does not match the element");
+  switch (patch.kind) {
+    case "rect":
+      setOptionalFinite(element, "x", patch.x);
+      setOptionalFinite(element, "y", patch.y);
+      setOptionalPositive(element, "width", patch.width);
+      setOptionalPositive(element, "height", patch.height);
+      setOptionalNonNegative(element, "rx", patch.rx);
+      setOptionalNonNegative(element, "ry", patch.ry);
+      break;
+    case "circle":
+      setOptionalFinite(element, "cx", patch.cx);
+      setOptionalFinite(element, "cy", patch.cy);
+      setOptionalPositive(element, "r", patch.r);
+      break;
+    case "ellipse":
+      setOptionalFinite(element, "cx", patch.cx);
+      setOptionalFinite(element, "cy", patch.cy);
+      setOptionalPositive(element, "rx", patch.rx);
+      setOptionalPositive(element, "ry", patch.ry);
+      break;
+    case "line":
+      setOptionalFinite(element, "x1", patch.x1);
+      setOptionalFinite(element, "y1", patch.y1);
+      setOptionalFinite(element, "x2", patch.x2);
+      setOptionalFinite(element, "y2", patch.y2);
+      break;
+    case "polygon":
+    case "polyline":
+      if (patch.points !== undefined) setPoints(element, patch.points);
+      break;
+    case "text":
+      setOptionalFinite(element, "x", patch.x);
+      setOptionalFinite(element, "y", patch.y);
+      break;
+  }
 }
 function resolveParent(
   document: XmlDocument,
@@ -368,9 +504,26 @@ function applyStyle(element: XmlElement, style: ShapeStyle | undefined): void {
   if (style.textAnchor !== undefined)
     element.setAttribute("text-anchor", style.textAnchor);
 }
+function isLayer(element: XmlElement): boolean {
+  return (
+    element.localName === "g" &&
+    element.getAttributeNS(
+      "http://www.inkscape.org/namespaces/inkscape",
+      "groupmode",
+    ) === "layer"
+  );
+}
 function setFinite(element: XmlElement, name: string, value: number): void {
   assertFinite(value, name);
   element.setAttribute(name, String(value));
+}
+function setOptionalFinite(
+  element: XmlElement,
+  name: string,
+  value: number | undefined,
+): void {
+  if (value === undefined) return;
+  setFinite(element, name, value);
 }
 function setPositive(element: XmlElement, name: string, value: number): void {
   assertRange(value, name, Number.MIN_VALUE, Number.POSITIVE_INFINITY);
@@ -384,6 +537,31 @@ function setOptionalNonNegative(
   if (value === undefined) return;
   assertRange(value, name, 0, Number.POSITIVE_INFINITY);
   element.setAttribute(name, String(value));
+}
+function setOptionalPositive(
+  element: XmlElement,
+  name: string,
+  value: number | undefined,
+): void {
+  if (value === undefined) return;
+  setPositive(element, name, value);
+}
+function setPoints(
+  element: XmlElement,
+  points: readonly { x: number; y: number }[],
+): void {
+  if (points.length < 2 || points.length > 1_000)
+    throw new Error("Polyline or polygon needs between two and 1000 points");
+  element.setAttribute(
+    "points",
+    points
+      .map((point) => {
+        assertFinite(point.x, "point x");
+        assertFinite(point.y, "point y");
+        return `${point.x},${point.y}`;
+      })
+      .join(" "),
+  );
 }
 function color(value: string): string {
   if (!COLOR.test(value)) throw new Error("Shape colors must be #rrggbb");
@@ -411,4 +589,8 @@ function hasControlCharacters(value: string): boolean {
     const code = character.codePointAt(0) ?? 0;
     return code < 32 || code === 127;
   });
+}
+function validateText(value: string): void {
+  if (value.length > 10_000 || hasControlCharacters(value))
+    throw new Error("Text content is invalid or too long");
 }

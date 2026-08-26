@@ -196,9 +196,33 @@ try {
   ) {
     throw new Error("elements_query did not return a bounded SVG summary");
   }
+  const updated = await workspaceClient.callTool({
+    arguments: {
+      elements: [
+        {
+          geometry: { kind: "rect", width: 45 },
+          id: "demo_rect",
+          style: { fill: "#00ff00" },
+        },
+        { id: "demo_text", text: "Updated from MCP" },
+      ],
+      expectedRevision: transformedRevision,
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_update",
+  });
+  const updatedRevision = updated.structuredContent?.revision;
+  if (
+    updated.isError ||
+    updated.structuredContent?.ids?.length !== 2 ||
+    typeof updatedRevision !== "string"
+  ) {
+    throw new Error("elements_update did not apply typed patches");
+  }
   const inspected = await workspaceClient.callTool({
     arguments: {
-      expectedRevision: transformedRevision,
+      expectedRevision: updatedRevision,
       path: "a4.svg",
       workspaceId: workspace.id,
     },
@@ -227,7 +251,7 @@ try {
   const pageAdded = await workspaceClient.callTool({
     arguments: {
       action: "add",
-      expectedRevision: transformedRevision,
+      expectedRevision: updatedRevision,
       page: { height: 210, id: "page_back", width: 148, x: 160, y: 0 },
       path: "a4.svg",
       workspaceId: workspace.id,

@@ -17,6 +17,7 @@ import {
   updateSvgPage,
   updateDocumentDisplaySettings,
   transformSvgShapes,
+  updateSvgShapes,
 } from "../../src/documents/index.js";
 import { preflightSvg } from "../../src/documents/index.js";
 const mm = (value: number) => ({ unit: "mm" as const, value });
@@ -284,6 +285,29 @@ describe("basic SVG documents", () => {
         kind: "matrix",
       }),
     ).toThrow("invertible");
+    const updated = updateSvgShapes(created.svg, [
+      {
+        geometry: { kind: "rect", width: 35, x: 12 },
+        id: "rect_1",
+        style: { fill: "#00ff00", opacity: 0.5 },
+      },
+      {
+        geometry: { kind: "text", y: 105 },
+        id: "text_1",
+        text: "Updated SVG",
+      },
+      { id: "layer_main", label: "Updated Main" },
+    ]);
+    expect(updated.svg).toContain('x="12"');
+    expect(updated.svg).toContain('width="35"');
+    expect(updated.svg).toContain('fill="#00ff00"');
+    expect(updated.svg).toContain('opacity="0.5"');
+    expect(updated.svg).toContain('y="105"');
+    expect(updated.svg).toContain(">Updated SVG</text>");
+    expect(updated.svg).toContain('inkscape:label="Updated Main"');
+    expect(() =>
+      updateSvgShapes(created.svg, [{ id: "rect_1", text: "Not text" }]),
+    ).toThrow("only update a text element");
   });
   it("queries typed element summaries by layer, kind, and bounded offset", () => {
     const source = createSvgShapes(

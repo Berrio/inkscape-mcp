@@ -11,6 +11,7 @@ import {
   createSvgShapes,
   deleteSvgShapes,
   transformSvgShapes,
+  updateSvgShapes,
   deleteSvgPage,
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
@@ -246,6 +247,118 @@ const transformSchema = z.discriminatedUnion("kind", [
     kind: z.literal("matrix"),
   }),
 ]);
+const geometryPatchSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      height: z.number().finite().positive().optional(),
+      kind: z.literal("rect"),
+      rx: z.number().finite().nonnegative().optional(),
+      ry: z.number().finite().nonnegative().optional(),
+      width: z.number().finite().positive().optional(),
+      x: z.number().finite().optional(),
+      y: z.number().finite().optional(),
+    })
+    .refine(
+      (value) =>
+        value.height !== undefined ||
+        value.rx !== undefined ||
+        value.ry !== undefined ||
+        value.width !== undefined ||
+        value.x !== undefined ||
+        value.y !== undefined,
+      "Geometry patch requires at least one value",
+    ),
+  z
+    .object({
+      cx: z.number().finite().optional(),
+      cy: z.number().finite().optional(),
+      kind: z.literal("circle"),
+      r: z.number().finite().positive().optional(),
+    })
+    .refine(
+      (value) =>
+        value.cx !== undefined ||
+        value.cy !== undefined ||
+        value.r !== undefined,
+      "Geometry patch requires at least one value",
+    ),
+  z
+    .object({
+      cx: z.number().finite().optional(),
+      cy: z.number().finite().optional(),
+      kind: z.literal("ellipse"),
+      rx: z.number().finite().positive().optional(),
+      ry: z.number().finite().positive().optional(),
+    })
+    .refine(
+      (value) =>
+        value.cx !== undefined ||
+        value.cy !== undefined ||
+        value.rx !== undefined ||
+        value.ry !== undefined,
+      "Geometry patch requires at least one value",
+    ),
+  z
+    .object({
+      kind: z.literal("line"),
+      x1: z.number().finite().optional(),
+      x2: z.number().finite().optional(),
+      y1: z.number().finite().optional(),
+      y2: z.number().finite().optional(),
+    })
+    .refine(
+      (value) =>
+        value.x1 !== undefined ||
+        value.x2 !== undefined ||
+        value.y1 !== undefined ||
+        value.y2 !== undefined,
+      "Geometry patch requires at least one value",
+    ),
+  z
+    .object({
+      kind: z.literal("polygon"),
+      points: z.array(pointSchema).min(2).max(1_000).optional(),
+    })
+    .refine(
+      (value) => value.points !== undefined,
+      "Geometry patch requires points",
+    ),
+  z
+    .object({
+      kind: z.literal("polyline"),
+      points: z.array(pointSchema).min(2).max(1_000).optional(),
+    })
+    .refine(
+      (value) => value.points !== undefined,
+      "Geometry patch requires points",
+    ),
+  z
+    .object({
+      kind: z.literal("text"),
+      x: z.number().finite().optional(),
+      y: z.number().finite().optional(),
+    })
+    .refine(
+      (value) => value.x !== undefined || value.y !== undefined,
+      "Geometry patch requires at least one value",
+    ),
+]);
+const elementUpdateSchema = z
+  .object({
+    geometry: geometryPatchSchema.optional(),
+    id: shapeIdSchema,
+    label: z.string().min(1).max(256).optional(),
+    style: shapeStyleSchema.optional(),
+    text: textContentSchema.optional(),
+  })
+  .refine(
+    (value) =>
+      value.geometry !== undefined ||
+      value.label !== undefined ||
+      value.style !== undefined ||
+      value.text !== undefined,
+    "Element update requires at least one patch",
+  );
 const elementSummarySchema = z.object({
   attributes: z.record(z.string(), z.string()),
   id: shapeIdSchema.optional(),
@@ -297,6 +410,52 @@ export function buildServer(config: ServerConfig): McpServer {
           workspaceReady: report.workspaceReady,
         },
         workspaceReady: report.workspaceReady,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_update",
+    {
+      description:
+        "Updates bounded SVG geometry, basic styles, text, or layer labels through typed allowlisted patches.",
+      inputSchema: z.object({
+        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        elements: z.array(elementUpdateSchema).min(1).max(100),
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        ids: z.array(shapeIdSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ elements, expectedRevision, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const updated = updateSvgShapes(
+        await readFile(document.absolutePath, "utf8"),
+        elements,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(updated.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        ids: updated.ids,
+        revision: committed.revision,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],

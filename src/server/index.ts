@@ -200,6 +200,13 @@ const shapeSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     id: shapeIdSchema.optional(),
+    kind: z.literal("path"),
+    parentId: shapeIdSchema.optional(),
+    d: z.string().min(1).max(100_000),
+    style: shapeStyleSchema.optional(),
+  }),
+  z.object({
+    id: shapeIdSchema.optional(),
     kind: z.literal("text"),
     parentId: shapeIdSchema.optional(),
     style: shapeStyleSchema.optional(),

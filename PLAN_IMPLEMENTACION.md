@@ -1728,7 +1728,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F06-T07` Crear círculo/elipse.
 - [x] `F06-T08` Crear line/polyline/polygon.
 - [ ] `F06-T09` Crear star/regular polygon/spiral compatibles con Inkscape o SVG estándar según modo.
-- [ ] `F06-T10` Elegir e implementar un parser/validador read-only completo de path `d` (M/L/H/V/C/S/Q/T/A/Z, límites y finitud) y crear paths solo después de validarlos.
+- [x] `F06-T10` Elegir e implementar un parser/validador read-only completo de path `d` (M/L/H/V/C/S/Q/T/A/Z, límites y finitud) y crear paths solo después de validarlos.
 - [x] `F06-T11` Crear texto/tspan básico.
 - [ ] `F06-T12` Crear imagen local linked/embedded detrás de política.
 - [x] `F06-T13` Crear group y layer con label/ID.

@@ -125,6 +125,13 @@ try {
           y: 90,
         },
         { cx: 90, cy: 30, id: "temporary_circle", kind: "circle", r: 5 },
+        {
+          d: "M 80 80 L 100 100",
+          id: "demo_path",
+          kind: "path",
+          parentId: "layer_main",
+          style: { stroke: "#000000", strokeWidth: 1 },
+        },
       ],
       expectedRevision: resizedRevision,
       path: "a4.svg",
@@ -139,6 +146,7 @@ try {
     elements.structuredContent?.ids?.[1] !== "demo_rect" ||
     elements.structuredContent?.ids?.[2] !== "demo_text" ||
     elements.structuredContent?.ids?.[3] !== "temporary_circle" ||
+    elements.structuredContent?.ids?.[4] !== "demo_path" ||
     typeof elementsRevision !== "string"
   ) {
     throw new Error("elements_create did not publish a typed rectangle");

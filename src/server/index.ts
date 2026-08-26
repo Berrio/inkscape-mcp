@@ -2431,7 +2431,7 @@ export function buildServer(config: ServerConfig): McpServer {
     "document_export",
     {
       description:
-        "Exports one PNG, SVG, or plain SVG from a validated ExportSpec through the bounded Inkscape pipeline. Use export_pdf for PDF-specific features and document_export_batch for variants.",
+        "Exports one PNG, baseline PDF, SVG, or plain SVG from a validated ExportSpec through the bounded Inkscape pipeline. Use export_pdf for PDF-specific features and document_export_batch for variants.",
       inputSchema: z
         .object({
           spec: exportSpecSchema,
@@ -2440,7 +2440,7 @@ export function buildServer(config: ServerConfig): McpServer {
         .strict(),
       outputSchema: z.object({
         artifact: artifactSchema,
-        format: z.enum(["png", "plain-svg", "svg"]),
+        format: z.enum(["pdf", "png", "plain-svg", "svg"]),
         outputPath: z.string().min(1).max(1024),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
         warnings: z.array(z.string()),
@@ -2455,6 +2455,7 @@ export function buildServer(config: ServerConfig): McpServer {
         );
       if (
         spec.format !== "png" &&
+        spec.format !== "pdf" &&
         spec.format !== "svg" &&
         spec.format !== "plain-svg"
       )
@@ -2475,6 +2476,17 @@ export function buildServer(config: ServerConfig): McpServer {
         (spec.area.kind === "pages" || spec.resourcePolicy !== "preserve-local")
       )
         throw new Error("Use export_svg for this SVG export mode");
+      if (
+        spec.format === "pdf" &&
+        (spec.area.kind === "pages" ||
+          spec.filterRasterDpi !== undefined ||
+          spec.filters !== "preserve" ||
+          spec.latex === true ||
+          spec.margin !== undefined ||
+          spec.text !== "preserve" ||
+          spec.version !== undefined)
+      )
+        throw new Error("Use export_pdf for advanced PDF export options");
       const workspace = await workspaces();
       const input = await workspace.resolveExisting(
         workspaceId,
@@ -2484,7 +2496,12 @@ export function buildServer(config: ServerConfig): McpServer {
         workspaceId,
         spec.target.path,
       );
-      const expectedExtension = spec.format === "png" ? /\.png$/iu : /\.svg$/iu;
+      const expectedExtension =
+        spec.format === "png"
+          ? /\.png$/iu
+          : spec.format === "pdf"
+            ? /\.pdf$/iu
+            : /\.svg$/iu;
       if (!expectedExtension.test(output.relativePath))
         throw new Error(
           "Output extension does not match the requested export format",
@@ -2534,7 +2551,11 @@ export function buildServer(config: ServerConfig): McpServer {
           );
           const temporaryOutput = join(
             directory,
-            spec.format === "png" ? "export.png" : "export.svg",
+            spec.format === "png"
+              ? "export.png"
+              : spec.format === "pdf"
+                ? "export.pdf"
+                : "export.svg",
           );
           const background =
             spec.format === "png" && spec.background.mode === "document"

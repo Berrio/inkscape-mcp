@@ -1074,6 +1074,32 @@ try {
   ) {
     throw new Error("document_export did not publish the generic PNG export");
   }
+  const genericPdf = await workspaceClient.callTool({
+    arguments: {
+      spec: {
+        area: { kind: "document" },
+        filters: "preserve",
+        format: "pdf",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+        target: {
+          kind: "file",
+          overwrite: false,
+          path: "a4-generic.pdf",
+        },
+        text: "preserve",
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export",
+  });
+  if (
+    genericPdf.isError ||
+    genericPdf.structuredContent?.format !== "pdf" ||
+    genericPdf.structuredContent?.outputPath !== "a4-generic.pdf" ||
+    typeof genericPdf.structuredContent?.artifact?.uri !== "string"
+  ) {
+    throw new Error("document_export did not publish the generic PDF export");
+  }
   const selectionSvg = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,

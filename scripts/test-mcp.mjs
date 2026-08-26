@@ -203,6 +203,7 @@ try {
   }
   const solidPng = await workspaceClient.callTool({
     arguments: {
+      area: "page",
       background: "solid",
       backgroundColor: "#ff0000",
       expectedRevision: settingsRevision,
@@ -212,8 +213,12 @@ try {
     },
     name: "export_png",
   });
-  if (solidPng.isError || solidPng.structuredContent?.background !== "solid") {
-    throw new Error("export_png did not apply a solid background request");
+  if (
+    solidPng.isError ||
+    solidPng.structuredContent?.background !== "solid" ||
+    solidPng.structuredContent?.area !== "page"
+  ) {
+    throw new Error("export_png did not apply area and background requests");
   }
   const pdf = await workspaceClient.callTool({
     arguments: {

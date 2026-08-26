@@ -690,6 +690,7 @@ export function buildServer(config: ServerConfig): McpServer {
       description:
         "Exports an SVG document to PNG through Inkscape using only bounded, allowlisted options.",
       inputSchema: z.object({
+        area: z.enum(["drawing", "page"]).default("page"),
         background: z
           .enum(["document", "solid", "transparent"])
           .default("document"),
@@ -711,6 +712,7 @@ export function buildServer(config: ServerConfig): McpServer {
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
+        area: z.enum(["drawing", "page"]),
         background: z.enum(["document", "solid", "transparent"]),
         dpiX: z.number().positive().optional(),
         dpiY: z.number().positive().optional(),
@@ -721,6 +723,7 @@ export function buildServer(config: ServerConfig): McpServer {
       annotations: { destructiveHint: false },
     },
     async ({
+      area,
       background,
       backgroundColor,
       backgroundOpacity,
@@ -792,6 +795,7 @@ export function buildServer(config: ServerConfig): McpServer {
             nativeInput.path,
             "--export-type=png",
             `--export-filename=${temporaryOutput}`,
+            area === "drawing" ? "--export-area-drawing" : "--export-area-page",
             ...backgroundArguments,
             ...(dpi === undefined ? [] : [`--export-dpi=${dpi}`]),
             ...(width === undefined ? [] : [`--export-width=${width}`]),
@@ -821,6 +825,7 @@ export function buildServer(config: ServerConfig): McpServer {
       });
       const result = {
         ...png.metadata,
+        area,
         background,
         revision: committed.revision,
       };

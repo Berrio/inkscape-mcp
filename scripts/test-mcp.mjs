@@ -4,6 +4,7 @@ import { Buffer } from "node:buffer";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 const server = {
   args: ["dist/cli.js"],
@@ -1280,6 +1281,56 @@ try {
     .catch(() => false);
   if (!timedOutBatch.isError || timeoutOutputExists)
     throw new Error("batch timeout published a partial output");
+  const submittedJob = await workspaceClient.callTool({
+    arguments: {
+      delivery: "job",
+      mode: "all_or_nothing",
+      specs: [
+        {
+          area: { kind: "page" },
+          background: { mode: "transparent" },
+          format: "png",
+          size: { dpi: 300, mode: "dpi" },
+          source: { expectedRevision: settingsRevision, path: "a4.svg" },
+          target: {
+            kind: "file",
+            overwrite: false,
+            path: "must-not-publish-after-cancel.png",
+          },
+        },
+      ],
+      workspaceId: workspace.id,
+    },
+    name: "document_export_batch",
+  });
+  const jobId = submittedJob.structuredContent?.jobId;
+  if (submittedJob.isError || typeof jobId !== "string")
+    throw new Error("document_export_batch did not submit an async job");
+  const cancelledJob = await workspaceClient.callTool({
+    arguments: { jobId, workspaceId: workspace.id },
+    name: "job_cancel",
+  });
+  if (cancelledJob.isError) throw new Error("job_cancel rejected an owned job");
+  let completedCancellation;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const status = await workspaceClient.callTool({
+      arguments: { jobId, workspaceId: workspace.id },
+      name: "job_get",
+    });
+    if (status.isError) throw new Error("job_get rejected an owned job");
+    if (status.structuredContent?.status === "cancelled") {
+      completedCancellation = status.structuredContent;
+      break;
+    }
+    await delay(25);
+  }
+  const cancelOutputExists = await readFile(
+    join(workspaceRoot, "must-not-publish-after-cancel.png"),
+  )
+    .then(() => true)
+    .catch(() => false);
+  if (completedCancellation === undefined || cancelOutputExists)
+    throw new Error("cancelled export job published a partial output");
   const bestEffortBatch = await workspaceClient.callTool({
     arguments: {
       mode: "best_effort",

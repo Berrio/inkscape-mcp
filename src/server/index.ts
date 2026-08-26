@@ -68,6 +68,7 @@ import {
 } from "../inkscape/index.js";
 import { ProcessRunner } from "../runner/index.js";
 import { PreviewCache } from "../preview/index.js";
+import { JobStore } from "./jobs.js";
 import {
   AtomicFileStore,
   ArtifactStore,
@@ -629,6 +630,7 @@ export function buildServer(config: ServerConfig): McpServer {
     version: packageMetadata.version,
   });
   const fileStore = new AtomicFileStore();
+  const jobs = new JobStore();
   const runner = new ProcessRunner(config.maxConcurrency);
   const capabilities = new CapabilityService();
   const scratch = new ScratchManager(
@@ -2451,6 +2453,7 @@ export function buildServer(config: ServerConfig): McpServer {
       inputSchema: z
         .object({
           mode: z.enum(["all_or_nothing", "best_effort"]),
+          delivery: z.enum(["sync", "job"]).default("sync"),
           preset: exportPresetSchema.optional(),
           specs: z.array(exportSpecSchema).min(1).max(50).optional(),
           timeoutMs: z
@@ -2470,160 +2473,269 @@ export function buildServer(config: ServerConfig): McpServer {
               path: ["specs"],
             });
         }),
-      outputSchema: z.object({
-        failures: z.array(
-          z.object({ index: z.number().int(), message: z.string() }),
-        ),
-        manifest: z.object({
-          durationMs: z.number().int().nonnegative(),
+      outputSchema: z.union([
+        z.object({
           failures: z.array(
             z.object({ index: z.number().int(), message: z.string() }),
           ),
-          inkscapeVersion: z.string().optional(),
-          mode: z.enum(["all_or_nothing", "best_effort"]),
-          publication: z.enum(["file_commit_batch", "file_commit_each"]),
-          source: z.object({
-            expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
-            path: z.string(),
+          manifest: z.object({
+            durationMs: z.number().int().nonnegative(),
+            failures: z.array(
+              z.object({ index: z.number().int(), message: z.string() }),
+            ),
+            inkscapeVersion: z.string().optional(),
+            mode: z.enum(["all_or_nothing", "best_effort"]),
+            publication: z.enum(["file_commit_batch", "file_commit_each"]),
+            source: z.object({
+              expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+              path: z.string(),
+            }),
+            variants: z.array(
+              z.object({
+                format: z.enum(["pdf", "plain-svg", "png", "svg"]),
+                index: z.number().int(),
+                outputPath: z.string(),
+                revision: z.string().regex(/^[a-f0-9]{64}$/u),
+              }),
+            ),
           }),
-          variants: z.array(
+          mode: z.enum(["all_or_nothing", "best_effort"]),
+          successes: z.array(
             z.object({
-              format: z.enum(["pdf", "plain-svg", "png", "svg"]),
               index: z.number().int(),
               outputPath: z.string(),
               revision: z.string().regex(/^[a-f0-9]{64}$/u),
             }),
           ),
         }),
-        mode: z.enum(["all_or_nothing", "best_effort"]),
-        successes: z.array(
-          z.object({
-            index: z.number().int(),
-            outputPath: z.string(),
-            revision: z.string().regex(/^[a-f0-9]{64}$/u),
-          }),
-        ),
-      }),
+        z.object({
+          jobId: z.string().regex(/^job_[a-f0-9]{32}$/u),
+          status: z.enum(["queued", "running"]),
+        }),
+      ]),
       annotations: { destructiveHint: false },
     },
-    async ({ mode, preset, specs, timeoutMs, workspaceId }) => {
-      assertDocumentWorkspace(config);
-      const startedAt = Date.now();
-      const expandedSpecs =
-        specs === undefined
-          ? expandExportPreset(preset!)
-          : specs.map(parseExportSpec);
-      const variants = planExportBatch(expandedSpecs);
-      if (preset !== undefined)
-        await (
-          await workspaces()
-        ).ensureOutputDirectory(workspaceId, preset.outputDirectory);
-      const source = variants[0]!.spec.source;
-      if (
-        variants.some(
-          (variant) =>
-            variant.spec.source.path !== source.path ||
-            variant.spec.source.expectedRevision !== source.expectedRevision,
+    async ({ delivery, mode, preset, specs, timeoutMs, workspaceId }) => {
+      const execute = async (execution?: {
+        onProgress: (progress: { detail?: string; stage: string }) => void;
+        signal: AbortSignal;
+      }) => {
+        if (execution?.signal.aborted)
+          throw new Error("Export batch was cancelled");
+        assertDocumentWorkspace(config);
+        const startedAt = Date.now();
+        const expandedSpecs =
+          specs === undefined
+            ? expandExportPreset(preset!)
+            : specs.map(parseExportSpec);
+        const variants = planExportBatch(expandedSpecs);
+        if (preset !== undefined)
+          await (
+            await workspaces()
+          ).ensureOutputDirectory(workspaceId, preset.outputDirectory);
+        const source = variants[0]!.spec.source;
+        if (
+          variants.some(
+            (variant) =>
+              variant.spec.source.path !== source.path ||
+              variant.spec.source.expectedRevision !== source.expectedRevision,
+          )
         )
-      )
-        throw new Error("Batch variants must share one source revision");
-      if (variants.some((variant) => !isBaselineBatchSpec(variant.spec)))
-        throw new Error(
-          "Batch supports baseline PNG, PDF, SVG, and plain SVG variants only",
+          throw new Error("Batch variants must share one source revision");
+        if (variants.some((variant) => !isBaselineBatchSpec(variant.spec)))
+          throw new Error(
+            "Batch supports baseline PNG, PDF, SVG, and plain SVG variants only",
+          );
+        const workspace = await workspaces();
+        const input = await workspace.resolveExisting(workspaceId, source.path);
+        const outputs = await Promise.all(
+          variants.map((variant) =>
+            workspace.resolveNewOutput(workspaceId, variant.outputPath),
+          ),
         );
-      const workspace = await workspaces();
-      const input = await workspace.resolveExisting(workspaceId, source.path);
-      const outputs = await Promise.all(
-        variants.map((variant) =>
-          workspace.resolveNewOutput(workspaceId, variant.outputPath),
-        ),
-      );
-      const staged = await executeExportBatch({
-        mode,
-        variants,
-        execute: async (variant) => {
-          const rendered = await renderGenericExport({
-            config,
-            inputPath: input.absolutePath,
-            inputRoot: input.workspaceRoot,
-            runner,
-            scratch,
-            spec: variant.spec as Extract<
-              ExportSpec,
-              { format: "pdf" | "plain-svg" | "png" | "svg" }
-            >,
-            ...(timeoutMs === undefined ? {} : { timeoutMs }),
+        const staged = await executeExportBatch({
+          mode,
+          variants,
+          execute: async (variant) => {
+            execution?.onProgress({
+              detail: `variant:${variant.index}`,
+              stage: "rendering",
+            });
+            const rendered = await renderGenericExport({
+              config,
+              inputPath: input.absolutePath,
+              inputRoot: input.workspaceRoot,
+              runner,
+              scratch,
+              spec: variant.spec as Extract<
+                ExportSpec,
+                { format: "pdf" | "plain-svg" | "png" | "svg" }
+              >,
+              ...(timeoutMs === undefined ? {} : { timeoutMs }),
+              ...(execution === undefined ? {} : { signal: execution.signal }),
+            });
+            return { ...rendered, variant };
+          },
+        });
+        if (mode === "all_or_nothing" && staged.failures.length > 0)
+          throw new Error(
+            `Batch rendering failed at variant ${staged.failures[0]!.index}`,
+          );
+        const successes = [] as {
+          index: number;
+          outputPath: string;
+          revision: string;
+        }[];
+        if (execution?.signal.aborted)
+          throw new Error("Export batch was cancelled");
+        execution?.onProgress({ stage: "publishing" });
+        if (mode === "all_or_nothing") {
+          const committed = await fileStore.commitBatch({
+            expectedRevision: source.expectedRevision,
+            files: staged.successes.map((stagedVariant) => {
+              const target = fileExportTarget(stagedVariant.value.variant.spec);
+              return {
+                contents: stagedVariant.value.bytes,
+                ...(target.expectedOutputRevision === undefined
+                  ? {}
+                  : { expectedOutputRevision: target.expectedOutputRevision }),
+                targetPath: outputs[stagedVariant.index]!.absolutePath,
+              };
+            }),
+            sourcePath: input.absolutePath,
           });
-          return { ...rendered, variant };
-        },
-      });
-      if (mode === "all_or_nothing" && staged.failures.length > 0)
-        throw new Error(
-          `Batch rendering failed at variant ${staged.failures[0]!.index}`,
-        );
-      const successes = [] as {
-        index: number;
-        outputPath: string;
-        revision: string;
-      }[];
-      if (mode === "all_or_nothing") {
-        const committed = await fileStore.commitBatch({
-          expectedRevision: source.expectedRevision,
-          files: staged.successes.map((stagedVariant) => {
+          for (let index = 0; index < staged.successes.length; index += 1)
+            successes.push({
+              index: staged.successes[index]!.index,
+              outputPath: outputs[staged.successes[index]!.index]!.relativePath,
+              revision: committed.files[index]!.revision,
+            });
+        } else
+          for (const stagedVariant of staged.successes) {
+            const output = outputs[stagedVariant.index]!;
             const target = fileExportTarget(stagedVariant.value.variant.spec);
-            return {
+            const committed = await fileStore.commit({
               contents: stagedVariant.value.bytes,
               ...(target.expectedOutputRevision === undefined
                 ? {}
                 : { expectedOutputRevision: target.expectedOutputRevision }),
-              targetPath: outputs[stagedVariant.index]!.absolutePath,
-            };
-          }),
-          sourcePath: input.absolutePath,
+              expectedRevision: source.expectedRevision,
+              sourcePath: input.absolutePath,
+              targetPath: output.absolutePath,
+            });
+            successes.push({
+              index: stagedVariant.index,
+              outputPath: output.relativePath,
+              revision: committed.revision,
+            });
+          }
+        const manifest = createExportBatchManifest({
+          durationMs: Date.now() - startedAt,
+          failures: staged.failures,
+          ...(staged.successes[0] === undefined
+            ? {}
+            : { inkscapeVersion: staged.successes[0].value.inkscapeVersion }),
+          mode,
+          publication:
+            mode === "all_or_nothing"
+              ? "file_commit_batch"
+              : "file_commit_each",
+          source,
+          variants: successes.map((success) => ({
+            format: variants[success.index]!.format,
+            index: success.index,
+            outputPath: success.outputPath,
+            revision: success.revision,
+          })),
         });
-        for (let index = 0; index < staged.successes.length; index += 1)
-          successes.push({
-            index: staged.successes[index]!.index,
-            outputPath: outputs[staged.successes[index]!.index]!.relativePath,
-            revision: committed.files[index]!.revision,
-          });
-      } else
-        for (const stagedVariant of staged.successes) {
-          const output = outputs[stagedVariant.index]!;
-          const target = fileExportTarget(stagedVariant.value.variant.spec);
-          const committed = await fileStore.commit({
-            contents: stagedVariant.value.bytes,
-            ...(target.expectedOutputRevision === undefined
-              ? {}
-              : { expectedOutputRevision: target.expectedOutputRevision }),
-            expectedRevision: source.expectedRevision,
-            sourcePath: input.absolutePath,
-            targetPath: output.absolutePath,
-          });
-          successes.push({
-            index: stagedVariant.index,
-            outputPath: output.relativePath,
-            revision: committed.revision,
-          });
-        }
-      const manifest = createExportBatchManifest({
-        durationMs: Date.now() - startedAt,
-        failures: staged.failures,
-        ...(staged.successes[0] === undefined
-          ? {}
-          : { inkscapeVersion: staged.successes[0].value.inkscapeVersion }),
-        mode,
-        publication:
-          mode === "all_or_nothing" ? "file_commit_batch" : "file_commit_each",
-        source,
-        variants: successes.map((success) => ({
-          format: variants[success.index]!.format,
-          index: success.index,
-          outputPath: success.outputPath,
-          revision: success.revision,
-        })),
-      });
-      const result = { failures: staged.failures, manifest, mode, successes };
+        const result = { failures: staged.failures, manifest, mode, successes };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      };
+      if (delivery === "job") {
+        const job = jobs.create(workspaceId, async (options) => {
+          const response = await execute(options);
+          return response.structuredContent;
+        });
+        const result = { jobId: job.id, status: job.status };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      }
+      return await execute();
+    },
+  );
+
+  server.registerTool(
+    "job_get",
+    {
+      description:
+        "Returns the owner-bound status, latest monotonic progress and terminal batch result of an asynchronous export job.",
+      inputSchema: z
+        .object({
+          jobId: z.string().regex(/^job_[a-f0-9]{32}$/u),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        error: z.string().optional(),
+        id: z.string().regex(/^job_[a-f0-9]{32}$/u),
+        progress: z
+          .object({ detail: z.string().optional(), stage: z.string() })
+          .optional(),
+        result: z.unknown().optional(),
+        status: z.enum([
+          "cancelled",
+          "completed",
+          "failed",
+          "queued",
+          "running",
+        ]),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ jobId, workspaceId }) => {
+      const result = jobs.get(jobId, workspaceId);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
+
+  server.registerTool(
+    "job_cancel",
+    {
+      description:
+        "Idempotently requests cancellation of an owner-bound asynchronous export job. No unfinished output is published.",
+      inputSchema: z
+        .object({
+          jobId: z.string().regex(/^job_[a-f0-9]{32}$/u),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        error: z.string().optional(),
+        id: z.string().regex(/^job_[a-f0-9]{32}$/u),
+        progress: z
+          .object({ detail: z.string().optional(), stage: z.string() })
+          .optional(),
+        result: z.unknown().optional(),
+        status: z.enum([
+          "cancelled",
+          "completed",
+          "failed",
+          "queued",
+          "running",
+        ]),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({ jobId, workspaceId }) => {
+      const result = jobs.cancel(jobId, workspaceId);
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
         structuredContent: result,
@@ -4037,6 +4149,7 @@ async function renderGenericExport(request: {
   inputRoot: string;
   runner: ProcessRunner;
   scratch: ScratchManager;
+  signal?: AbortSignal;
   spec: Extract<ExportSpec, { format: "pdf" | "plain-svg" | "png" | "svg" }>;
   timeoutMs?: number;
 }): Promise<{ bytes: Buffer; inkscapeVersion: string }> {
@@ -4114,6 +4227,7 @@ async function renderGenericExport(request: {
       cwd: directory,
       maxStderrBytes: request.config.maxStderrBytes,
       maxStdoutBytes: request.config.maxStdoutBytes,
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
       timeoutMs: request.timeoutMs ?? request.config.processTimeoutMs,
     });
     if (run.exitCode !== 0 || run.terminationReason !== "completed")

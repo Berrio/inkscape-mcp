@@ -1247,6 +1247,58 @@ try {
   if (!rejectedAtomicBatch.isError || atomicOutputExists) {
     throw new Error("all_or_nothing batch published a variant after failure");
   }
+  const bestEffortBatch = await workspaceClient.callTool({
+    arguments: {
+      mode: "best_effort",
+      specs: [
+        {
+          area: {
+            elementIds: ["missing_selection"],
+            kind: "selection",
+            output: "combined",
+            visibility: "document",
+          },
+          background: { mode: "transparent" },
+          format: "png",
+          source: { expectedRevision: settingsRevision, path: "a4.svg" },
+          target: { kind: "file", overwrite: false, path: "will-fail.png" },
+        },
+        {
+          area: { kind: "drawing" },
+          background: { mode: "transparent" },
+          format: "png",
+          source: { expectedRevision: settingsRevision, path: "a4.svg" },
+          target: {
+            kind: "file",
+            overwrite: false,
+            path: "best-effort-succeeds.png",
+          },
+        },
+      ],
+      workspaceId: workspace.id,
+    },
+    name: "document_export_batch",
+  });
+  if (
+    bestEffortBatch.isError ||
+    bestEffortBatch.structuredContent?.failures?.length !== 1 ||
+    bestEffortBatch.structuredContent.failures[0]?.index !== 0 ||
+    bestEffortBatch.structuredContent.successes?.length !== 1 ||
+    bestEffortBatch.structuredContent.successes[0]?.index !== 1 ||
+    bestEffortBatch.structuredContent.manifest?.publication !==
+      "file_commit_each"
+  ) {
+    throw new Error("best_effort batch did not isolate a failed variant");
+  }
+  const bestEffortBytes = await readFile(
+    join(workspaceRoot, "best-effort-succeeds.png"),
+  );
+  if (
+    !bestEffortBytes
+      .subarray(0, 8)
+      .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  )
+    throw new Error("best_effort batch did not publish a valid PNG success");
   const selectionSvg = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,

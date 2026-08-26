@@ -945,11 +945,13 @@ export function buildServer(config: ServerConfig): McpServer {
         flavor: z.enum(["inkscape", "plain"]),
         outputPath: z.string().min(1).max(1024),
         path: z.string().min(1).max(1024),
+        textToPath: z.boolean().default(false),
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
         flavor: z.enum(["inkscape", "plain"]),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        warnings: z.array(z.string()),
       }),
       annotations: { destructiveHint: false },
     },
@@ -959,6 +961,7 @@ export function buildServer(config: ServerConfig): McpServer {
       flavor,
       outputPath,
       path,
+      textToPath,
       workspaceId,
     }) => {
       assertDocumentWorkspace(config);
@@ -994,6 +997,7 @@ export function buildServer(config: ServerConfig): McpServer {
             "--export-type=svg",
             `--export-filename=${temporaryOutput}`,
             ...(flavor === "plain" ? ["--export-plain-svg"] : []),
+            ...(textToPath ? ["--export-text-to-path"] : []),
           ],
           cwd: directory,
           maxStderrBytes: config.maxStderrBytes,
@@ -1014,7 +1018,11 @@ export function buildServer(config: ServerConfig): McpServer {
         sourcePath: input.absolutePath,
         targetPath: output.absolutePath,
       });
-      const result = { flavor, revision: committed.revision };
+      const result = {
+        flavor,
+        revision: committed.revision,
+        warnings: textToPath ? ["TEXT_CONVERTED_TO_PATHS"] : [],
+      };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
         structuredContent: result,

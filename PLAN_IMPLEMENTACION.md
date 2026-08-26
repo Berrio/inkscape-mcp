@@ -1681,7 +1681,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [ ] `F05-T21` Exportar SVG Inkscape y plain SVG; probar el `viewBox` grande/512 del problema conocido 6317 y aplicar solo una corrección temporal validada si la build lo reproduce.
 - [ ] `F05-T22` Implementar selection-only como documento autónomo mediante cierre transitivo de `defs`, `href`, CSS heredado/calculado, fuentes e imágenes; detectar ciclos, remapear IDs/refs y declarar pérdidas si se opta por aplanar estilos.
-- [ ] `F05-T23` Implementar text-to-path opcional con warning.
+- [x] `F05-T23` Implementar text-to-path opcional con warning.
 - [ ] `F05-T24` Verificar XML, namespaces, refs, IDs y política externa.
 - [ ] `F05-T25` Evaluar SVGZ real; gatear si no existe soporte validado.
 

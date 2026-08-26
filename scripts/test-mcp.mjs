@@ -234,12 +234,19 @@ try {
       flavor: "plain",
       outputPath: "a4-plain.svg",
       path: "a4.svg",
+      textToPath: true,
       workspaceId: workspace.id,
     },
     name: "export_svg",
   });
-  if (plainSvg.isError || plainSvg.structuredContent?.flavor !== "plain") {
-    throw new Error("export_svg did not publish the expected plain SVG");
+  if (
+    plainSvg.isError ||
+    plainSvg.structuredContent?.flavor !== "plain" ||
+    !plainSvg.structuredContent?.warnings?.includes("TEXT_CONVERTED_TO_PATHS")
+  ) {
+    throw new Error(
+      "export_svg did not publish the expected plain SVG warning",
+    );
   }
   const contained = await workspaceClient.callTool({
     arguments: {

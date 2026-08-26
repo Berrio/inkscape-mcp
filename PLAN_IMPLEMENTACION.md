@@ -1690,7 +1690,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F05-T26` Implementar `document_export`.
 - [ ] `F05-T27` Implementar `document_export_batch` con `best_effort` y `all_or_nothing`.
 - [ ] `F05-T28` Implementar colisiones, límites, progreso, cancelación y commit lógico `directory_rename|manifest_commit`, con limpieza/rollback best-effort documentados.
-- [ ] `F05-T29` Añadir presets A4 print, web PNG, plain SVG e icon pack mínimo.
+- [x] `F05-T29` Añadir presets A4 print, web PNG, plain SVG e icon pack mínimo. — `document_export_batch` acepta exactamente un `preset` o `specs`, expande print A4 PDF, web PNG de 1200 px, SVG plano e iconos 16–512 px a variantes normales y crea su directorio de salida dentro del workspace mediante validación por segmento.
 
 #### Puerta MVP F05
 

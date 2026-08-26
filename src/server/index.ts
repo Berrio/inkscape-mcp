@@ -46,7 +46,9 @@ import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import {
   buildExportArgv,
   executeExportBatch,
+  expandExportPreset,
   type ExportSpec,
+  exportPresetSchema,
   exportSpecSchema,
   normalizeExportArea,
   parseExportSpec,
@@ -2438,10 +2440,19 @@ export function buildServer(config: ServerConfig): McpServer {
       inputSchema: z
         .object({
           mode: z.enum(["all_or_nothing", "best_effort"]),
-          specs: z.array(exportSpecSchema).min(1).max(50),
+          preset: exportPresetSchema.optional(),
+          specs: z.array(exportSpecSchema).min(1).max(50).optional(),
           workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
         })
-        .strict(),
+        .strict()
+        .superRefine((value, context) => {
+          if ((value.specs === undefined) === (value.preset === undefined))
+            context.addIssue({
+              code: "custom",
+              message: "Provide exactly one of specs or preset",
+              path: ["specs"],
+            });
+        }),
       outputSchema: z.object({
         failures: z.array(
           z.object({ index: z.number().int(), message: z.string() }),
@@ -2457,9 +2468,17 @@ export function buildServer(config: ServerConfig): McpServer {
       }),
       annotations: { destructiveHint: false },
     },
-    async ({ mode, specs, workspaceId }) => {
+    async ({ mode, preset, specs, workspaceId }) => {
       assertDocumentWorkspace(config);
-      const variants = planExportBatch(specs.map(parseExportSpec));
+      const expandedSpecs =
+        specs === undefined
+          ? expandExportPreset(preset!)
+          : specs.map(parseExportSpec);
+      const variants = planExportBatch(expandedSpecs);
+      if (preset !== undefined)
+        await (
+          await workspaces()
+        ).ensureOutputDirectory(workspaceId, preset.outputDirectory);
       const source = variants[0]!.spec.source;
       if (
         variants.some(

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { opendir, readFile, realpath, stat } from "node:fs/promises";
+import { mkdir, opendir, readFile, realpath, stat } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -94,6 +94,40 @@ export class WorkspaceService {
         "Output parent leaves the workspace",
       );
     return resolved(workspace, resolve(canonicalParent, basename(candidate)));
+  }
+
+  /** Creates a workspace-local output directory one checked segment at a time.
+   * Existing reparse points are canonicalized before a later segment can be
+   * created, preventing a preset from following an outside junction. */
+  public async ensureOutputDirectory(
+    workspaceId: string,
+    clientPath: string,
+  ): Promise<ResolvedWorkspacePath> {
+    const workspace = this.workspace(workspaceId);
+    assertSafeRelativePath(clientPath);
+    let current = workspace.root;
+    for (const segment of clientPath.split(/[\\/]+/u)) {
+      const candidate = resolve(current, segment);
+      try {
+        const metadata = await stat(candidate);
+        if (!metadata.isDirectory())
+          throw new WorkspacePathError(
+            "PATH_INVALID",
+            "Output directory segment is not a directory",
+          );
+      } catch (error) {
+        if (error instanceof WorkspacePathError) throw error;
+        await mkdir(candidate);
+      }
+      const canonical = await realpath(candidate);
+      if (!isInside(workspace.root, canonical))
+        throw new WorkspacePathError(
+          "PATH_OUTSIDE_WORKSPACE",
+          "Output directory leaves the workspace",
+        );
+      current = canonical;
+    }
+    return resolved(workspace, current);
   }
 
   public async listDocuments(

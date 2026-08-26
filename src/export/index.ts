@@ -29,14 +29,17 @@ export {
 export { createExportManifest, type ExportManifest } from "./manifest.js";
 export { runExportPipeline, type ExportPipeline } from "./pipeline.js";
 export {
+  exportPresetSchema,
   exportSpecSchema,
   parseExportSpec,
   type ExportArea,
   type ExportInput,
+  type ExportPreset,
   type ExportSpec,
   type MultiOutputTarget,
   type OutputTarget,
 } from "./spec.js";
+export { expandExportPreset } from "./presets.js";
 export { verifyExportArtifact, type ExportVerification } from "./verify.js";
 export { pruneSvgPagesForPdf } from "./pdf-pages.js";
 export {

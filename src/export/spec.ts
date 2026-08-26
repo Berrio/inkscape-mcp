@@ -118,6 +118,13 @@ const multiOutputTargetSchema = z
 const sourceSchema = z
   .object({ expectedRevision: revisionSchema, path: relativePathSchema })
   .strict();
+export const exportPresetSchema = z
+  .object({
+    name: z.enum(["print-a4-pdf", "web-png", "plain-svg", "icon-pack"]),
+    outputDirectory: relativePathSchema,
+    source: sourceSchema,
+  })
+  .strict();
 const commonExportSchema = z.object({
   source: sourceSchema,
   target: z.union([outputTargetSchema, multiOutputTargetSchema]),
@@ -298,6 +305,7 @@ export const exportSpecSchema = z
 
 export type ExportSpec = z.output<typeof exportSpecSchema>;
 export type ExportInput = z.input<typeof exportSpecSchema>;
+export type ExportPreset = z.output<typeof exportPresetSchema>;
 export type OutputTarget = z.output<typeof outputTargetSchema>;
 export type MultiOutputTarget = z.output<typeof multiOutputTargetSchema>;
 export type ExportArea = ExportSpec["area"];

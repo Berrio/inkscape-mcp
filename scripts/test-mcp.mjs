@@ -1177,6 +1177,26 @@ try {
   ) {
     throw new Error("document_export_batch did not publish both PNG variants");
   }
+  const presetBatch = await workspaceClient.callTool({
+    arguments: {
+      mode: "all_or_nothing",
+      preset: {
+        name: "web-png",
+        outputDirectory: "preset-web",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export_batch",
+  });
+  if (
+    presetBatch.isError ||
+    presetBatch.structuredContent?.successes?.length !== 1 ||
+    presetBatch.structuredContent.successes[0]?.outputPath !==
+      "preset-web/web-1200.png"
+  ) {
+    throw new Error("document_export_batch did not expand the web PNG preset");
+  }
   const rejectedAtomicBatch = await workspaceClient.callTool({
     arguments: {
       mode: "all_or_nothing",

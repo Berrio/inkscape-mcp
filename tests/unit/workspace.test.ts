@@ -55,6 +55,17 @@ describe("workspace boundary", () => {
       service.resolveNewOutput(workspace.id, "nested/export.png"),
     ).resolves.toMatchObject({ relativePath: "nested/export.png" });
   });
+  it("creates output directories only beneath the workspace root", async () => {
+    const root = await temporaryDirectory();
+    const service = await WorkspaceService.create([root]);
+    const workspace = service.list()[0]!;
+    await expect(
+      service.ensureOutputDirectory(workspace.id, "deliverables/web"),
+    ).resolves.toMatchObject({ relativePath: "deliverables/web" });
+    await expect(
+      service.resolveNewOutput(workspace.id, "deliverables/web/result.png"),
+    ).resolves.toMatchObject({ relativePath: "deliverables/web/result.png" });
+  });
   it("rejects a symlink that resolves outside the workspace", async () => {
     const root = await temporaryDirectory();
     const outside = await temporaryDirectory();

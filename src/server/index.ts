@@ -10,6 +10,7 @@ import {
   createSvgDocument,
   deleteSvgPage,
   inspectDocumentDisplaySettings,
+  inspectSvgInventory,
   inspectSvgSettings,
   listSvgPages,
   pageSizeFromPreset,
@@ -66,6 +67,28 @@ const displaySettingsSchema = z.object({
   deskColor: z.string().regex(/^#[a-f0-9]{6}$/u),
   pageColor: z.string().regex(/^#[a-f0-9]{6}$/u),
   pageOpacity: z.number().min(0).max(1),
+});
+const inventorySchema = z.object({
+  duplicateIds: z.array(z.string()),
+  elementCount: z.number().int().nonnegative(),
+  externalResourceCount: z.number().int().nonnegative(),
+  images: z.array(
+    z.object({ kind: z.enum(["embedded", "external", "linked"]) }),
+  ),
+  ids: z.array(z.string()),
+  layers: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      locked: z.boolean(),
+      visibility: z.enum(["hidden", "visible"]),
+    }),
+  ),
+  namespaces: z.array(z.string()),
+  typeCounts: z.record(z.string(), z.number().int().nonnegative()),
+  truncated: z.boolean(),
+  unknownNamespaces: z.array(z.string()),
+  unresolvedReferences: z.array(z.string()),
 });
 const pagePresetSchema = z.enum([
   "a3-landscape",
@@ -266,12 +289,15 @@ export function buildServer(config: ServerConfig): McpServer {
           .string()
           .regex(/^[a-f0-9]{64}$/u)
           .optional(),
+        level: z.enum(["summary", "standard", "deep"]).default("standard"),
         path: z.string().min(1).max(1024),
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
         height: z.string(),
         heightUnit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
+        inspectionLevel: z.enum(["summary", "standard", "deep"]),
+        inventory: inventorySchema.optional(),
         pages: z.array(pageSchema),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
         viewBox: z.object({
@@ -285,7 +311,7 @@ export function buildServer(config: ServerConfig): McpServer {
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ expectedRevision, path, workspaceId }) => {
+    async ({ expectedRevision, level, path, workspaceId }) => {
       assertDocumentWorkspace(config);
       const workspace = await workspaces();
       const document = await workspace.resolveExisting(workspaceId, path);
@@ -297,6 +323,15 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         ...settings,
         heightUnit: parseViewportLength(settings.height).unit,
+        inspectionLevel: level,
+        ...(level === "summary"
+          ? {}
+          : {
+              inventory: inspectSvgInventory(
+                source,
+                level === "deep" ? 1_000 : 100,
+              ),
+            }),
         pages: listSvgPages(source),
         revision,
         widthUnit: parseViewportLength(settings.width).unit,

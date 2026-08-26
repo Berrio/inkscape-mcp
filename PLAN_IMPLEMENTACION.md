@@ -1609,14 +1609,14 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Inspección
 
-- [ ] `F04-T01` Inventariar elementos por tipo, ID, layer, visibilidad y lock.
+- [x] `F04-T01` Inventariar elementos por tipo, ID, layer, visibilidad y lock.
 - [ ] `F04-T02` Reportar bounds globales y por página.
 - [ ] `F04-T03` Inventariar fills, strokes, gradientes, patterns, filters y opacidades.
 - [ ] `F04-T04` Inventariar fuentes/estilos y detectar faltantes mediante un font resolver probado; si no existe esa capability, devolver `FONT_RESOLUTION_UNAVAILABLE` y no afirmar ausencia.
 - [ ] `F04-T05` Inventariar imágenes linked/embedded, dimensiones y rutas redactadas.
-- [ ] `F04-T06` Detectar IDs duplicados, refs rotas, recursos externos y namespaces desconocidos.
+- [x] `F04-T06` Detectar IDs duplicados, refs rotas, recursos externos y namespaces desconocidos.
 - [ ] `F04-T07` Añadir paginación/filtros para documentos grandes.
-- [ ] `F04-T08` Completar `document_inspect` con niveles `summary|standard|deep`.
+- [x] `F04-T08` Completar `document_inspect` con niveles `summary|standard|deep`.
 
 #### Preflight
 
@@ -1624,7 +1624,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F04-T10` Perfil `print`: tamaño físico, `BleedSpec` explícito por lado y separado de margen/crop marks, fuentes, filtros rasterizados, imágenes efectivas y warnings de color.
 - [ ] `F04-T11` Perfil `interchange`: plain SVG, features Inkscape, flow text, LPE, external refs y compatibilidad.
 - [ ] `F04-T12` Códigos/severidad/remediation estables y documentados.
-- [ ] `F04-T13` Tool `document_preflight` sin mutar documento.
+- [x] `F04-T13` Tool `document_preflight` sin mutar documento.
 
 #### Preview
 

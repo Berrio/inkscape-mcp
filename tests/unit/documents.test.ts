@@ -5,6 +5,7 @@ import {
   deleteSvgPage,
   inspectSvgSettings,
   inspectDocumentDisplaySettings,
+  inspectSvgInventory,
   listSvgPages,
   pageSizeFromPreset,
   reorderSvgPages,
@@ -113,6 +114,25 @@ describe("basic SVG documents", () => {
     expect(result.issues.map((issue) => issue.code)).toEqual([
       "SVG_ACTIVE_CONTENT",
       "SVG_EXTERNAL_RESOURCE",
+    ]);
+  });
+  it("summarizes IDs, layers, images and unresolved references without paths", () => {
+    const inventory = inspectSvgInventory(
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:custom="urn:custom" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"><g id="layer" inkscape:groupmode="layer" inkscape:label="Layer" sodipodi:insensitive="true" style="display:none"><rect id="same"/><use href="#missing"/></g><image href="data:image/png;base64,AA=="/><image href="https://example.test/image.png"/><circle id="same"/></svg>',
+    );
+    expect(inventory).toMatchObject({
+      duplicateIds: ["same"],
+      externalResourceCount: 2,
+      ids: ["layer", "same", "same"],
+      unknownNamespaces: ["urn:custom"],
+      unresolvedReferences: ["missing"],
+    });
+    expect(inventory.images).toEqual([
+      { kind: "embedded" },
+      { kind: "external" },
+    ]);
+    expect(inventory.layers).toEqual([
+      { id: "layer", label: "Layer", locked: true, visibility: "hidden" },
     ]);
   });
   it("round-trips explicit Inkscape pages by stable ID", () => {

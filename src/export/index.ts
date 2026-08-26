@@ -1,7 +1,12 @@
 export { verifyPng, type PngMetadata } from "./png.js";
 export { verifyPdf, type PdfMetadata } from "./pdf.js";
 export { verifySvg } from "./svg.js";
-export { buildExportArgv, type ExportArgvRequest } from "./argv.js";
+export {
+  buildExportArgv,
+  PNG_OPTION_CAPABILITY_FLAGS,
+  requiredPngCapabilityFlags,
+  type ExportArgvRequest,
+} from "./argv.js";
 export {
   normalizeExportArea,
   type ExportAreaRequest,

@@ -165,17 +165,44 @@ const pngBackgroundSchema = z.discriminatedUnion("mode", [
     .strict(),
 ]);
 const textSchema = z.enum(["preserve", "paths"]);
+const pngColorModeSchema = z.enum([
+  "Gray_1",
+  "Gray_2",
+  "Gray_4",
+  "Gray_8",
+  "Gray_16",
+  "RGB_8",
+  "RGB_16",
+  "GrayAlpha_8",
+  "GrayAlpha_16",
+  "RGBA_8",
+  "RGBA_16",
+]);
 const pngExportSchema = commonExportSchema
   .extend({
     antialias: z.number().int().min(0).max(3).optional(),
     area: pngAreaSchema,
     background: pngBackgroundSchema.default({ mode: "document" }),
     bitDepth: z.union([z.literal(8), z.literal(16)]).optional(),
+    colorMode: pngColorModeSchema.optional(),
     compression: z.number().int().min(0).max(9).optional(),
+    dithering: z.boolean().optional(),
     format: z.literal("png"),
     margin: edgeInsetsSchema.optional(),
     size: pngSizeSchema.optional(),
     snapAreaToPixels: z.boolean().optional(),
+  })
+  .superRefine((value, context) => {
+    if (
+      value.bitDepth !== undefined &&
+      value.colorMode !== undefined &&
+      !value.colorMode.endsWith(`_${value.bitDepth}`)
+    )
+      context.addIssue({
+        code: "custom",
+        message: "PNG bitDepth must match colorMode",
+        path: ["bitDepth"],
+      });
   })
   .strict();
 const pdfExportSchema = commonExportSchema

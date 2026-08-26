@@ -7,6 +7,7 @@ import {
   exportSpecSchema,
   normalizeExportArea,
   parseExportSpec,
+  requiredPngCapabilityFlags,
   runExportPipeline,
 } from "../../src/export/index.js";
 
@@ -46,6 +47,65 @@ it("accepts a PNG-only custom area and produces fixed export argv", () => {
     "--export-background=#ff0000",
     "--export-background-opacity=0.5",
   ]);
+});
+
+it("builds only capability-gated PNG renderer flags", () => {
+  const spec = parseExportSpec({
+    antialias: 3,
+    area: { kind: "drawing" },
+    background: { mode: "transparent" },
+    colorMode: "RGBA_16",
+    compression: 9,
+    dithering: true,
+    format: "png",
+    snapAreaToPixels: true,
+    source,
+    target,
+  });
+  expect(
+    buildExportArgv({
+      area: normalizeExportArea(spec.area, []),
+      inputPath: "trusted-input.svg",
+      outputPath: "trusted-output.png",
+      spec,
+    }),
+  ).toContain("--export-png-color-mode=RGBA_16");
+  expect(
+    buildExportArgv({
+      area: normalizeExportArea(spec.area, []),
+      inputPath: "trusted-input.svg",
+      outputPath: "trusted-output.png",
+      spec,
+    }),
+  ).toEqual(
+    expect.arrayContaining([
+      "--export-png-use-dithering=true",
+      "--export-png-compression=9",
+      "--export-png-antialias=3",
+      "--export-area-snap",
+    ]),
+  );
+  expect(requiredPngCapabilityFlags(spec)).toEqual([
+    "--export-png-color-mode",
+    "--export-png-use-dithering",
+    "--export-png-compression",
+    "--export-png-antialias",
+    "--export-area-snap",
+  ]);
+});
+
+it("rejects an incompatible PNG bit depth and color mode", () => {
+  expect(
+    exportSpecSchema.safeParse({
+      area: { kind: "drawing" },
+      background: { mode: "transparent" },
+      bitDepth: 8,
+      colorMode: "RGBA_16",
+      format: "png",
+      source,
+      target,
+    }).success,
+  ).toBe(false);
 });
 
 it("rejects crossed format, target, path and overwrite combinations", () => {

@@ -81,6 +81,10 @@ describe("Inkscape capabilities", () => {
       availability: "absent",
       name: "--export-page",
     });
+    expect(first.flags).toContainEqual({
+      availability: "absent",
+      name: "--export-png-color-mode",
+    });
     expect(first.experimentalCapabilities).toEqual([]);
     expect(second).toBe(first);
     expect(calls).toBe(3);

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import packageMetadata from "../../package.json" with { type: "json" };
+import { CapabilityService } from "../capabilities/index.js";
 import { assertDocumentWorkspace, type ServerConfig } from "../config/index.js";
 import {
   addSvgPage,
@@ -43,6 +44,7 @@ import {
   buildExportArgv,
   normalizeExportArea,
   parseExportSpec,
+  requiredPngCapabilityFlags,
   verifyPdf,
   verifyPng,
   verifySvg,
@@ -571,6 +573,17 @@ const nativeVisualBounds = nativeVisualBoundsDescriptor();
 const PREVIEW_CACHE_TTL_MS = 10 * 60 * 1_000;
 const PREVIEW_MAX_AXIS = 2_048;
 
+function pngCapabilityLabel(flag: string): string {
+  const labels: Readonly<Record<string, string>> = {
+    "--export-area-snap": "snap area to pixels",
+    "--export-png-antialias": "antialias",
+    "--export-png-color-mode": "color mode",
+    "--export-png-compression": "compression",
+    "--export-png-use-dithering": "dithering",
+  };
+  return labels[flag] ?? "PNG renderer option";
+}
+
 export function buildServer(config: ServerConfig): McpServer {
   const server = new McpServer({
     name: "inkscape-mcp",
@@ -578,6 +591,7 @@ export function buildServer(config: ServerConfig): McpServer {
   });
   const fileStore = new AtomicFileStore();
   const runner = new ProcessRunner(config.maxConcurrency);
+  const capabilities = new CapabilityService();
   const scratch = new ScratchManager(
     config.scratchRoot === "auto" ? undefined : config.scratchRoot,
   );
@@ -2394,6 +2408,7 @@ export function buildServer(config: ServerConfig): McpServer {
         "Exports an SVG document to PNG through Inkscape using only bounded, allowlisted options.",
       inputSchema: z
         .object({
+          antialias: z.number().int().min(0).max(3).optional(),
           allowDistortion: z.boolean().default(false),
           area: z
             .enum(["custom", "drawing", "page", "selection"])
@@ -2406,6 +2421,22 @@ export function buildServer(config: ServerConfig): McpServer {
             .regex(/^#[a-fA-F0-9]{6}$/u)
             .optional(),
           backgroundOpacity: z.number().finite().min(0).max(1).optional(),
+          colorMode: z
+            .enum([
+              "Gray_1",
+              "Gray_2",
+              "Gray_4",
+              "Gray_8",
+              "Gray_16",
+              "RGB_8",
+              "RGB_16",
+              "GrayAlpha_8",
+              "GrayAlpha_16",
+              "RGBA_8",
+              "RGBA_16",
+            ])
+            .optional(),
+          compression: z.number().int().min(0).max(9).optional(),
           customArea: z
             .object({
               height: z.number().finite().positive(),
@@ -2421,11 +2452,13 @@ export function buildServer(config: ServerConfig): McpServer {
             .optional(),
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
           dpi: z.number().finite().positive().max(9_600).optional(),
+          dithering: z.boolean().optional(),
           height: z.number().int().positive().max(100_000).optional(),
           outputPath: z.string().min(1).max(1024),
           pageId: shapeIdSchema.optional(),
           path: z.string().min(1).max(1024),
           selectionId: shapeIdSchema.optional(),
+          snapAreaToPixels: z.boolean().optional(),
           width: z.number().int().positive().max(100_000).optional(),
           workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
         })
@@ -2501,20 +2534,25 @@ export function buildServer(config: ServerConfig): McpServer {
       annotations: { destructiveHint: false },
     },
     async ({
+      antialias,
       allowDistortion,
       area,
       background,
       backgroundColor,
       backgroundOpacity,
+      colorMode,
+      compression,
       customArea,
       expectedOutputRevision,
       expectedRevision,
       dpi,
+      dithering,
       height,
       outputPath,
       pageId,
       path,
       selectionId,
+      snapAreaToPixels,
       width,
       workspaceId,
     }) => {
@@ -2567,6 +2605,7 @@ export function buildServer(config: ServerConfig): McpServer {
           throw new Error("PNG selection element does not exist");
       }
       const pngSpec = parseExportSpec({
+        ...(antialias === undefined ? {} : { antialias }),
         area: exportArea,
         background:
           background === "solid"
@@ -2576,7 +2615,11 @@ export function buildServer(config: ServerConfig): McpServer {
                 opacity: backgroundOpacity ?? 1,
               }
             : { mode: background },
+        ...(colorMode === undefined ? {} : { colorMode }),
+        ...(compression === undefined ? {} : { compression }),
+        ...(dithering === undefined ? {} : { dithering }),
         format: "png",
+        ...(snapAreaToPixels === undefined ? {} : { snapAreaToPixels }),
         size:
           dpi !== undefined
             ? { dpi, mode: "dpi" }
@@ -2616,6 +2659,27 @@ export function buildServer(config: ServerConfig): McpServer {
       );
       if (!("version" in probe))
         throw new Error("Inkscape executable could not be validated");
+      const requiredCapabilities = requiredPngCapabilityFlags(pngSpec);
+      if (requiredCapabilities.length > 0) {
+        const observed = await capabilities.inspect(
+          runner,
+          candidate,
+          probe.version,
+          process.cwd(),
+        );
+        const available = new Set(
+          observed.flags
+            .filter((flag) => flag.availability === "available")
+            .map((flag) => flag.name),
+        );
+        const unavailable = requiredCapabilities.filter(
+          (flag) => !available.has(flag),
+        );
+        if (unavailable.length > 0)
+          throw new Error(
+            `Requested PNG renderer options are unavailable in this Inkscape installation: ${unavailable.map(pngCapabilityLabel).join(", ")}`,
+          );
+      }
       const png = await scratch.withDirectory("staging", async (directory) => {
         const nativeInput = await createNativeInputBundle(
           input.absolutePath,

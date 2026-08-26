@@ -19,6 +19,11 @@ const TRACKED_FLAGS = [
   "--export-page",
   "--export-pdf-version",
   "--export-plain-svg",
+  "--export-area-snap",
+  "--export-png-antialias",
+  "--export-png-color-mode",
+  "--export-png-compression",
+  "--export-png-use-dithering",
   "--export-type",
 ] as const;
 

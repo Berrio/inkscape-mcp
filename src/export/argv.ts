@@ -1,6 +1,14 @@
 import type { NormalizedExportArea } from "./area.js";
 import type { ExportSpec } from "./spec.js";
 
+export const PNG_OPTION_CAPABILITY_FLAGS = {
+  antialias: "--export-png-antialias",
+  colorMode: "--export-png-color-mode",
+  compression: "--export-png-compression",
+  dithering: "--export-png-use-dithering",
+  snapAreaToPixels: "--export-area-snap",
+} as const;
+
 export type ExportArgvRequest = {
   area: NormalizedExportArea;
   inputPath: string;
@@ -44,6 +52,30 @@ export function buildExportArgv(request: ExportArgvRequest): readonly string[] {
   return [`--export-type=${request.spec.format}`, ...base];
 }
 
+/** Returns only flags required by options that change the PNG renderer. */
+export function requiredPngCapabilityFlags(
+  spec: ExportSpec,
+): readonly string[] {
+  if (spec.format !== "png") return [];
+  return [
+    ...(spec.colorMode !== undefined || spec.bitDepth !== undefined
+      ? [PNG_OPTION_CAPABILITY_FLAGS.colorMode]
+      : []),
+    ...(spec.dithering !== undefined
+      ? [PNG_OPTION_CAPABILITY_FLAGS.dithering]
+      : []),
+    ...(spec.compression !== undefined
+      ? [PNG_OPTION_CAPABILITY_FLAGS.compression]
+      : []),
+    ...(spec.antialias !== undefined
+      ? [PNG_OPTION_CAPABILITY_FLAGS.antialias]
+      : []),
+    ...(spec.snapAreaToPixels === true
+      ? [PNG_OPTION_CAPABILITY_FLAGS.snapAreaToPixels]
+      : []),
+  ];
+}
+
 function pngArguments(spec: Extract<ExportSpec, { format: "png" }>): string[] {
   const argumentsList: string[] = [];
   if (spec.size?.mode === "dpi")
@@ -64,10 +96,18 @@ function pngArguments(spec: Extract<ExportSpec, { format: "png" }>): string[] {
       `--export-background=${spec.background.color}`,
       `--export-background-opacity=${spec.background.opacity}`,
     );
+  const colorMode =
+    spec.colorMode ??
+    (spec.bitDepth === undefined ? undefined : `RGBA_${spec.bitDepth}`);
+  if (colorMode !== undefined)
+    argumentsList.push(`--export-png-color-mode=${colorMode}`);
+  if (spec.dithering !== undefined)
+    argumentsList.push(`--export-png-use-dithering=${spec.dithering}`);
   if (spec.compression !== undefined)
     argumentsList.push(`--export-png-compression=${spec.compression}`);
   if (spec.antialias !== undefined)
     argumentsList.push(`--export-png-antialias=${spec.antialias}`);
+  if (spec.snapAreaToPixels === true) argumentsList.push("--export-area-snap");
   return argumentsList;
 }
 

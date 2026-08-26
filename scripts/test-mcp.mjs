@@ -683,7 +683,11 @@ try {
     },
     name: "export_png",
   });
-  if (exported.isError || exported.structuredContent?.width !== 400) {
+  if (
+    exported.isError ||
+    exported.structuredContent?.width !== 400 ||
+    exported.structuredContent?.bitDepth !== 8
+  ) {
     throw new Error("export_png did not publish the expected PNG");
   }
   const dpiPng = await workspaceClient.callTool({
@@ -749,6 +753,31 @@ try {
   });
   if (customPng.isError || customPng.structuredContent?.area !== "custom") {
     throw new Error("export_png did not export a typed custom area");
+  }
+  const advancedPng = await workspaceClient.callTool({
+    arguments: {
+      antialias: 3,
+      background: "transparent",
+      colorMode: "RGBA_16",
+      compression: 9,
+      dithering: true,
+      expectedRevision: settingsRevision,
+      outputPath: "a4-\u00f1-16bit.png",
+      path: "a4.svg",
+      snapAreaToPixels: true,
+      workspaceId: workspace.id,
+    },
+    name: "export_png",
+  });
+  if (
+    advancedPng.isError ||
+    advancedPng.structuredContent?.bitDepth !== 16 ||
+    advancedPng.structuredContent?.colorType !== 6 ||
+    advancedPng.structuredContent?.background !== "transparent"
+  ) {
+    throw new Error(
+      "export_png did not gate and verify advanced 16-bit PNG options",
+    );
   }
   const pdf = await workspaceClient.callTool({
     arguments: {

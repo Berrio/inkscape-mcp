@@ -1660,12 +1660,12 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### PNG
 
-- [ ] `F05-T08` Exportar page/drawing/selection/custom.
-- [ ] `F05-T09` Implementar width/height/DPI con precedencia y ratio.
-- [ ] `F05-T10` Implementar fondo `document|transparent|solid`, opacidad y snap; `document` usa settings de F03 y no toma el color de desk.
-- [ ] `F05-T11` Capability-gate color mode/dithering/compression/antialias.
-- [ ] `F05-T12` Verificar firma, IHDR, dimensiones, modo, bytes y hash.
-- [ ] `F05-T13` Probar transparencia, fondos, 8/16 bit y paths Unicode.
+- [x] `F05-T08` Exportar page/drawing/selection/custom. — `export_png` normaliza las cuatro áreas tipadas y verifica que la selección exista antes de ejecutar Inkscape.
+- [x] `F05-T09` Implementar width/height/DPI con precedencia y ratio. — DPI no se mezcla con dimensiones; width/height mantienen ratio salvo `allowDistortion` explícito y el PNG verificado debe coincidir.
+- [x] `F05-T10` Implementar fondo `document|transparent|solid`, opacidad y snap; `document` usa settings de F03 y no toma el color de desk. — El fondo de documento usa `pagecolor`/`pageopacity`; solid y transparencia pasan flags allowlisted y snap solo se activa explícitamente.
+- [x] `F05-T11` Capability-gate color mode/dithering/compression/antialias. — Las cinco opciones avanzadas, incluido snap, se solicitan a `CapabilityService`; una instalación que no las anuncia devuelve un error recuperable sin ejecutar flags especulativos.
+- [x] `F05-T12` Verificar firma, IHDR, dimensiones, modo, bytes y hash. — `verifyPng` prueba firma/IHDR, width/height esperados, bit depth, color type, pHYs opcional, longitud y SHA-256.
+- [x] `F05-T13` Probar transparencia, fondos, 8/16 bit y paths Unicode. — La prueba MCP real exporta PNG 8-bit y transparente RGBA_16 con dithering, compresión, antialias, snap y destino Unicode; los unitarios cubren los builders y las incompatibilidades de color mode/bit depth.
 
 #### PDF
 

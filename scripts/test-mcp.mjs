@@ -705,14 +705,14 @@ try {
       expectedRevision: updatedRevision,
       operations: [
         {
-          aliases: { transaction_rect: "tx_rect" },
+          aliases: { transaction_preview: "tx_preview" },
           elements: [
             { height: 4, id: "tx_preview", kind: "rect", width: 4, x: 1, y: 1 },
           ],
           kind: "create",
         },
         {
-          ids: ["tx_preview"],
+          ids: ["@transaction_preview"],
           kind: "transform",
           transform: { kind: "translate", x: 2, y: 3 },
         },
@@ -740,16 +740,76 @@ try {
       expectedRevision: updatedRevision,
       operations: [
         {
+          aliases: {
+            transaction_rect: "tx_rect",
+            transaction_second: "tx_second",
+          },
           elements: [
             { height: 4, id: "tx_rect", kind: "rect", width: 4, x: 1, y: 1 },
+            {
+              height: 4,
+              id: "tx_second",
+              kind: "rect",
+              width: 4,
+              x: 8,
+              y: 1,
+            },
           ],
           kind: "create",
         },
         {
-          ids: ["@transaction_rect"],
+          kind: "arrange",
+          request: {
+            action: "before",
+            ids: ["@transaction_second"],
+            relativeTo: "@transaction_rect",
+          },
+        },
+        {
+          alias: "transaction_clone",
+          id: "@transaction_rect",
+          kind: "duplicate",
+          mode: "copy",
+          newId: "tx_clone",
+        },
+        {
+          elements: [{ id: "@transaction_clone", style: { fill: "#123456" } }],
+          kind: "update",
+        },
+        {
+          kind: "group",
+          request: {
+            action: "group",
+            alias: "transaction_group",
+            groupId: "tx_group",
+            ids: ["@transaction_rect", "@transaction_clone"],
+          },
+        },
+        {
+          ids: ["@transaction_second"],
+          kind: "reparent",
+          parentId: "@transaction_group",
+        },
+        {
+          ids: ["@transaction_group"],
           kind: "transform",
           transform: { kind: "translate", x: 2, y: 3 },
         },
+        {
+          aliases: { transaction_discard: "tx_discard" },
+          elements: [
+            {
+              height: 1,
+              id: "tx_discard",
+              kind: "rect",
+              width: 1,
+              x: 1,
+              y: 8,
+            },
+          ],
+          kind: "create",
+        },
+        { ids: ["@transaction_discard"], kind: "delete" },
       ],
       path: "a4.svg",
       workspaceId: workspace.id,
@@ -760,7 +820,7 @@ try {
   if (
     transaction.isError ||
     transaction.structuredContent?.dryRun !== false ||
-    transaction.structuredContent?.estimatedCost !== 2 ||
+    transaction.structuredContent?.estimatedCost !== 11 ||
     !transaction.structuredContent?.diff?.addedIds?.includes("tx_rect") ||
     typeof transactionRevision !== "string"
   ) {

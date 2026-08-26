@@ -1768,7 +1768,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [x] `F06-T36` Definir unión discriminada versionada `DesignOperation`. — `document_apply_operations` acepta una unión estricta y acotada de create/update/transform/arrange/group/duplicate/reparent/delete, sin XML, CSS, paths ni comandos arbitrarios.
 - [x] `F06-T37` Implementar `document_apply_operations` all-or-nothing. — Cada operación transforma el SVG en memoria y hay un único commit con revisión esperada tras completar todas; una operación inválida no escribe el resultado parcial.
-- [~] `F06-T38` Permitir referencias a IDs creados antes dentro de la misma transacción mediante aliases locales. — `create.aliases` registra aliases locales de IDs creados explícitamente y `transform` acepta referencias `@alias`; falta extender la resolución a todas las operaciones de diseño.
+- [x] `F06-T38` Permitir referencias a IDs creados antes dentro de la misma transacción mediante aliases locales. — `create.aliases` registra aliases locales de IDs creados explícitamente; update, transform, arrange, group, duplicate, reparent y delete resuelven `@alias` sólo dentro de esa transacción. Group y duplicate también pueden publicar un alias de su nuevo ID; los aliases duplicados o no definidos rechazan toda la transacción.
 - [x] `F06-T39` Implementar `dryRun` que valida y resume sin escribir. — `dryRun` ejecuta el mismo pipeline y retorna diff semántico, número de operaciones y la revisión original sin commit.
 - [x] `F06-T40` Limitar operaciones, matches y costo estimado. — Límite estricto de 50 operaciones y 100 objetivos por operación; cada respuesta incluye `estimatedCost` determinista en unidades de objetos, sin prometer tiempo de render.
 

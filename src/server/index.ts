@@ -647,34 +647,41 @@ const elementUpdateSchema = z
       value.text !== undefined,
     "Element update requires at least one patch",
   );
-const arrangeOperationSchema = z.discriminatedUnion("action", [
-  z.object({
-    action: z.enum(["back", "front", "lower", "raise"]),
-    ids: z.array(shapeIdSchema).min(1).max(100),
-  }),
-  z.object({
-    action: z.literal("index"),
-    ids: z.array(shapeIdSchema).min(1).max(100),
-    index: z.number().int().min(0).max(100_000),
-  }),
-  z.object({
-    action: z.enum(["before", "after"]),
-    ids: z.array(shapeIdSchema).min(1).max(100),
-    relativeTo: shapeIdSchema,
-  }),
-]);
-const groupOperationSchema = z.discriminatedUnion("action", [
-  z.object({
-    action: z.literal("group"),
-    groupId: shapeIdSchema,
-    ids: z.array(shapeIdSchema).min(1).max(100),
-  }),
-  z.object({ action: z.literal("ungroup"), groupId: shapeIdSchema }),
-]);
 const transactionAliasSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/u);
 const transactionReferenceSchema = z.union([
   shapeIdSchema,
   z.string().regex(/^@[a-z][a-z0-9_-]{0,63}$/u),
+]);
+const transactionElementUpdateSchema = elementUpdateSchema.safeExtend({
+  id: transactionReferenceSchema,
+});
+const transactionArrangeOperationSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.enum(["back", "front", "lower", "raise"]),
+    ids: z.array(transactionReferenceSchema).min(1).max(100),
+  }),
+  z.object({
+    action: z.literal("index"),
+    ids: z.array(transactionReferenceSchema).min(1).max(100),
+    index: z.number().int().min(0).max(100_000),
+  }),
+  z.object({
+    action: z.enum(["before", "after"]),
+    ids: z.array(transactionReferenceSchema).min(1).max(100),
+    relativeTo: transactionReferenceSchema,
+  }),
+]);
+const transactionGroupOperationSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("group"),
+    alias: transactionAliasSchema.optional(),
+    groupId: shapeIdSchema,
+    ids: z.array(transactionReferenceSchema).min(1).max(100),
+  }),
+  z.object({
+    action: z.literal("ungroup"),
+    groupId: transactionReferenceSchema,
+  }),
 ]);
 const designOperationSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -687,30 +694,37 @@ const designOperationSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("update"),
-    elements: z.array(elementUpdateSchema).min(1).max(100),
+    elements: z.array(transactionElementUpdateSchema).min(1).max(100),
   }),
   z.object({
     kind: z.literal("transform"),
     ids: z.array(transactionReferenceSchema).min(1).max(100),
     transform: transformSchema,
   }),
-  z.object({ kind: z.literal("arrange"), request: arrangeOperationSchema }),
-  z.object({ kind: z.literal("group"), request: groupOperationSchema }),
+  z.object({
+    kind: z.literal("arrange"),
+    request: transactionArrangeOperationSchema,
+  }),
+  z.object({
+    kind: z.literal("group"),
+    request: transactionGroupOperationSchema,
+  }),
   z.object({
     kind: z.literal("duplicate"),
-    id: shapeIdSchema,
+    alias: transactionAliasSchema.optional(),
+    id: transactionReferenceSchema,
     mode: z.enum(["copy", "use"]),
     newId: shapeIdSchema,
-    parentId: shapeIdSchema.optional(),
+    parentId: transactionReferenceSchema.optional(),
   }),
   z.object({
     kind: z.literal("reparent"),
-    ids: z.array(shapeIdSchema).min(1).max(100),
-    parentId: shapeIdSchema,
+    ids: z.array(transactionReferenceSchema).min(1).max(100),
+    parentId: transactionReferenceSchema,
   }),
   z.object({
     kind: z.literal("delete"),
-    ids: z.array(shapeIdSchema).min(1).max(100),
+    ids: z.array(transactionReferenceSchema).min(1).max(100),
   }),
 ]);
 type DesignOperation = z.infer<typeof designOperationSchema>;
@@ -1816,16 +1830,17 @@ export function buildServer(config: ServerConfig): McpServer {
                   throw new Error(
                     "Transaction alias must name an ID created by its operation",
                   );
-                if (aliases.has(alias))
-                  throw new Error("Transaction alias is already defined");
-                aliases.set(alias, id);
+                registerTransactionAlias(aliases, alias, id);
               }
             }
             svg = created.svg;
             break;
           }
           case "update":
-            svg = updateSvgShapes(svg, operation.elements).svg;
+            svg = updateSvgShapes(
+              svg,
+              resolveTransactionElementUpdates(operation.elements, aliases),
+            ).svg;
             break;
           case "transform":
             svg = transformSvgShapes(
@@ -1836,27 +1851,79 @@ export function buildServer(config: ServerConfig): McpServer {
             break;
           case "arrange": {
             const { action, ids, ...options } = operation.request;
-            svg = arrangeSvgShapes(svg, ids, action, options).svg;
+            const resolvedOptions =
+              action === "before" || action === "after"
+                ? {
+                    relativeTo: resolveTransactionReference(
+                      operation.request.relativeTo,
+                      aliases,
+                    ),
+                  }
+                : options;
+            svg = arrangeSvgShapes(
+              svg,
+              resolveTransactionReferences(ids, aliases),
+              action,
+              resolvedOptions,
+            ).svg;
             break;
           }
-          case "group":
-            svg = groupSvgShapes(svg, operation.request).svg;
+          case "group": {
+            const request = operation.request;
+            const result = groupSvgShapes(
+              svg,
+              request.action === "group"
+                ? {
+                    action: "group",
+                    groupId: request.groupId,
+                    ids: resolveTransactionReferences(request.ids, aliases),
+                  }
+                : {
+                    action: "ungroup",
+                    groupId: resolveTransactionReference(
+                      request.groupId,
+                      aliases,
+                    ),
+                  },
+            );
+            if (request.action === "group" && request.alias !== undefined)
+              registerTransactionAlias(aliases, request.alias, request.groupId);
+            svg = result.svg;
             break;
-          case "duplicate":
-            svg = duplicateSvgShape(svg, {
-              id: operation.id,
+          }
+          case "duplicate": {
+            const result = duplicateSvgShape(svg, {
+              id: resolveTransactionReference(operation.id, aliases),
               mode: operation.mode,
               newId: operation.newId,
               ...(operation.parentId === undefined
                 ? {}
-                : { parentId: operation.parentId }),
+                : {
+                    parentId: resolveTransactionReference(
+                      operation.parentId,
+                      aliases,
+                    ),
+                  }),
+            });
+            if (operation.alias !== undefined)
+              registerTransactionAlias(aliases, operation.alias, result.id);
+            svg = result.svg;
+            break;
+          }
+          case "reparent":
+            svg = reparentSvgShapes(svg, {
+              ids: resolveTransactionReferences(operation.ids, aliases),
+              parentId: resolveTransactionReference(
+                operation.parentId,
+                aliases,
+              ),
             }).svg;
             break;
-          case "reparent":
-            svg = reparentSvgShapes(svg, operation).svg;
-            break;
           case "delete":
-            svg = deleteSvgShapes(svg, operation.ids).svg;
+            svg = deleteSvgShapes(
+              svg,
+              resolveTransactionReferences(operation.ids, aliases),
+            ).svg;
             break;
         }
       }
@@ -5030,13 +5097,40 @@ function resolveTransactionReferences(
   references: readonly string[],
   aliases: ReadonlyMap<string, string>,
 ): string[] {
-  return references.map((reference) => {
-    if (!reference.startsWith("@")) return reference;
-    const resolved = aliases.get(reference.slice(1));
-    if (resolved === undefined)
-      throw new Error("Transaction alias is not defined");
-    return resolved;
-  });
+  return references.map((reference) =>
+    resolveTransactionReference(reference, aliases),
+  );
+}
+
+function resolveTransactionReference(
+  reference: string,
+  aliases: ReadonlyMap<string, string>,
+): string {
+  if (!reference.startsWith("@")) return reference;
+  const resolved = aliases.get(reference.slice(1));
+  if (resolved === undefined)
+    throw new Error("Transaction alias is not defined");
+  return resolved;
+}
+
+function resolveTransactionElementUpdates(
+  updates: readonly z.infer<typeof transactionElementUpdateSchema>[],
+  aliases: ReadonlyMap<string, string>,
+): Parameters<typeof updateSvgShapes>[1] {
+  return updates.map(({ id, ...update }) => ({
+    ...update,
+    id: resolveTransactionReference(id, aliases),
+  }));
+}
+
+function registerTransactionAlias(
+  aliases: Map<string, string>,
+  alias: string,
+  id: string,
+): void {
+  if (aliases.has(alias))
+    throw new Error("Transaction alias is already defined");
+  aliases.set(alias, id);
 }
 
 /** Resolves public image requests before the DOM-only shape constructor runs. */

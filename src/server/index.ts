@@ -370,7 +370,12 @@ export function buildServer(config: ServerConfig): McpServer {
         expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
         height: z.number().finite().positive(),
         mode: z
-          .enum(["page_only", "scale_content_contain", "scale_content_cover"])
+          .enum([
+            "page_only",
+            "scale_content_contain",
+            "scale_content_cover",
+            "scale_content_stretch",
+          ])
           .default("page_only"),
         path: z.string().min(1).max(1024),
         unit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),

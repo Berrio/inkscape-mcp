@@ -82,6 +82,20 @@ describe("basic SVG documents", () => {
         "scale_content_cover",
       ).warnings,
     ).toContain("CONTENT_MAY_BE_CROPPED");
+    const stretched = resizeContentSvg(
+      source,
+      {
+        width: { unit: "px", value: 800 },
+        height: { unit: "px", value: 600 },
+      },
+      {
+        width: { unit: "px", value: 1080 },
+        height: { unit: "px", value: 1080 },
+      },
+      "scale_content_stretch",
+    );
+    expect(stretched.svg).toContain("matrix(1.35 0 0 1.8 0 0)");
+    expect(stretched.warnings).toContain("NON_UNIFORM_CONTENT_SCALE");
   });
   it("reports active content and external resources without mutating SVG", () => {
     const result = preflightSvg(

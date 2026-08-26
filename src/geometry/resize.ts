@@ -3,7 +3,10 @@ import { type PageSize, type UserRect, toCssPixels } from "./units.js";
 export type ViewBoxPolicy =
   "explicit" | "preserve_user_scale" | "preserve_viewbox";
 export type ResizeMode =
-  "page_only" | "scale_content_contain" | "scale_content_cover";
+  | "page_only"
+  | "scale_content_contain"
+  | "scale_content_cover"
+  | "scale_content_stretch";
 export type ResizeAnchor =
   | "bottom_center"
   | "bottom_left"
@@ -64,14 +67,20 @@ export function planResize(input: {
           : ["NON_UNIFORM_DOCUMENT_SCALE"],
     };
   }
-  const scale =
-    input.mode === "scale_content_contain"
-      ? Math.min(targetWidth / currentWidth, targetHeight / currentHeight)
-      : Math.max(targetWidth / currentWidth, targetHeight / currentHeight);
-  const offsetX = (targetWidth - currentWidth * scale) * anchor.x;
-  const offsetY = (targetHeight - currentHeight * scale) * anchor.y;
+  const scaleX =
+    input.mode === "scale_content_stretch"
+      ? targetWidth / currentWidth
+      : input.mode === "scale_content_contain"
+        ? Math.min(targetWidth / currentWidth, targetHeight / currentHeight)
+        : Math.max(targetWidth / currentWidth, targetHeight / currentHeight);
+  const scaleY =
+    input.mode === "scale_content_stretch"
+      ? targetHeight / currentHeight
+      : scaleX;
+  const offsetX = (targetWidth - currentWidth * scaleX) * anchor.x;
+  const offsetY = (targetHeight - currentHeight * scaleY) * anchor.y;
   return {
-    contentTransform: [scale, 0, 0, scale, offsetX, offsetY],
+    contentTransform: [scaleX, 0, 0, scaleY, offsetX, offsetY],
     newViewBox: {
       x: input.currentViewBox.x,
       y: input.currentViewBox.y,
@@ -79,7 +88,11 @@ export function planResize(input: {
       height: (input.currentViewBox.height * targetHeight) / currentHeight,
     },
     warnings:
-      input.mode === "scale_content_cover" ? ["CONTENT_MAY_BE_CROPPED"] : [],
+      input.mode === "scale_content_cover"
+        ? ["CONTENT_MAY_BE_CROPPED"]
+        : input.mode === "scale_content_stretch"
+          ? ["NON_UNIFORM_CONTENT_SCALE"]
+          : [],
   };
 }
 function anchorFractions(anchor: ResizeAnchor): { x: number; y: number } {

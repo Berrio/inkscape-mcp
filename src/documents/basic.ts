@@ -114,7 +114,10 @@ export function resizeContentSvg(
   source: string,
   currentPage: PageSize,
   targetPage: PageSize,
-  mode: Extract<ResizeMode, "scale_content_contain" | "scale_content_cover">,
+  mode: Extract<
+    ResizeMode,
+    "scale_content_contain" | "scale_content_cover" | "scale_content_stretch"
+  >,
   anchor?: ResizeAnchor,
 ): { svg: string; warnings: readonly string[] } {
   const settings = inspectSvgSettings(source);
@@ -131,14 +134,14 @@ export function resizeContentSvg(
   const document = new DOMParser().parseFromString(source, "image/svg+xml");
   const root = document.documentElement;
   if (!root) throw new Error("SVG root is missing");
-  const [scale, , , , offsetX, offsetY] = transform;
+  const [scaleX, , , scaleY, offsetX, offsetY] = transform;
   const targetCssWidth = toCssPixels(targetPage.width);
   const targetCssHeight = toCssPixels(targetPage.height);
   const translateX =
-    settings.viewBox.x * (1 - scale) +
+    settings.viewBox.x * (1 - scaleX) +
     offsetX * (plan.newViewBox.width / targetCssWidth);
   const translateY =
-    settings.viewBox.y * (1 - scale) +
+    settings.viewBox.y * (1 - scaleY) +
     offsetY * (plan.newViewBox.height / targetCssHeight);
   const group = document.createElementNS(
     root.namespaceURI ?? "http://www.w3.org/2000/svg",
@@ -146,7 +149,7 @@ export function resizeContentSvg(
   );
   group.setAttribute(
     "transform",
-    `matrix(${scale} 0 0 ${scale} ${translateX} ${translateY})`,
+    `matrix(${scaleX} 0 0 ${scaleY} ${translateX} ${translateY})`,
   );
   const renderable = Array.from(root.childNodes).filter(
     (node) =>

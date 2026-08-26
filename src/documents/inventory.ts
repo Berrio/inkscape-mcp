@@ -14,12 +14,30 @@ const KNOWN_NAMESPACES = new Set([
 ]);
 
 export type DocumentInventory = {
+  definitions: {
+    filters: readonly { id: string; primitiveCount: number }[];
+    gradients: readonly {
+      id: string;
+      kind: "linear" | "radial";
+      stopCount: number;
+    }[];
+    patterns: readonly { height?: string; id: string; width?: string }[];
+  };
   duplicateIds: readonly string[];
   elementCount: number;
   externalResourceCount: number;
   fontFamilies: readonly string[];
+  fontWarnings: readonly ["FONT_RESOLUTION_UNAVAILABLE"];
   fontResolution: "unavailable";
-  images: readonly { kind: "embedded" | "external" | "linked" }[];
+  images: readonly {
+    display: { height?: string; width?: string };
+    intrinsic: {
+      height?: number;
+      status: "available" | "unavailable";
+      width?: number;
+    };
+    kind: "embedded" | "external" | "linked";
+  }[];
   ids: readonly string[];
   layers: readonly {
     id: string;
@@ -28,6 +46,8 @@ export type DocumentInventory = {
     visibility: "hidden" | "visible";
   }[];
   namespaces: readonly string[];
+  nextOffset?: number;
+  offset: number;
   paintUsage: {
     fills: number;
     filters: number;
@@ -37,21 +57,23 @@ export type DocumentInventory = {
     strokes: number;
   };
   typeCounts: Readonly<Record<string, number>>;
+  totalElementCount: number;
   truncated: boolean;
   unknownNamespaces: readonly string[];
   unresolvedReferences: readonly string[];
 };
 
+export type InventoryOptions = {
+  detailLimit: number;
+  kinds?: readonly string[] | undefined;
+  offset?: number | undefined;
+};
+
 export function inspectSvgInventory(
   source: string,
-  detailLimit: number = 100,
+  options: number | InventoryOptions = 100,
 ): DocumentInventory {
-  if (
-    !Number.isInteger(detailLimit) ||
-    detailLimit < 1 ||
-    detailLimit > MAX_DETAIL_LIMIT
-  )
-    throw new Error("Inventory detail limit is out of range");
+  const { detailLimit, kinds, offset } = normalizeOptions(options);
   // Validates malformed XML, DTD/entity use, document size and element limits
   // before the read-only raw DOM walk needed to preserve reference information.
   sanitizeSvg(source, {
@@ -64,11 +86,25 @@ export function inspectSvgInventory(
     "image/svg+xml",
   ).documentElement;
   if (!root || root.localName !== "svg") throw new Error("SVG root is missing");
-  const elements = [...walk(root)];
+  const allElements = [...walk(root)];
+  const selected =
+    kinds === undefined
+      ? allElements
+      : allElements.filter((element) =>
+          kinds.includes(element.localName ?? ""),
+        );
+  const elements = selected.slice(offset, offset + detailLimit);
+  const pageElements = new Set(elements);
   const definitionKinds = new Map(
-    elements.flatMap((element) => {
+    allElements.flatMap((element) => {
       const id = element.getAttribute("id");
       return id === null ? [] : ([[id, element.localName ?? ""]] as const);
+    }),
+  );
+  const documentIds = new Set(
+    allElements.flatMap((element) => {
+      const id = element.getAttribute("id");
+      return id === null ? [] : [id];
     }),
   );
   const typeCounts: Record<string, number> = {};
@@ -79,6 +115,15 @@ export function inspectSvgInventory(
   const namespaces = new Set<string>();
   const layers: DocumentInventory["layers"][number][] = [];
   const images: DocumentInventory["images"][number][] = [];
+  const definitions: {
+    filters: { id: string; primitiveCount: number }[];
+    gradients: { id: string; kind: "linear" | "radial"; stopCount: number }[];
+    patterns: { height?: string; id: string; width?: string }[];
+  } = {
+    filters: [],
+    gradients: [],
+    patterns: [],
+  };
   const fontFamilies = new Set<string>();
   const paintUsage: DocumentInventory["paintUsage"] = {
     fills: 0,
@@ -88,11 +133,10 @@ export function inspectSvgInventory(
     patterns: 0,
     strokes: 0,
   };
-  let elementCount = 0;
+  const elementCount = selected.length;
   let externalResourceCount = 0;
   let truncated = false;
-  for (const element of elements) {
-    elementCount += 1;
+  for (const element of selected) {
     const name = element.localName ?? "unknown";
     typeCounts[name] = (typeCounts[name] ?? 0) + 1;
     const id = element.getAttribute("id");
@@ -109,6 +153,8 @@ export function inspectSvgInventory(
         if (normalized) fontFamilies.add(normalized);
       }
     }
+    if (name === "style")
+      collectFontFamilies(element.textContent ?? "", fontFamilies);
     if (fill !== undefined) {
       paintUsage.fills += 1;
       if (
@@ -138,8 +184,6 @@ export function inspectSvgInventory(
     if (id) {
       if (ids.has(id)) duplicateIds.add(id);
       ids.add(id);
-      if (inspectedIds.length < detailLimit) inspectedIds.push(id);
-      else truncated = true;
     }
     for (let index = 0; index < element.attributes.length; index += 1) {
       const attribute = element.attributes.item(index);
@@ -152,6 +196,8 @@ export function inspectSvgInventory(
         else if (isExternalReference(target)) externalResourceCount += 1;
       }
     }
+    if (!pageElements.has(element)) continue;
+    if (id) inspectedIds.push(id);
     if (
       name === "g" &&
       element.getAttributeNS(INKSCAPE_NAMESPACE, "groupmode") === "layer"
@@ -175,26 +221,38 @@ export function inspectSvgInventory(
         element.getAttribute("xlink:href") ??
         "";
       if (images.length >= detailLimit) truncated = true;
-      else images.push({ kind: imageKind(href) });
+      else images.push(imageSummary(element, href));
     }
+    collectDefinition(element, definitions, detailLimit, () => {
+      truncated = true;
+    });
   }
   return {
+    definitions,
     duplicateIds: [...duplicateIds].sort(),
     elementCount,
     externalResourceCount,
     fontFamilies: [...fontFamilies].sort(),
+    fontWarnings: ["FONT_RESOLUTION_UNAVAILABLE"],
     fontResolution: "unavailable",
     images,
     ids: inspectedIds,
     layers,
     namespaces: [...namespaces].sort(),
+    ...(offset + elements.length < selected.length
+      ? { nextOffset: offset + elements.length }
+      : {}),
+    offset,
     paintUsage,
     typeCounts,
-    truncated,
+    totalElementCount: selected.length,
+    truncated: truncated || offset + elements.length < selected.length,
     unknownNamespaces: [...namespaces]
       .filter((namespace) => !KNOWN_NAMESPACES.has(namespace))
       .sort(),
-    unresolvedReferences: [...references].filter((id) => !ids.has(id)).sort(),
+    unresolvedReferences: [...references]
+      .filter((id) => !documentIds.has(id))
+      .sort(),
   };
 }
 function isPaintReference(
@@ -215,6 +273,130 @@ function parseInlineStyle(value: string): Readonly<Record<string, string>> {
     if (property && styleValue) styles[property] = styleValue;
   }
   return styles;
+}
+
+function normalizeOptions(options: number | InventoryOptions): {
+  detailLimit: number;
+  kinds?: readonly string[];
+  offset: number;
+} {
+  const detailLimit =
+    typeof options === "number" ? options : options.detailLimit;
+  const offset = typeof options === "number" ? 0 : (options.offset ?? 0);
+  const kinds = typeof options === "number" ? undefined : options.kinds;
+  if (
+    !Number.isInteger(detailLimit) ||
+    detailLimit < 1 ||
+    detailLimit > MAX_DETAIL_LIMIT ||
+    !Number.isInteger(offset) ||
+    offset < 0 ||
+    offset > 100_000 ||
+    (kinds !== undefined &&
+      (kinds.length > 100 ||
+        kinds.some((kind) => !/^[A-Za-z][A-Za-z0-9-]{0,127}$/u.test(kind))))
+  )
+    throw new Error("Inventory detail options are out of range");
+  return { detailLimit, ...(kinds === undefined ? {} : { kinds }), offset };
+}
+
+function collectFontFamilies(value: string, target: Set<string>): void {
+  for (const match of value.matchAll(/font-family\s*:\s*([^;}]+)/giu))
+    for (const family of (match[1] ?? "").split(",")) {
+      const normalized = family.trim().replace(/^['"]|['"]$/gu, "");
+      if (normalized) target.add(normalized);
+    }
+}
+
+function collectDefinition(
+  element: XmlElement,
+  definitions: {
+    filters: { id: string; primitiveCount: number }[];
+    gradients: { id: string; kind: "linear" | "radial"; stopCount: number }[];
+    patterns: { height?: string; id: string; width?: string }[];
+  },
+  limit: number,
+  truncate: () => void,
+): void {
+  const id = element.getAttribute("id");
+  if (!id) return;
+  const name = element.localName;
+  if (name === "linearGradient" || name === "radialGradient") {
+    if (definitions.gradients.length >= limit) return truncate();
+    definitions.gradients.push({
+      id,
+      kind: name === "linearGradient" ? "linear" : "radial",
+      stopCount: Array.from(element.childNodes).filter(
+        (child) => child.nodeType === 1 && child.localName === "stop",
+      ).length,
+    });
+  } else if (name === "pattern") {
+    if (definitions.patterns.length >= limit) return truncate();
+    definitions.patterns.push({
+      ...(element.getAttribute("height") === null
+        ? {}
+        : { height: element.getAttribute("height")! }),
+      id,
+      ...(element.getAttribute("width") === null
+        ? {}
+        : { width: element.getAttribute("width")! }),
+    });
+  } else if (name === "filter") {
+    if (definitions.filters.length >= limit) return truncate();
+    definitions.filters.push({
+      id,
+      primitiveCount: Array.from(element.childNodes).filter(
+        (child) => child.nodeType === 1,
+      ).length,
+    });
+  }
+}
+
+function imageSummary(
+  element: XmlElement,
+  href: string,
+): DocumentInventory["images"][number] {
+  const display = {
+    ...(element.getAttribute("height") === null
+      ? {}
+      : { height: element.getAttribute("height")! }),
+    ...(element.getAttribute("width") === null
+      ? {}
+      : { width: element.getAttribute("width")! }),
+  };
+  const intrinsic = embeddedPngSize(href);
+  return {
+    display,
+    intrinsic:
+      intrinsic === undefined
+        ? { status: "unavailable" }
+        : { ...intrinsic, status: "available" },
+    kind: imageKind(href),
+  };
+}
+
+function embeddedPngSize(
+  href: string,
+): { height: number; width: number } | undefined {
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/iu.exec(href);
+  if (!match) return undefined;
+  const payload = match[1] ?? "";
+  // PNG dimensions occur in the IHDR header.  Decode a bounded prefix only:
+  // inventories must never turn a multi-megabyte embedded image into output or
+  // allocate it merely to inspect its size.
+  const bytes = Buffer.from(payload.slice(0, 128), "base64");
+  if (
+    bytes.length < 24 ||
+    bytes
+      .subarray(0, 8)
+      .compare(
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      ) !== 0 ||
+    bytes.subarray(12, 16).toString("ascii") !== "IHDR"
+  )
+    return undefined;
+  const width = bytes.readUInt32BE(16);
+  const height = bytes.readUInt32BE(20);
+  return width > 0 && height > 0 ? { height, width } : undefined;
 }
 
 function* walk(root: XmlElement): Generator<XmlElement> {

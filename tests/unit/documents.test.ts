@@ -290,6 +290,7 @@ describe("basic SVG documents", () => {
       externalResourceCount: 2,
       fontFamilies: ["Arial", "NotoSans"],
       fontResolution: "unavailable",
+      fontWarnings: ["FONT_RESOLUTION_UNAVAILABLE"],
       ids: ["gradient", "layer", "same", "same"],
       unknownNamespaces: ["urn:custom"],
       unresolvedReferences: ["missing"],
@@ -303,12 +304,71 @@ describe("basic SVG documents", () => {
       },
     });
     expect(inventory.images).toEqual([
-      { kind: "embedded" },
-      { kind: "external" },
+      {
+        display: {},
+        intrinsic: { status: "unavailable" },
+        kind: "embedded",
+      },
+      {
+        display: {},
+        intrinsic: { status: "unavailable" },
+        kind: "external",
+      },
     ]);
     expect(inventory.layers).toEqual([
       { id: "layer", label: "Layer", locked: true, visibility: "hidden" },
     ]);
+  });
+  it("inventories paint definitions and redacted image metadata without claiming font availability", () => {
+    const inventory = inspectSvgInventory(
+      '<svg xmlns="http://www.w3.org/2000/svg"><style>.title { font-family: Forte, serif; }</style><defs><linearGradient id="linear"><stop/><stop/></linearGradient><radialGradient id="radial"><stop/></radialGradient><pattern id="dots" width="4" height="5"/><filter id="soft"><feGaussianBlur/></filter></defs><rect fill="url(#linear)" stroke="url(#dots)" filter="url(#soft)" style="opacity: 0.4"/><image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ" width="20" height="10"/><image href="private/assets/secret.png" width="12"/></svg>',
+    );
+    expect(inventory.definitions).toEqual({
+      filters: [{ id: "soft", primitiveCount: 1 }],
+      gradients: [
+        { id: "linear", kind: "linear", stopCount: 2 },
+        { id: "radial", kind: "radial", stopCount: 1 },
+      ],
+      patterns: [{ id: "dots", width: "4", height: "5" }],
+    });
+    expect(inventory.fontFamilies).toEqual(["Forte", "serif"]);
+    expect(inventory.fontWarnings).toEqual(["FONT_RESOLUTION_UNAVAILABLE"]);
+    expect(inventory.images).toEqual([
+      {
+        display: { height: "10", width: "20" },
+        intrinsic: { height: 1, status: "available", width: 1 },
+        kind: "embedded",
+      },
+      {
+        display: { width: "12" },
+        intrinsic: { status: "unavailable" },
+        kind: "linked",
+      },
+    ]);
+    expect(JSON.stringify(inventory)).not.toContain(
+      "private/assets/secret.png",
+    );
+  });
+  it("paginates and filters inventory details with a bounded next offset", () => {
+    const inventory = inspectSvgInventory(
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect id="one"/><circle id="skip"/><rect id="two"/><rect id="three"/></svg>',
+      { detailLimit: 2, kinds: ["rect"], offset: 1 },
+    );
+    expect(inventory).toMatchObject({
+      elementCount: 3,
+      ids: ["two", "three"],
+      offset: 1,
+      totalElementCount: 3,
+      truncated: false,
+      typeCounts: { rect: 3 },
+    });
+    expect(inventory.nextOffset).toBeUndefined();
+    const firstPage = inspectSvgInventory(
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect id="one"/><circle id="skip"/><rect id="two"/><rect id="three"/></svg>',
+      { detailLimit: 2, kinds: ["rect"] },
+    );
+    expect(firstPage.nextOffset).toBe(2);
+    expect(firstPage.truncated).toBe(true);
   });
   it("round-trips explicit Inkscape pages by stable ID", () => {
     const source = createSvgDocument({

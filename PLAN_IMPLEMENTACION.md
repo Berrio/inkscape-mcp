@@ -1610,12 +1610,12 @@ Evidencia específica adicional para WP de alto riesgo:
 #### Inspección
 
 - [x] `F04-T01` Inventariar elementos por tipo, ID, layer, visibilidad y lock.
-- [ ] `F04-T02` Reportar bounds globales y por página.
-- [ ] `F04-T03` Inventariar fills, strokes, gradientes, patterns, filters y opacidades.
-- [ ] `F04-T04` Inventariar fuentes/estilos y detectar faltantes mediante un font resolver probado; si no existe esa capability, devolver `FONT_RESOLUTION_UNAVAILABLE` y no afirmar ausencia.
-- [ ] `F04-T05` Inventariar imágenes linked/embedded, dimensiones y rutas redactadas.
+- [x] `F04-T02` Reportar bounds globales y por página. — `document_inspect(includeVisualBounds=true)` consulta `--query-all` con revisión fijada y devuelve unión global e intersecciones por página con fidelidad parcial.
+- [x] `F04-T03` Inventariar fills, strokes, gradientes, patterns, filters y opacidades. — Inventario acotado de atributos/estilos inline y defs; no afirma estilos CSS computados.
+- [x] `F04-T04` Inventariar fuentes/estilos y detectar faltantes mediante un font resolver probado; si no existe esa capability, devolver `FONT_RESOLUTION_UNAVAILABLE` y no afirmar ausencia. — Devuelve familias declaradas y `FONT_RESOLUTION_UNAVAILABLE`, sin afirmar presencia/ausencia.
+- [x] `F04-T05` Inventariar imágenes linked/embedded, dimensiones y rutas redactadas. — Tipo, display y PNG IHDR intrínseco acotado sin exponer href/ruta/payload.
 - [x] `F04-T06` Detectar IDs duplicados, refs rotas, recursos externos y namespaces desconocidos.
-- [ ] `F04-T07` Añadir paginación/filtros para documentos grandes.
+- [x] `F04-T07` Añadir paginación/filtros para documentos grandes. — `inventoryKinds`, límite/offset, `nextOffset`, total y truncamiento estable.
 - [x] `F04-T08` Completar `document_inspect` con niveles `summary|standard|deep`.
 
 #### Preflight

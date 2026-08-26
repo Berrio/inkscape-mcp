@@ -475,6 +475,7 @@ try {
   const inspected = await workspaceClient.callTool({
     arguments: {
       expectedRevision: groupedRevision,
+      includeVisualBounds: true,
       path: "a4.svg",
       workspaceId: workspace.id,
     },
@@ -485,7 +486,11 @@ try {
     inspected.structuredContent?.viewBox?.width !== 148 ||
     inspected.structuredContent?.widthUnit !== "mm" ||
     (inspected.structuredContent?.inventory?.elementCount ?? 0) < 2 ||
-    inspected.structuredContent?.pages?.[0]?.id !== "page_front"
+    inspected.structuredContent?.pages?.[0]?.id !== "page_front" ||
+    inspected.structuredContent?.visualBounds?.fidelity !== "partial" ||
+    inspected.structuredContent?.visualBounds?.source !==
+      "inkscape-query-all" ||
+    inspected.structuredContent?.visualBounds?.pages?.[0]?.id !== "page_front"
   ) {
     throw new Error("document_inspect did not report the resized viewBox");
   }

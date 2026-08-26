@@ -107,13 +107,47 @@ const displaySettingsSchema = z.object({
   pageOpacity: z.number().min(0).max(1),
 });
 const inventorySchema = z.object({
+  definitions: z.object({
+    filters: z.array(
+      z.object({
+        id: z.string(),
+        primitiveCount: z.number().int().nonnegative(),
+      }),
+    ),
+    gradients: z.array(
+      z.object({
+        id: z.string(),
+        kind: z.enum(["linear", "radial"]),
+        stopCount: z.number().int().nonnegative(),
+      }),
+    ),
+    patterns: z.array(
+      z.object({
+        height: z.string().optional(),
+        id: z.string(),
+        width: z.string().optional(),
+      }),
+    ),
+  }),
   duplicateIds: z.array(z.string()),
   elementCount: z.number().int().nonnegative(),
   externalResourceCount: z.number().int().nonnegative(),
   fontFamilies: z.array(z.string()),
+  fontWarnings: z.tuple([z.literal("FONT_RESOLUTION_UNAVAILABLE")]),
   fontResolution: z.literal("unavailable"),
   images: z.array(
-    z.object({ kind: z.enum(["embedded", "external", "linked"]) }),
+    z.object({
+      display: z.object({
+        height: z.string().optional(),
+        width: z.string().optional(),
+      }),
+      intrinsic: z.object({
+        height: z.number().int().positive().optional(),
+        status: z.enum(["available", "unavailable"]),
+        width: z.number().int().positive().optional(),
+      }),
+      kind: z.enum(["embedded", "external", "linked"]),
+    }),
   ),
   ids: z.array(z.string()),
   layers: z.array(
@@ -125,6 +159,8 @@ const inventorySchema = z.object({
     }),
   ),
   namespaces: z.array(z.string()),
+  nextOffset: z.number().int().nonnegative().optional(),
+  offset: z.number().int().nonnegative(),
   paintUsage: z.object({
     fills: z.number().int().nonnegative(),
     filters: z.number().int().nonnegative(),
@@ -133,10 +169,37 @@ const inventorySchema = z.object({
     patterns: z.number().int().nonnegative(),
     strokes: z.number().int().nonnegative(),
   }),
+  totalElementCount: z.number().int().nonnegative(),
   typeCounts: z.record(z.string(), z.number().int().nonnegative()),
   truncated: z.boolean(),
   unknownNamespaces: z.array(z.string()),
   unresolvedReferences: z.array(z.string()),
+});
+const visualBoundsSchema = z.object({
+  fidelity: z.literal("partial"),
+  global: z
+    .object({
+      height: z.number().finite().positive(),
+      width: z.number().finite().positive(),
+      x: z.number().finite(),
+      y: z.number().finite(),
+    })
+    .optional(),
+  limitations: z.array(z.string()),
+  pages: z.array(
+    z.object({
+      bounds: z
+        .object({
+          height: z.number().finite().positive(),
+          width: z.number().finite().positive(),
+          x: z.number().finite(),
+          y: z.number().finite(),
+        })
+        .optional(),
+      id: z.string(),
+    }),
+  ),
+  source: z.literal("inkscape-query-all"),
 });
 const pagePresetSchema = z.enum([
   "a3-landscape",
@@ -1201,12 +1264,19 @@ export function buildServer(config: ServerConfig): McpServer {
     "document_inspect",
     {
       description:
-        "Reads SVG viewport dimensions, viewBox and revision from an authorized document without mutating it.",
+        "Reads SVG settings and a bounded, redacted design inventory from an authorized document without mutating it.",
       inputSchema: z.object({
         expectedRevision: z
           .string()
           .regex(/^[a-f0-9]{64}$/u)
           .optional(),
+        includeVisualBounds: z.boolean().default(false),
+        inventoryKinds: z
+          .array(z.string().regex(/^[A-Za-z][A-Za-z0-9-]{0,127}$/u))
+          .max(100)
+          .optional(),
+        inventoryLimit: z.number().int().min(1).max(1_000).optional(),
+        inventoryOffset: z.number().int().min(0).max(100_000).default(0),
         level: z.enum(["summary", "standard", "deep"]).default("standard"),
         path: z.string().min(1).max(1024),
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
@@ -1236,6 +1306,7 @@ export function buildServer(config: ServerConfig): McpServer {
           x: z.number(),
           y: z.number(),
         }),
+        visualBounds: visualBoundsSchema.optional(),
         width: z.string(),
         widthUnit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
         warnings: z.array(
@@ -1252,15 +1323,51 @@ export function buildServer(config: ServerConfig): McpServer {
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ expectedRevision, level, path, workspaceId }) => {
+    async ({
+      expectedRevision,
+      includeVisualBounds,
+      inventoryKinds,
+      inventoryLimit,
+      inventoryOffset,
+      level,
+      path,
+      workspaceId,
+    }) => {
       assertDocumentWorkspace(config);
       const workspace = await workspaces();
       const document = await workspace.resolveExisting(workspaceId, path);
       const revision = await sha256File(document.absolutePath);
       if (expectedRevision !== undefined && expectedRevision !== revision)
         throw new Error("Document revision no longer matches");
+      if (includeVisualBounds && expectedRevision === undefined)
+        throw new Error("Inkscape bounds require expectedRevision");
       const source = await readFile(document.absolutePath, "utf8");
       const settings = inspectSvgSettings(source);
+      const explicitPages = listSvgPages(source);
+      const visualBounds =
+        includeVisualBounds && expectedRevision !== undefined
+          ? inventoryVisualBounds(
+              await queryNativeBounds({
+                config,
+                documentPath: document.absolutePath,
+                expectedRevision,
+                runner,
+                scratch,
+                workspaceRoot: document.workspaceRoot,
+              }),
+              explicitPages.length === 0
+                ? [
+                    {
+                      height: settings.viewBox.height,
+                      id: "root_viewbox",
+                      width: settings.viewBox.width,
+                      x: settings.viewBox.x,
+                      y: settings.viewBox.y,
+                    },
+                  ]
+                : explicitPages,
+            )
+          : undefined;
       const output = {
         ...settings,
         heightUnit: parseViewportLength(settings.height).unit,
@@ -1268,13 +1375,17 @@ export function buildServer(config: ServerConfig): McpServer {
         ...(level === "summary"
           ? {}
           : {
-              inventory: inspectSvgInventory(
-                source,
-                level === "deep" ? 1_000 : 100,
-              ),
+              inventory: inspectSvgInventory(source, {
+                detailLimit: inventoryLimit ?? (level === "deep" ? 1_000 : 100),
+                ...(inventoryKinds === undefined
+                  ? {}
+                  : { kinds: inventoryKinds }),
+                offset: inventoryOffset,
+              }),
             }),
-        pages: listSvgPages(source),
+        pages: explicitPages,
         revision,
+        ...(visualBounds === undefined ? {} : { visualBounds }),
         widthUnit: parseViewportLength(settings.width).unit,
       };
       return {
@@ -2542,6 +2653,63 @@ function resourceVariable(
   value: string | string[] | undefined,
 ): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function inventoryVisualBounds(
+  boundsById: ReadonlyMap<string, InkscapeBounds>,
+  pages: readonly {
+    height: number;
+    id: string;
+    width: number;
+    x: number;
+    y: number;
+  }[],
+): {
+  fidelity: "partial";
+  global?: InkscapeBounds;
+  limitations: readonly ["GEOMETRIC_ENGINE_UNAVAILABLE"];
+  pages: readonly { bounds?: InkscapeBounds; id: string }[];
+  source: "inkscape-query-all";
+} {
+  const bounds = [...boundsById.values()].filter(
+    (value) => value.width > 0 && value.height > 0,
+  );
+  return {
+    fidelity: nativeVisualBounds.fidelity,
+    ...(unionAvailableBounds(bounds) === undefined
+      ? {}
+      : { global: unionAvailableBounds(bounds)! }),
+    limitations: nativeVisualBounds.limitations,
+    pages: pages.map((page) => {
+      const inPage = bounds
+        .map((bound) => intersectBounds(bound, page))
+        .filter((bound): bound is InkscapeBounds => bound !== undefined);
+      const pageBounds = unionAvailableBounds(inPage);
+      return pageBounds === undefined
+        ? { id: page.id }
+        : { bounds: pageBounds, id: page.id };
+    }),
+    source: nativeVisualBounds.source,
+  };
+}
+
+function unionAvailableBounds(
+  bounds: readonly InkscapeBounds[],
+): InkscapeBounds | undefined {
+  if (bounds.length === 0) return undefined;
+  return unionBounds(bounds);
+}
+
+function intersectBounds(
+  left: InkscapeBounds,
+  right: InkscapeBounds,
+): InkscapeBounds | undefined {
+  const x = Math.max(left.x, right.x);
+  const y = Math.max(left.y, right.y);
+  const rightEdge = Math.min(left.x + left.width, right.x + right.width);
+  const bottomEdge = Math.min(left.y + left.height, right.y + right.height);
+  if (rightEdge <= x || bottomEdge <= y) return undefined;
+  return { height: bottomEdge - y, width: rightEdge - x, x, y };
 }
 
 function unionBounds(bounds: readonly InkscapeBounds[]): InkscapeBounds {

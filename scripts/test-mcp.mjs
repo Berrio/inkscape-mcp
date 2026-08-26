@@ -705,6 +705,34 @@ try {
   if (dpiPng.isError || (dpiPng.structuredContent?.width ?? 0) < 1) {
     throw new Error("export_png did not accept a bounded DPI request");
   }
+  const printDocument = await workspaceClient.callTool({
+    arguments: {
+      outputPath: "a4-print.svg",
+      preset: "a4-portrait",
+      workspaceId: workspace.id,
+    },
+    name: "document_create",
+  });
+  const printRevision = printDocument.structuredContent?.revision;
+  if (printDocument.isError || typeof printRevision !== "string")
+    throw new Error("document_create did not prepare the A4 print fixture");
+  const printPng = await workspaceClient.callTool({
+    arguments: {
+      dpi: 300,
+      expectedRevision: printRevision,
+      outputPath: "a4-300dpi.png",
+      path: "a4-print.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_png",
+  });
+  if (
+    printPng.isError ||
+    printPng.structuredContent?.width !== 2480 ||
+    printPng.structuredContent?.height !== 3508
+  ) {
+    throw new Error("A4 300 DPI PNG did not produce 2480 by 3508 pixels");
+  }
   const solidPng = await workspaceClient.callTool({
     arguments: {
       area: "drawing",

@@ -1694,7 +1694,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Puerta MVP F05
 
-- [ ] `F05-G01` A4 a 300 dpi produce 2480 × 3508 px según política documentada.
+- [x] `F05-G01` A4 a 300 dpi produce 2480 × 3508 px según política documentada. — La prueba MCP crea un fixture A4 independiente, exporta página a 300 dpi y verifica IHDR 2480 × 3508 con Inkscape 1.4.4.
 - [ ] `F05-G02` PNG transparente y con fondo validan dimensiones/píxeles esperados.
 - [ ] `F05-G03` PDF multipágina conserva el número y tamaños de páginas esperados.
 - [ ] `F05-G04` SVG y plain SVG reabren en Inkscape y pasan validación estructural/visual.

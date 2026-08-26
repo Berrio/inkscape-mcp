@@ -818,6 +818,27 @@ try {
   ) {
     throw new Error("export_pdf did not publish an inspectable PDF");
   }
+  const latexPdf = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: settingsRevision,
+      latex: true,
+      outputPath: "a4-latex.pdf",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_pdf",
+  });
+  if (
+    latexPdf.isError ||
+    latexPdf.structuredContent?.latexSidecar?.path !== "a4-latex.pdf_tex" ||
+    typeof latexPdf.structuredContent?.latexSidecar?.revision !== "string" ||
+    !latexPdf.structuredContent?.warnings?.includes("LATEX_SIDECAR_EMITTED")
+  ) {
+    throw new Error("export_pdf did not publish its LaTeX sidecar");
+  }
+  const latexSidecar = await readFile(join(workspaceRoot, "a4-latex.pdf_tex"));
+  if (latexSidecar.byteLength < 1)
+    throw new Error("export_pdf published an empty LaTeX sidecar");
   await writeFile(
     join(workspaceRoot, "multipage.svg"),
     await readFile(

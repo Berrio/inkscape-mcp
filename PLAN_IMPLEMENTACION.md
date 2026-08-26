@@ -1671,11 +1671,11 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [x] `F05-T14` Ejecutar spike/ADR: elegir inspector PDF JS, confirmar que 1.4.4 separa `--export-page`, fijar estrategia prune (direct solo por capability futura; merge como último fallback), tolerancias de boxes y fixture de `viewBox` con origen no cero. — ADR-011 fija `pdf-lib` MIT, sonda 1.4.4, tolerancia 0.6 pt y los fixtures `pdf-multipage.svg`/`pdf-nonzero-viewbox.svg`.
 - [ ] `F05-T15` Implementar opciones PDF 1.4/1.5, text-to-path, filter DPI/ignore y LaTeX; margen queda capability-gated por sonda y usa expansión temporal si el flag falla; normalizar una copia temporal a origen cero cuando la sonda detecte el problema de PDF con `viewBox` no cero.
-- [ ] `F05-T16` Implementar PDF multipágina completo sin asumir semántica errónea de `--export-page`.
-- [ ] `F05-T17` Implementar subset a PDF único por poda de SVG temporal en 1.4.4; habilitar direct solo por capability futura y unión externa únicamente si la poda no preserva semántica.
+- [x] `F05-T16` Implementar PDF multipágina completo sin asumir semántica errónea de `--export-page`. — En 1.4.4 la exportación de documento no añade `--export-page`; la prueba MCP real verifica un PDF de dos páginas y declara estrategia `full_document`.
+- [x] `F05-T17` Implementar subset a PDF único por poda de SVG temporal en 1.4.4; habilitar direct solo por capability futura y unión externa únicamente si la poda no preserva semántica. — La copia inmutable se poda por IDs seguros antes de la exportación y el PDF resultante se verifica contra el número solicitado, con estrategia `prune_subset`.
 - [ ] `F05-T18` Implementar exportar páginas separadas con nombres deterministas.
 - [ ] `F05-T19` Verificar firma, versión, page count, orden, boxes, bytes y hash, incluido `pdf-nonzero-viewbox.svg` contra el problema conocido 6323.
-- [ ] `F05-T20` Detectar artefactos secundarios LaTeX y publicarlos como grupo lógicamente atómico.
+- [x] `F05-T20` Detectar artefactos secundarios LaTeX y publicarlos como grupo lógicamente atómico. — `latex=true` verifica y publica `output.pdf` y `output.pdf_tex` mediante `AtomicFileStore.commitBatch`; fallos manejados restauran miembros ya publicados y la prueba MCP real lee el sidecar no vacío.
 
 #### SVG
 

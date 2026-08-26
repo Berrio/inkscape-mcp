@@ -6,6 +6,10 @@ export {
   sha256File,
   type CommitFileRequest,
   type CommitFileResult,
+  type CommitBatchFileRequest,
+  type CommitBatchFileResult,
+  type CommitFileBatchRequest,
+  type CommitFileBatchResult,
   type MutationDocumentRef,
 } from "./revisions.js";
 export { ScratchManager } from "./scratch.js";

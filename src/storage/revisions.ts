@@ -80,6 +80,24 @@ export type CommitFileRequest = {
   targetPath: string;
 };
 export type CommitFileResult = { backupPath?: string; revision: string };
+export type CommitBatchFileRequest = {
+  contents: Uint8Array;
+  expectedOutputRevision?: string;
+  targetPath: string;
+};
+export type CommitBatchFileResult = {
+  backupPath?: string;
+  revision: string;
+  targetPath: string;
+};
+export type CommitFileBatchRequest = {
+  expectedRevision?: string;
+  files: readonly CommitBatchFileRequest[];
+  sourcePath?: string;
+};
+export type CommitFileBatchResult = {
+  files: readonly CommitBatchFileResult[];
+};
 type TemporaryWriter = (path: string, contents: Uint8Array) => Promise<void>;
 
 export class AtomicFileStore {
@@ -129,6 +147,117 @@ export class AtomicFileStore {
           };
         } finally {
           await rm(temporary, { force: true });
+        }
+      },
+    );
+  }
+
+  /**
+   * Publishes a small, related set of outputs with one lock/revision boundary.
+   * A process crash between renames cannot be made filesystem-atomic across files,
+   * but handled failures restore every already-published member from its backup.
+   */
+  public async commitBatch(
+    request: CommitFileBatchRequest,
+  ): Promise<CommitFileBatchResult> {
+    if (request.files.length < 1 || request.files.length > 100)
+      throw new Error("A commit batch must contain between 1 and 100 files");
+    const files = request.files.map((file) => ({
+      ...file,
+      targetPath: resolve(file.targetPath),
+    }));
+    if (
+      new Set(files.map((file) => file.targetPath.toLocaleLowerCase())).size !==
+      files.length
+    )
+      throw new Error("A commit batch cannot contain duplicate output paths");
+    return this.locks.withLocks(
+      [
+        ...files.map((file) => file.targetPath),
+        ...(request.sourcePath ? [request.sourcePath] : []),
+      ],
+      async () => {
+        if (request.sourcePath && request.expectedRevision)
+          await assertRevision(request.sourcePath, request.expectedRevision);
+        const staged = await Promise.all(
+          files.map(async (file) => ({
+            ...file,
+            exists: await fileExists(file.targetPath),
+          })),
+        );
+        for (const file of staged) {
+          if (file.exists && file.expectedOutputRevision === undefined)
+            throw new RevisionConflictError(
+              "Overwriting an output requires expectedOutputRevision",
+            );
+          if (file.exists && file.expectedOutputRevision)
+            await assertRevision(file.targetPath, file.expectedOutputRevision);
+        }
+        const temporaries = staged.map((file) =>
+          join(
+            dirname(file.targetPath),
+            `.${basename(file.targetPath)}.inkscape-mcp-${crypto.randomUUID()}.tmp`,
+          ),
+        );
+        const backups: (string | undefined)[] = staged.map(() => undefined);
+        const published: number[] = [];
+        try {
+          for (let index = 0; index < staged.length; index += 1)
+            await this.writeTemporary(
+              temporaries[index]!,
+              staged[index]!.contents,
+            );
+          if (request.sourcePath && request.expectedRevision)
+            await assertRevision(request.sourcePath, request.expectedRevision);
+          for (const file of staged) {
+            const finalExists = await fileExists(file.targetPath);
+            if (finalExists !== file.exists)
+              throw new RevisionConflictError(
+                "Output existence changed before publication",
+              );
+            if (finalExists && file.expectedOutputRevision)
+              await assertRevision(
+                file.targetPath,
+                file.expectedOutputRevision,
+              );
+          }
+          for (let index = 0; index < staged.length; index += 1) {
+            const file = staged[index]!;
+            if (!file.exists) continue;
+            const backup = uniqueBackupPath(file.targetPath);
+            await copyFile(file.targetPath, backup, 0);
+            backups[index] = backup;
+          }
+          for (let index = 0; index < staged.length; index += 1) {
+            await rename(temporaries[index]!, staged[index]!.targetPath);
+            published.push(index);
+          }
+          return {
+            files: await Promise.all(
+              staged.map(async (file, index) => ({
+                ...(backups[index] === undefined
+                  ? {}
+                  : { backupPath: backups[index] }),
+                revision: await sha256File(file.targetPath),
+                targetPath: file.targetPath,
+              })),
+            ),
+          };
+        } catch (error) {
+          await Promise.all(
+            published.map(async (index) => {
+              const file = staged[index]!;
+              const backup = backups[index];
+              if (backup === undefined)
+                await rm(file.targetPath, { force: true });
+              else await copyFile(backup, file.targetPath, 0);
+            }),
+          );
+          throw error;
+        } finally {
+          await Promise.all(
+            temporaries.map((path) => rm(path, { force: true })),
+          );
         }
       },
     );

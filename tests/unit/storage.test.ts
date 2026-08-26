@@ -225,6 +225,80 @@ describe("file revisions and atomic store", () => {
       (await readdir(root)).filter((name) => name.includes("inkscape-mcp")),
     ).toEqual([]);
   });
+  it("commits related outputs as one handled rollback boundary", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const pdf = join(root, "output.pdf");
+    const latex = join(root, "output.pdf_tex");
+    await writeFile(source, "source");
+    const store = new AtomicFileStore();
+    const result = await store.commitBatch({
+      expectedRevision: await sha256File(source),
+      files: [
+        { contents: Buffer.from("pdf"), targetPath: pdf },
+        { contents: Buffer.from("latex"), targetPath: latex },
+      ],
+      sourcePath: source,
+    });
+    expect(result.files.map((file) => file.revision)).toEqual([
+      await sha256File(pdf),
+      await sha256File(latex),
+    ]);
+    await expect(readFile(pdf, "utf8")).resolves.toBe("pdf");
+    await expect(readFile(latex, "utf8")).resolves.toBe("latex");
+  });
+  it("does not publish a primary output when a batch member cannot be staged", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const pdf = join(root, "output.pdf");
+    const latex = join(root, "output.pdf_tex");
+    await writeFile(source, "source");
+    let writes = 0;
+    const store = new AtomicFileStore(
+      new CanonicalPathLocks(),
+      async (temporaryPath, contents) => {
+        writes += 1;
+        if (writes === 2) throw new Error("sidecar staging failed");
+        await writeFile(temporaryPath, contents);
+      },
+    );
+    await expect(
+      store.commitBatch({
+        expectedRevision: await sha256File(source),
+        files: [
+          { contents: Buffer.from("pdf"), targetPath: pdf },
+          { contents: Buffer.from("latex"), targetPath: latex },
+        ],
+        sourcePath: source,
+      }),
+    ).rejects.toThrow("sidecar staging failed");
+    await expect(readFile(pdf)).rejects.toBeDefined();
+    await expect(readFile(latex)).rejects.toBeDefined();
+    expect(
+      (await readdir(root)).filter((name) => name.includes("inkscape-mcp")),
+    ).toEqual([]);
+  });
+  it("rejects a batch before publication when an existing sidecar lacks its revision", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const pdf = join(root, "output.pdf");
+    const latex = join(root, "output.pdf_tex");
+    await writeFile(source, "source");
+    await writeFile(latex, "existing sidecar");
+    const store = new AtomicFileStore();
+    await expect(
+      store.commitBatch({
+        expectedRevision: await sha256File(source),
+        files: [
+          { contents: Buffer.from("pdf"), targetPath: pdf },
+          { contents: Buffer.from("latex"), targetPath: latex },
+        ],
+        sourcePath: source,
+      }),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+    await expect(readFile(pdf)).rejects.toBeDefined();
+    await expect(readFile(latex, "utf8")).resolves.toBe("existing sidecar");
+  });
   it("rejects an external source or destination writer before atomic publication", async () => {
     const root = await temporaryDirectory();
     const source = join(root, "source.svg");

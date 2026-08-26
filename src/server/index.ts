@@ -2770,29 +2770,44 @@ export function buildServer(config: ServerConfig): McpServer {
     {
       description:
         "Exports an SVG document to a validated PDF through Inkscape using bounded, allowlisted options.",
-      inputSchema: z.object({
-        expectedOutputRevision: z
-          .string()
-          .regex(/^[a-f0-9]{64}$/u)
-          .optional(),
-        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
-        filterDpi: z.number().finite().positive().max(10_000).optional(),
-        filters: z.enum(["ignore", "preserve"]).default("preserve"),
-        outputPath: z.string().min(1).max(1024),
-        pageIds: z
-          .array(shapeIdSchema)
-          .min(1)
-          .max(100)
-          .refine(
-            (ids) => new Set(ids).size === ids.length,
-            "PDF page IDs must be distinct",
-          )
-          .optional(),
-        path: z.string().min(1).max(1024),
-        pdfVersion: z.enum(["1.4", "1.5"]).optional(),
-        textToPath: z.boolean().default(false),
-        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
-      }),
+      inputSchema: z
+        .object({
+          expectedLatexOutputRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
+          expectedOutputRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          filterDpi: z.number().finite().positive().max(10_000).optional(),
+          filters: z.enum(["ignore", "preserve"]).default("preserve"),
+          latex: z.boolean().default(false),
+          outputPath: z.string().min(1).max(1024),
+          pageIds: z
+            .array(shapeIdSchema)
+            .min(1)
+            .max(100)
+            .refine(
+              (ids) => new Set(ids).size === ids.length,
+              "PDF page IDs must be distinct",
+            )
+            .optional(),
+          path: z.string().min(1).max(1024),
+          pdfVersion: z.enum(["1.4", "1.5"]).optional(),
+          textToPath: z.boolean().default(false),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict()
+        .superRefine((value, context) => {
+          if (value.expectedLatexOutputRevision !== undefined && !value.latex)
+            context.addIssue({
+              code: "custom",
+              message: "expectedLatexOutputRevision requires latex=true",
+              path: ["expectedLatexOutputRevision"],
+            });
+        }),
       outputSchema: z.object({
         byteLength: z.number().int().positive(),
         cropBoxes: z.array(
@@ -2804,6 +2819,12 @@ export function buildServer(config: ServerConfig): McpServer {
           }),
         ),
         hash: z.string().regex(/^[a-f0-9]{64}$/u),
+        latexSidecar: z
+          .object({
+            path: z.string().min(1).max(1028),
+            revision: z.string().regex(/^[a-f0-9]{64}$/u),
+          })
+          .optional(),
         mediaBoxes: z.array(
           z.object({
             height: z.number().positive(),
@@ -2822,10 +2843,12 @@ export function buildServer(config: ServerConfig): McpServer {
       annotations: { destructiveHint: false },
     },
     async ({
+      expectedLatexOutputRevision,
       expectedOutputRevision,
       expectedRevision,
       filterDpi,
       filters,
+      latex,
       outputPath,
       pageIds,
       path,
@@ -2839,6 +2862,12 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = await workspace.resolveNewOutput(workspaceId, outputPath);
       if (!/\.pdf$/iu.test(output.relativePath))
         throw new Error("export_pdf requires a .pdf output path");
+      const latexOutput = latex
+        ? await workspace.resolveNewOutput(
+            workspaceId,
+            `${output.relativePath}_tex`,
+          )
+        : undefined;
       if (pageIds !== undefined) {
         const available = new Set(
           listSvgPages(await readFile(input.absolutePath, "utf8")).map(
@@ -2856,6 +2885,7 @@ export function buildServer(config: ServerConfig): McpServer {
         ...(filterDpi === undefined ? {} : { filterRasterDpi: filterDpi }),
         filters: filters === "ignore" ? "ignore-with-warning" : "preserve",
         format: "pdf",
+        latex,
         source: { expectedRevision, path },
         target: {
           ...(expectedOutputRevision === undefined
@@ -2949,24 +2979,69 @@ export function buildServer(config: ServerConfig): McpServer {
           throw new Error(
             "PDF subset did not preserve the requested page count",
           );
+        let latexBytes: Buffer | undefined;
+        if (latex) {
+          try {
+            latexBytes = await readFile(`${temporaryOutput}_tex`);
+          } catch {
+            throw new Error(
+              "Inkscape did not produce the requested LaTeX sidecar",
+            );
+          }
+        }
         return {
           bytes: await readFile(temporaryOutput),
+          ...(latexBytes === undefined ? {} : { latexBytes }),
           metadata,
         };
       });
-      const committed = await fileStore.commit({
-        contents: pdf.bytes,
-        ...(expectedOutputRevision === undefined
-          ? {}
-          : { expectedOutputRevision }),
-        expectedRevision,
-        sourcePath: input.absolutePath,
-        targetPath: output.absolutePath,
-      });
+      const committedFiles = latex
+        ? (
+            await fileStore.commitBatch({
+              expectedRevision,
+              files: [
+                {
+                  contents: pdf.bytes,
+                  ...(expectedOutputRevision === undefined
+                    ? {}
+                    : { expectedOutputRevision }),
+                  targetPath: output.absolutePath,
+                },
+                {
+                  contents: pdf.latexBytes!,
+                  ...(expectedLatexOutputRevision === undefined
+                    ? {}
+                    : { expectedOutputRevision: expectedLatexOutputRevision }),
+                  targetPath: latexOutput!.absolutePath,
+                },
+              ],
+              sourcePath: input.absolutePath,
+            })
+          ).files
+        : [
+            await fileStore.commit({
+              contents: pdf.bytes,
+              ...(expectedOutputRevision === undefined
+                ? {}
+                : { expectedOutputRevision }),
+              expectedRevision,
+              sourcePath: input.absolutePath,
+              targetPath: output.absolutePath,
+            }),
+          ];
+      const committed = committedFiles[0]!;
       const result = {
         byteLength: pdf.metadata.byteLength,
         cropBoxes: pdf.metadata.cropBoxes,
         hash: pdf.metadata.hash,
+        ...(latex
+          ? {
+              latexSidecar: {
+                path: latexOutput!.relativePath,
+                revision: committedFiles[1]!.revision,
+              },
+            }
+          : {}),
         mediaBoxes: pdf.metadata.mediaBoxes,
         pageCount: pdf.metadata.pageCount,
         ...(pageIds === undefined ? {} : { pageIds }),
@@ -2976,6 +3051,7 @@ export function buildServer(config: ServerConfig): McpServer {
         warnings: [
           ...(pageIds === undefined ? [] : ["PDF_SUBSET_PRUNED"]),
           ...(filters === "ignore" ? ["FILTERS_IGNORED_VISUAL_CHANGE"] : []),
+          ...(latex ? ["LATEX_SIDECAR_EMITTED"] : []),
           ...(textToPath ? ["TEXT_CONVERTED_TO_PATHS"] : []),
         ],
       };

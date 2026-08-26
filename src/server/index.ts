@@ -792,6 +792,13 @@ export function buildServer(config: ServerConfig): McpServer {
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
+        mediaBoxes: z.array(
+          z.object({
+            height: z.number().positive(),
+            width: z.number().positive(),
+          }),
+        ),
+        pageCount: z.number().int().positive(),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
         version: z.string().regex(/^1\.[0-9]$/u),
       }),
@@ -863,6 +870,8 @@ export function buildServer(config: ServerConfig): McpServer {
         targetPath: output.absolutePath,
       });
       const result = {
+        mediaBoxes: pdf.metadata.mediaBoxes,
+        pageCount: pdf.metadata.pageCount,
         revision: committed.revision,
         version: pdf.metadata.version,
       };

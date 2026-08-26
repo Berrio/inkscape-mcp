@@ -194,8 +194,12 @@ try {
     },
     name: "export_pdf",
   });
-  if (pdf.isError || pdf.structuredContent?.version !== "1.5") {
-    throw new Error("export_pdf did not publish the expected PDF");
+  if (
+    pdf.isError ||
+    pdf.structuredContent?.version !== "1.5" ||
+    (pdf.structuredContent?.pageCount ?? 0) < 1
+  ) {
+    throw new Error("export_pdf did not publish an inspectable PDF");
   }
   const plainSvg = await workspaceClient.callTool({
     arguments: {

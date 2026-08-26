@@ -1072,6 +1072,43 @@ try {
     throw new Error("export_svg did not publish an autonomous selection SVG");
   }
   await writeFile(
+    join(workspaceRoot, "css-selection.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><style>.selected { fill: url(#paint); }</style><defs><linearGradient id="paint"><stop offset="0" stop-color="#ff0000"/><stop offset="1" stop-color="#0000ff"/></linearGradient></defs><rect id="selected" class="selected" width="10" height="10"/></svg>',
+  );
+  const cssInspection = await workspaceClient.callTool({
+    arguments: {
+      level: "summary",
+      path: "css-selection.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_inspect",
+  });
+  const cssRevision = cssInspection.structuredContent?.revision;
+  if (cssInspection.isError || typeof cssRevision !== "string")
+    throw new Error("document_inspect did not prepare the CSS selection SVG");
+  const cssSelection = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: cssRevision,
+      flavor: "plain",
+      outputPath: "css-selection-output.svg",
+      path: "css-selection.svg",
+      selectionIds: ["selected"],
+      workspaceId: workspace.id,
+    },
+    name: "export_svg",
+  });
+  if (
+    cssSelection.isError ||
+    !cssSelection.structuredContent?.warnings?.includes(
+      "SELECTION_STYLESHEET_PRESERVED_PARTIAL",
+    ) ||
+    !(
+      await readFile(join(workspaceRoot, "css-selection-output.svg"), "utf8")
+    ).includes("linearGradient")
+  ) {
+    throw new Error("export_svg did not preserve selection stylesheet closure");
+  }
+  await writeFile(
     join(workspaceRoot, "viewbox-512.svg"),
     await readFile(
       join(process.cwd(), "tests", "fixtures", "svg-viewbox-512.svg"),

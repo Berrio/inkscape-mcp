@@ -9,7 +9,8 @@ import { normalizeSvgIds, sanitizeSvg } from "../svg/index.js";
 
 const SVG = "http://www.w3.org/2000/svg";
 const SAFE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u;
-const REF = /(?:url\(\s*#|^#)([A-Za-z_][A-Za-z0-9_.-]{0,127})/gu;
+const URL_REFERENCE = /url\(\s*#([A-Za-z_][A-Za-z0-9_.-]{0,127})/gu;
+const DIRECT_REFERENCE_ATTRIBUTES = new Set(["href", "xlink:href"]);
 
 /** Produces an autonomous SVG for selected elements and their local references. */
 export function extractSvgSelection(
@@ -30,9 +31,8 @@ export function extractSvgSelection(
   const input = new DOMParser().parseFromString(source, "image/svg+xml");
   const root = input.documentElement;
   if (!root || root.localName !== "svg") throw new Error("SVG root is missing");
-  if (input.getElementsByTagName("style").length > 0)
-    throw new Error("Selection export does not yet support stylesheet closure");
   const all = Array.from(input.getElementsByTagName("*"));
+  const styles = Array.from(input.getElementsByTagName("style"));
   const byId = new Map(
     all.flatMap((element) => {
       const id = element.getAttribute("id");
@@ -65,8 +65,18 @@ export function extractSvgSelection(
       for (let index = 0; index < current.attributes.length; index += 1) {
         const attribute = current.attributes.item(index);
         if (!attribute) continue;
-        for (const match of attribute.value.matchAll(REF)) found.add(match[1]!);
+        for (const match of attribute.value.matchAll(URL_REFERENCE))
+          found.add(match[1]!);
+        if (DIRECT_REFERENCE_ATTRIBUTES.has(attribute.name.toLowerCase())) {
+          const direct = /^#([A-Za-z_][A-Za-z0-9_.-]{0,127})$/u.exec(
+            attribute.value,
+          );
+          if (direct) found.add(direct[1]!);
+        }
       }
+      if (current.localName === "style")
+        for (const match of (current.textContent ?? "").matchAll(URL_REFERENCE))
+          found.add(match[1]!);
       for (let index = 0; index < current.childNodes.length; index += 1) {
         const child = current.childNodes.item(index);
         if (child && child.nodeType === child.ELEMENT_NODE)
@@ -112,6 +122,8 @@ export function extractSvgSelection(
         includeDependency(reference);
     });
   }
+  for (const style of styles)
+    for (const reference of references(style)) includeDependency(reference);
   const defs = output.createElementNS(SVG, "defs");
   const dependencyRoots = [...dependencyIds]
     .map((id) => byId.get(id)!)
@@ -126,6 +138,7 @@ export function extractSvgSelection(
   for (const dependency of dependencyRoots) {
     defs.appendChild(dependency.cloneNode(true));
   }
+  for (const style of styles) target.appendChild(style.cloneNode(true));
   if (defs.childNodes.length > 0) target.appendChild(defs);
   for (const element of selectedRoots)
     target.appendChild(cloneWithAncestors(element, root));
@@ -135,7 +148,12 @@ export function extractSvgSelection(
       prefix: "selection",
     },
   );
-  return { ids: [...ids], svg: normalized.svg, warnings: [] };
+  return {
+    ids: [...ids],
+    svg: normalized.svg,
+    warnings:
+      styles.length === 0 ? [] : ["SELECTION_STYLESHEET_PRESERVED_PARTIAL"],
+  };
 }
 
 function isDescendantOf(element: XmlElement, ancestor: XmlElement): boolean {

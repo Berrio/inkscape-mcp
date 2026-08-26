@@ -13,19 +13,20 @@ describe("selection SVG export", () => {
     expect(result.svg).not.toContain('id="other"');
     expect(result.svg).not.toContain('id="unused"');
   });
-  it("rejects missing references and stylesheet closure it cannot preserve", () => {
+  it("rejects missing references and preserves stylesheet dependencies", () => {
     expect(() =>
       extractSvgSelection(
         '<svg viewBox="0 0 1 1"><rect id="one" fill="url(#missing)"/></svg>',
         ["one"],
       ),
     ).toThrow("unresolved reference");
-    expect(() =>
-      extractSvgSelection(
-        '<svg viewBox="0 0 1 1"><style>.x { fill: red; }</style><rect id="one" class="x"/></svg>',
-        ["one"],
-      ),
-    ).toThrow("stylesheet closure");
+    const styled = extractSvgSelection(
+      '<svg viewBox="0 0 1 1"><style>.x { fill: url(#paint); }</style><defs><linearGradient id="paint"><stop/></linearGradient></defs><rect id="one" class="x"/></svg>',
+      ["one"],
+    );
+    expect(styled.svg).toContain(".x { fill: url(#paint); }");
+    expect(styled.svg).toContain('id="paint"');
+    expect(styled.warnings).toEqual(["SELECTION_STYLESHEET_PRESERVED_PARTIAL"]);
   });
   it("preserves ancestor transforms and fails closed on reference cycles", () => {
     const result = extractSvgSelection(

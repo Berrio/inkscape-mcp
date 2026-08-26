@@ -3428,7 +3428,14 @@ export function buildServer(config: ServerConfig): McpServer {
           throw new Error("Inkscape SVG export failed");
         const metadata = await verifySvg(temporaryOutput);
         await nativeInput.assertCurrent();
-        return { bytes: await readFile(temporaryOutput), metadata };
+        return {
+          bytes: await readFile(temporaryOutput),
+          metadata,
+          warnings:
+            selection === undefined
+              ? []
+              : ["SELECTION_EXTRACTED_AUTONOMOUSLY", ...selection.warnings],
+        };
       });
       const committed = await fileStore.commit({
         contents: svg.bytes,
@@ -3446,9 +3453,7 @@ export function buildServer(config: ServerConfig): McpServer {
         revision: committed.revision,
         viewBox: svg.metadata.viewBox,
         warnings: [
-          ...(selectionIds === undefined
-            ? []
-            : ["SELECTION_EXTRACTED_AUTONOMOUSLY"]),
+          ...svg.warnings,
           ...(textToPath ? ["TEXT_CONVERTED_TO_PATHS"] : []),
         ],
       };

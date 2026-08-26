@@ -203,6 +203,16 @@ const shapeSchema = z.discriminatedUnion("kind", [
     kind: z.literal("text"),
     parentId: shapeIdSchema.optional(),
     style: shapeStyleSchema.optional(),
+    spans: z
+      .array(
+        z.object({
+          dx: z.number().finite().optional(),
+          dy: z.number().finite().optional(),
+          text: textContentSchema,
+        }),
+      )
+      .max(100)
+      .optional(),
     text: textContentSchema,
     x: z.number().finite(),
     y: z.number().finite(),

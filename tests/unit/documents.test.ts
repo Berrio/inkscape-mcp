@@ -240,6 +240,7 @@ describe("basic SVG documents", () => {
         kind: "text",
         parentId: "layer_main",
         style: { fontFamily: "Arial", fontSize: 12, fontWeight: "bold" },
+        spans: [{ dx: 2, text: " World" }],
         text: "Hello SVG",
         x: 5,
         y: 100,
@@ -264,7 +265,9 @@ describe("basic SVG documents", () => {
     expect(created.svg).toContain('id="rect_1" fill="#ff0000"');
     expect(created.svg).toContain('points="0,0 10,20"');
     expect(created.svg).toContain('font-family="Arial"');
-    expect(created.svg).toContain(">Hello SVG</text>");
+    expect(created.svg).toContain(
+      '>Hello SVG<tspan dx="2"> World</tspan></text>',
+    );
     expect(created.svg).toContain('inkscape:groupmode="layer"');
     expect(() =>
       createSvgShapes(created.svg, [

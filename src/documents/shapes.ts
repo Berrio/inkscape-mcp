@@ -117,6 +117,13 @@ export type ShapeSpec =
     })
   | (ShapeBase & {
       kind: "text";
+      spans?:
+        | readonly {
+            dx?: number | undefined;
+            dy?: number | undefined;
+            text: string;
+          }[]
+        | undefined;
       text: string;
       x: number;
       y: number;
@@ -469,7 +476,24 @@ function createShapeElement(
       validateText(shape.text);
       setFinite(element, "x", shape.x);
       setFinite(element, "y", shape.y);
-      element.textContent = shape.text;
+      if (shape.spans === undefined || shape.spans.length === 0) {
+        element.textContent = shape.text;
+      } else {
+        if (shape.spans.length > 100)
+          throw new Error("Text accepts at most 100 tspans");
+        element.appendChild(document.createTextNode(shape.text));
+        for (const span of shape.spans) {
+          validateText(span.text);
+          const tspan = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "tspan",
+          );
+          setOptionalFinite(tspan, "dx", span.dx);
+          setOptionalFinite(tspan, "dy", span.dy);
+          tspan.textContent = span.text;
+          element.appendChild(tspan);
+        }
+      }
       break;
     case "group":
       break;

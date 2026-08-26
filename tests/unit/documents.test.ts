@@ -8,6 +8,7 @@ import {
   changePageOrientationSvg,
   createSvgShapes,
   duplicateSvgShape,
+  reparentSvgShapes,
   groupSvgShapes,
   fitPageToBoundsSvg,
   deleteSvgPage,
@@ -716,6 +717,23 @@ describe("basic SVG documents", () => {
         newId: "layer_copy",
       }),
     ).toThrow("descendant IDs");
+    const reparented = reparentSvgShapes(created.svg, {
+      ids: ["star_1"],
+      parentId: "layer_main",
+    });
+    expect(
+      querySvgElements(reparented.svg, {
+        ids: ["star_1"],
+        limit: 1,
+        offset: 0,
+      }).elements[0]?.parentId,
+    ).toBe("layer_main");
+    expect(() =>
+      reparentSvgShapes(created.svg, {
+        ids: ["layer_main"],
+        parentId: "layer_main",
+      }),
+    ).toThrow("cycle");
   });
 
   it("creates a bounded standard SVG spiral path", () => {

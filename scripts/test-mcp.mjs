@@ -761,9 +761,26 @@ try {
     typeof duplicatedRevision !== "string"
   )
     throw new Error("elements_duplicate did not create a use clone");
-  const inspected = await workspaceClient.callTool({
+  const reparented = await workspaceClient.callTool({
     arguments: {
       expectedRevision: duplicatedRevision,
+      ids: ["demo_star"],
+      parentId: "demo_group",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_reparent",
+  });
+  const reparentedRevision = reparented.structuredContent?.revision;
+  if (
+    reparented.isError ||
+    reparented.structuredContent?.ids?.[0] !== "demo_star" ||
+    typeof reparentedRevision !== "string"
+  )
+    throw new Error("elements_reparent did not move an element into a group");
+  const inspected = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: reparentedRevision,
       includeVisualBounds: true,
       path: "a4.svg",
       workspaceId: workspace.id,
@@ -821,7 +838,7 @@ try {
   const pageAdded = await workspaceClient.callTool({
     arguments: {
       action: "add",
-      expectedRevision: duplicatedRevision,
+      expectedRevision: reparentedRevision,
       page: { height: 210, id: "page_back", width: 148, x: 160, y: 0 },
       path: "a4.svg",
       workspaceId: workspace.id,

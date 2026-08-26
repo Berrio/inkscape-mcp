@@ -87,6 +87,10 @@ export type ElementDuplicateRequest = {
   newId: string;
   parentId?: string | undefined;
 };
+export type ElementReparentRequest = {
+  ids: readonly string[];
+  parentId: string;
+};
 type ShapeBase = {
   id?: string | undefined;
   parentId?: string | undefined;
@@ -383,6 +387,45 @@ export function duplicateSvgShape(
   }
   return {
     id: request.newId,
+    svg: new XMLSerializer().serializeToString(document),
+  };
+}
+
+/** Moves selected elements under one existing group/layer in document order. */
+export function reparentSvgShapes(
+  source: string,
+  request: ElementReparentRequest,
+): { ids: readonly string[]; svg: string } {
+  if (request.ids.length < 1 || request.ids.length > 100)
+    throw new Error("Reparent batch must contain between one and 100 IDs");
+  if (new Set(request.ids).size !== request.ids.length)
+    throw new Error("Reparent IDs must be unique");
+  if (!SAFE_ID.test(request.parentId))
+    throw new Error("Shape parent ID is invalid");
+  const document = parseSafeDocument(source);
+  const root = document.documentElement;
+  if (!root) throw new Error("SVG root is missing");
+  const elements = Array.from(document.getElementsByTagName("*"));
+  const parent = resolveParent(document, root, request.parentId);
+  const targets = request.ids.map((id) => {
+    if (!SAFE_ID.test(id)) throw new Error("Shape ID is invalid");
+    const target = elements.find(
+      (element) => element.getAttribute("id") === id,
+    );
+    if (!target) throw new Error("Shape ID does not exist");
+    if (target === parent || isDescendant(parent, target))
+      throw new Error("Reparenting would create a cycle");
+    return target;
+  });
+  const targetSet = new Set(targets);
+  if (targets.some((target) => isDescendantOfSelected(target, targetSet)))
+    throw new Error(
+      "Reparent targets cannot include an ancestor and descendant",
+    );
+  const ordered = elements.filter((element) => targetSet.has(element));
+  for (const target of ordered) parent.appendChild(target);
+  return {
+    ids: request.ids.slice(),
     svg: new XMLSerializer().serializeToString(document),
   };
 }
@@ -774,6 +817,27 @@ function isWithinDeletedTree(
         ? (current.parentNode as XmlElement)
         : null;
   }
+  return false;
+}
+function isDescendant(element: XmlElement, ancestor: XmlElement): boolean {
+  for (
+    let current = parentElement(element);
+    current;
+    current = parentElement(current)
+  )
+    if (current === ancestor) return true;
+  return false;
+}
+function isDescendantOfSelected(
+  element: XmlElement,
+  selected: ReadonlySet<XmlElement>,
+): boolean {
+  for (
+    let current = parentElement(element);
+    current;
+    current = parentElement(current)
+  )
+    if (selected.has(current)) return true;
   return false;
 }
 function referencesDeletedId(

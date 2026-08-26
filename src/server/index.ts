@@ -33,6 +33,7 @@ import {
   preflightSvg,
   querySvgElementTargets,
   reorderSvgPages,
+  reparentSvgShapes,
   resizeContentSvg,
   resizePageOnlySvg,
   rewriteStagedAssetReferences,
@@ -1066,6 +1067,55 @@ export function buildServer(config: ServerConfig): McpServer {
         backupCreated: committed.backupPath !== undefined,
         id: duplicated.id,
         mode,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_reparent",
+    {
+      description:
+        "Moves bounded SVG elements under one existing group or layer in source document order. It rejects cycles and ancestor-descendant selections.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z.array(shapeIdSchema).min(1).max(100),
+          parentId: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        ids: z.array(shapeIdSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, ids, parentId, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const reparented = reparentSvgShapes(
+        await readFile(document.absolutePath, "utf8"),
+        { ids, parentId },
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(reparented.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        ids: reparented.ids,
         revision: committed.revision,
       };
       return {

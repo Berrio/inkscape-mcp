@@ -1741,7 +1741,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F06-T17` Implementar texto básico sin aceptar markup inseguro.
 - [x] `F06-T18` Implementar delete explícito y cascade/ref policy. — Antes de borrar, recorre el subárbol destino y rechaza referencias vivas a cualquiera de sus IDs mediante href/xlink, `url(#…)` en atributos y CSS, o ARIA; el commit no se alcanza en un rechazo.
 - [~] `F06-T19` Implementar duplicate independiente y clone `<use>` como operaciones distintas. — `elements_duplicate` copia elementos simples bajo nuevo ID o crea `<use href="#…">` explícito; la copia de subárboles con IDs hijos se rechaza hasta que el remapeo profundo preserve sus refs internas.
-- [ ] `F06-T20` Implementar group/ungroup/reparent con orden estable.
+- [x] `F06-T20` Implementar group/ungroup/reparent con orden estable. — `elements_group` conserva hijos y `elements_reparent` mueve una selección en orden documental a un group/layer existente, rechazando ciclos y selección ancestro-descendiente.
 - [ ] `F06-T21` Implementar z-order: front/back/raise/lower/index/relative-to.
 - [x] `F06-T22` Registrar tools update/delete/duplicate/group. — `elements_update`, `elements_delete`, `elements_duplicate` y `elements_group` tienen schemas estrictos, revisión esperada y commit atómico.
 

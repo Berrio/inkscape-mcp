@@ -33,6 +33,7 @@ export {
 export {
   createSvgShapes,
   duplicateSvgShape,
+  reparentSvgShapes,
   arrangeSvgShapes,
   groupSvgShapes,
   deleteSvgShapes,
@@ -40,6 +41,7 @@ export {
   updateSvgShapes,
   type ElementGeometryPatch,
   type ElementDuplicateRequest,
+  type ElementReparentRequest,
   type ElementArrangeAction,
   type ElementGroupAction,
   type ElementTransform,

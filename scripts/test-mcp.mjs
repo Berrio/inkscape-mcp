@@ -1049,6 +1049,31 @@ try {
       "export_svg did not publish the expected plain SVG warning",
     );
   }
+  const genericExport = await workspaceClient.callTool({
+    arguments: {
+      spec: {
+        area: { kind: "page" },
+        background: { mode: "transparent" },
+        format: "png",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+        target: {
+          kind: "file",
+          overwrite: false,
+          path: "a4-generic.png",
+        },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export",
+  });
+  if (
+    genericExport.isError ||
+    genericExport.structuredContent?.format !== "png" ||
+    genericExport.structuredContent?.outputPath !== "a4-generic.png" ||
+    typeof genericExport.structuredContent?.artifact?.uri !== "string"
+  ) {
+    throw new Error("document_export did not publish the generic PNG export");
+  }
   const selectionSvg = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,

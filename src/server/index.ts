@@ -45,12 +45,14 @@ import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import {
   buildExportArgv,
+  exportSpecSchema,
   normalizeExportArea,
   parseExportSpec,
   pruneSvgPagesForPdf,
   requiredPdfCapabilityFlags,
   requiredPngCapabilityFlags,
   verifyPdf,
+  verifyExportArtifact,
   verifyPng,
   verifySvg,
 } from "../export/index.js";
@@ -2420,6 +2422,179 @@ export function buildServer(config: ServerConfig): McpServer {
               ]
             : []),
         ],
+        structuredContent: result,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_export",
+    {
+      description:
+        "Exports one PNG, SVG, or plain SVG from a validated ExportSpec through the bounded Inkscape pipeline. Use export_pdf for PDF-specific features and document_export_batch for variants.",
+      inputSchema: z
+        .object({
+          spec: exportSpecSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        artifact: artifactSchema,
+        format: z.enum(["png", "plain-svg", "svg"]),
+        outputPath: z.string().min(1).max(1024),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        warnings: z.array(z.string()),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({ spec, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      if (spec.target.kind !== "file")
+        throw new Error(
+          "document_export supports one file; use document_export_batch for variants",
+        );
+      if (
+        spec.format !== "png" &&
+        spec.format !== "svg" &&
+        spec.format !== "plain-svg"
+      )
+        throw new Error("Use the specialized export tool for this format");
+      if (spec.format === "png" && spec.margin !== undefined)
+        throw new Error("document_export does not yet support PNG margins");
+      if (
+        spec.format === "png" &&
+        (spec.antialias !== undefined ||
+          spec.colorMode !== undefined ||
+          spec.compression !== undefined ||
+          spec.dithering !== undefined ||
+          spec.snapAreaToPixels !== undefined)
+      )
+        throw new Error("Use export_png for advanced PNG renderer options");
+      if (
+        (spec.format === "svg" || spec.format === "plain-svg") &&
+        (spec.area.kind === "pages" || spec.resourcePolicy !== "preserve-local")
+      )
+        throw new Error("Use export_svg for this SVG export mode");
+      const workspace = await workspaces();
+      const input = await workspace.resolveExisting(
+        workspaceId,
+        spec.source.path,
+      );
+      const output = await workspace.resolveNewOutput(
+        workspaceId,
+        spec.target.path,
+      );
+      const expectedExtension = spec.format === "png" ? /\.png$/iu : /\.svg$/iu;
+      if (!expectedExtension.test(output.relativePath))
+        throw new Error(
+          "Output extension does not match the requested export format",
+        );
+      const source = await readFile(input.absolutePath, "utf8");
+      const area = normalizeExportArea(
+        spec.area.kind === "pages"
+          ? { kind: "page", pageIds: spec.area.pageIds }
+          : spec.area,
+        listSvgPages(source),
+      );
+      if (area.selectionId !== undefined) {
+        const selected = querySvgElementTargets(source, {
+          ids: [area.selectionId],
+          limit: 1,
+          offset: 0,
+        });
+        if (selected.missingIds.length > 0)
+          throw new Error("Export selection element does not exist");
+      }
+      const discovery = await locateInkscape({
+        config,
+        cwd: process.cwd(),
+        runner,
+      });
+      const candidate = discovery.candidates[0];
+      if (!candidate) throw new Error("Inkscape executable is unavailable");
+      const probe = await probeInkscapeCandidate(
+        runner,
+        candidate,
+        process.cwd(),
+      );
+      if (!("version" in probe))
+        throw new Error("Inkscape executable could not be validated");
+      const rendered = await scratch.withDirectory(
+        "staging",
+        async (directory) => {
+          const nativeInput = await createNativeInputBundle(
+            input.absolutePath,
+            spec.source.expectedRevision,
+            directory,
+            {
+              allowedRoot: input.workspaceRoot,
+              maxDependencyBytes: config.maxInputBytes,
+              maximumSanitizeMode: config.maximumSanitizeMode,
+            },
+          );
+          const temporaryOutput = join(
+            directory,
+            spec.format === "png" ? "export.png" : "export.svg",
+          );
+          const background =
+            spec.format === "png" && spec.background.mode === "document"
+              ? inspectDocumentDisplaySettings(
+                  await readFile(nativeInput.path, "utf8"),
+                )
+              : undefined;
+          const run = await runner.run(candidate.executablePath, {
+            args: [
+              ...buildExportArgv({
+                area,
+                inputPath: nativeInput.path,
+                outputPath: temporaryOutput,
+                spec,
+              }),
+              ...(background === undefined
+                ? []
+                : [
+                    `--export-background=${background.pageColor}`,
+                    `--export-background-opacity=${background.pageOpacity}`,
+                  ]),
+            ],
+            cwd: directory,
+            maxStderrBytes: config.maxStderrBytes,
+            maxStdoutBytes: config.maxStdoutBytes,
+            timeoutMs: config.processTimeoutMs,
+          });
+          if (run.exitCode !== 0 || run.terminationReason !== "completed")
+            throw new Error("Inkscape document export failed");
+          await verifyExportArtifact(spec.format, temporaryOutput);
+          await nativeInput.assertCurrent();
+          return await readFile(temporaryOutput);
+        },
+      );
+      const committed = await fileStore.commit({
+        contents: rendered,
+        ...(spec.target.expectedOutputRevision === undefined
+          ? {}
+          : { expectedOutputRevision: spec.target.expectedOutputRevision }),
+        expectedRevision: spec.source.expectedRevision,
+        sourcePath: input.absolutePath,
+        targetPath: output.absolutePath,
+      });
+      await artifacts.removeExpired();
+      const artifact = await artifacts.publish(
+        output.absolutePath,
+        workspaceId,
+        24 * 60 * 60 * 1_000,
+      );
+      if (artifact.hash !== committed.revision)
+        throw new Error("Export output changed before artifact publication");
+      const result = {
+        artifact,
+        format: spec.format,
+        outputPath: output.relativePath,
+        revision: committed.revision,
+        warnings: [],
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
         structuredContent: result,
       };
     },

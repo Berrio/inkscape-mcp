@@ -45,9 +45,12 @@ import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import {
   buildExportArgv,
+  executeExportBatch,
+  type ExportSpec,
   exportSpecSchema,
   normalizeExportArea,
   parseExportSpec,
+  planExportBatch,
   pruneSvgPagesForPdf,
   requiredPdfCapabilityFlags,
   requiredPngCapabilityFlags,
@@ -2428,6 +2431,131 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "document_export_batch",
+    {
+      description:
+        "Renders a bounded batch of baseline PNG, PDF, SVG, or plain SVG variants. all_or_nothing verifies every variant before one logical publish; best_effort publishes verified successes.",
+      inputSchema: z
+        .object({
+          mode: z.enum(["all_or_nothing", "best_effort"]),
+          specs: z.array(exportSpecSchema).min(1).max(50),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        failures: z.array(
+          z.object({ index: z.number().int(), message: z.string() }),
+        ),
+        mode: z.enum(["all_or_nothing", "best_effort"]),
+        successes: z.array(
+          z.object({
+            index: z.number().int(),
+            outputPath: z.string(),
+            revision: z.string().regex(/^[a-f0-9]{64}$/u),
+          }),
+        ),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({ mode, specs, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const variants = planExportBatch(specs.map(parseExportSpec));
+      const source = variants[0]!.spec.source;
+      if (
+        variants.some(
+          (variant) =>
+            variant.spec.source.path !== source.path ||
+            variant.spec.source.expectedRevision !== source.expectedRevision,
+        )
+      )
+        throw new Error("Batch variants must share one source revision");
+      if (variants.some((variant) => !isBaselineBatchSpec(variant.spec)))
+        throw new Error(
+          "Batch supports baseline PNG, PDF, SVG, and plain SVG variants only",
+        );
+      const workspace = await workspaces();
+      const input = await workspace.resolveExisting(workspaceId, source.path);
+      const outputs = await Promise.all(
+        variants.map((variant) =>
+          workspace.resolveNewOutput(workspaceId, variant.outputPath),
+        ),
+      );
+      const staged = await executeExportBatch({
+        mode,
+        variants,
+        execute: async (variant) => ({
+          bytes: await renderGenericExport({
+            config,
+            inputPath: input.absolutePath,
+            inputRoot: input.workspaceRoot,
+            runner,
+            scratch,
+            spec: variant.spec as Extract<
+              ExportSpec,
+              { format: "pdf" | "plain-svg" | "png" | "svg" }
+            >,
+          }),
+          variant,
+        }),
+      });
+      if (mode === "all_or_nothing" && staged.failures.length > 0)
+        throw new Error(
+          `Batch rendering failed at variant ${staged.failures[0]!.index}`,
+        );
+      const successes = [] as {
+        index: number;
+        outputPath: string;
+        revision: string;
+      }[];
+      if (mode === "all_or_nothing") {
+        const committed = await fileStore.commitBatch({
+          expectedRevision: source.expectedRevision,
+          files: staged.successes.map((stagedVariant) => {
+            const target = fileExportTarget(stagedVariant.value.variant.spec);
+            return {
+              contents: stagedVariant.value.bytes,
+              ...(target.expectedOutputRevision === undefined
+                ? {}
+                : { expectedOutputRevision: target.expectedOutputRevision }),
+              targetPath: outputs[stagedVariant.index]!.absolutePath,
+            };
+          }),
+          sourcePath: input.absolutePath,
+        });
+        for (let index = 0; index < staged.successes.length; index += 1)
+          successes.push({
+            index: staged.successes[index]!.index,
+            outputPath: outputs[staged.successes[index]!.index]!.relativePath,
+            revision: committed.files[index]!.revision,
+          });
+      } else
+        for (const stagedVariant of staged.successes) {
+          const output = outputs[stagedVariant.index]!;
+          const target = fileExportTarget(stagedVariant.value.variant.spec);
+          const committed = await fileStore.commit({
+            contents: stagedVariant.value.bytes,
+            ...(target.expectedOutputRevision === undefined
+              ? {}
+              : { expectedOutputRevision: target.expectedOutputRevision }),
+            expectedRevision: source.expectedRevision,
+            sourcePath: input.absolutePath,
+            targetPath: output.absolutePath,
+          });
+          successes.push({
+            index: stagedVariant.index,
+            outputPath: output.relativePath,
+            revision: committed.revision,
+          });
+        }
+      const result = { failures: staged.failures, mode, successes };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
+
+  server.registerTool(
     "document_export",
     {
       description:
@@ -3784,6 +3912,139 @@ async function publishSelectionSvgWithAssets(args: {
     await rmdir(args.assetDirectory).catch(() => undefined);
     throw error;
   }
+}
+
+function fileExportTarget(
+  spec: ExportSpec,
+): Extract<ExportSpec["target"], { kind: "file" }> {
+  if (spec.target.kind !== "file")
+    throw new Error("Batch variants require a file target");
+  return spec.target;
+}
+
+function isBaselineBatchSpec(
+  spec: ExportSpec,
+): spec is Extract<
+  ExportSpec,
+  { format: "pdf" | "plain-svg" | "png" | "svg" }
+> {
+  if (spec.target.kind !== "file") return false;
+  if (spec.format === "png")
+    return (
+      spec.margin === undefined &&
+      spec.antialias === undefined &&
+      spec.colorMode === undefined &&
+      spec.compression === undefined &&
+      spec.dithering === undefined &&
+      spec.snapAreaToPixels === undefined
+    );
+  if (spec.format === "pdf")
+    return (
+      spec.area.kind !== "pages" &&
+      spec.filterRasterDpi === undefined &&
+      spec.filters === "preserve" &&
+      spec.latex !== true &&
+      spec.margin === undefined &&
+      spec.text === "preserve" &&
+      spec.version === undefined
+    );
+  return (
+    (spec.format === "svg" || spec.format === "plain-svg") &&
+    spec.area.kind !== "pages" &&
+    spec.resourcePolicy === "preserve-local"
+  );
+}
+
+async function renderGenericExport(request: {
+  config: ServerConfig;
+  inputPath: string;
+  inputRoot: string;
+  runner: ProcessRunner;
+  scratch: ScratchManager;
+  spec: Extract<ExportSpec, { format: "pdf" | "plain-svg" | "png" | "svg" }>;
+}): Promise<Buffer> {
+  const source = await readFile(request.inputPath, "utf8");
+  const area = normalizeExportArea(
+    request.spec.area.kind === "pages"
+      ? { kind: "page", pageIds: request.spec.area.pageIds }
+      : request.spec.area,
+    listSvgPages(source),
+  );
+  if (area.selectionId !== undefined) {
+    const selected = querySvgElementTargets(source, {
+      ids: [area.selectionId],
+      limit: 1,
+      offset: 0,
+    });
+    if (selected.missingIds.length > 0)
+      throw new Error("Export selection element does not exist");
+  }
+  const discovery = await locateInkscape({
+    config: request.config,
+    cwd: process.cwd(),
+    runner: request.runner,
+  });
+  const candidate = discovery.candidates[0];
+  if (!candidate) throw new Error("Inkscape executable is unavailable");
+  const probe = await probeInkscapeCandidate(
+    request.runner,
+    candidate,
+    process.cwd(),
+  );
+  if (!("version" in probe))
+    throw new Error("Inkscape executable could not be validated");
+  return request.scratch.withDirectory("staging", async (directory) => {
+    const nativeInput = await createNativeInputBundle(
+      request.inputPath,
+      request.spec.source.expectedRevision,
+      directory,
+      {
+        allowedRoot: request.inputRoot,
+        maxDependencyBytes: request.config.maxInputBytes,
+        maximumSanitizeMode: request.config.maximumSanitizeMode,
+      },
+    );
+    const temporaryOutput = join(
+      directory,
+      request.spec.format === "png"
+        ? "export.png"
+        : request.spec.format === "pdf"
+          ? "export.pdf"
+          : "export.svg",
+    );
+    const background =
+      request.spec.format === "png" &&
+      request.spec.background.mode === "document"
+        ? inspectDocumentDisplaySettings(
+            await readFile(nativeInput.path, "utf8"),
+          )
+        : undefined;
+    const run = await request.runner.run(candidate.executablePath, {
+      args: [
+        ...buildExportArgv({
+          area,
+          inputPath: nativeInput.path,
+          outputPath: temporaryOutput,
+          spec: request.spec,
+        }),
+        ...(background === undefined
+          ? []
+          : [
+              `--export-background=${background.pageColor}`,
+              `--export-background-opacity=${background.pageOpacity}`,
+            ]),
+      ],
+      cwd: directory,
+      maxStderrBytes: request.config.maxStderrBytes,
+      maxStdoutBytes: request.config.maxStdoutBytes,
+      timeoutMs: request.config.processTimeoutMs,
+    });
+    if (run.exitCode !== 0 || run.terminationReason !== "completed")
+      throw new Error("Inkscape document export failed");
+    await verifyExportArtifact(request.spec.format, temporaryOutput);
+    await nativeInput.assertCurrent();
+    return await readFile(temporaryOutput);
+  });
 }
 
 function hasControlCharacters(value: string): boolean {

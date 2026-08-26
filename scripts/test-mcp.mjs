@@ -1100,6 +1100,36 @@ try {
   ) {
     throw new Error("document_export did not publish the generic PDF export");
   }
+  const genericBatch = await workspaceClient.callTool({
+    arguments: {
+      mode: "all_or_nothing",
+      specs: [
+        {
+          area: { kind: "page" },
+          background: { mode: "transparent" },
+          format: "png",
+          source: { expectedRevision: settingsRevision, path: "a4.svg" },
+          target: { kind: "file", overwrite: false, path: "batch-one.png" },
+        },
+        {
+          area: { kind: "drawing" },
+          background: { mode: "transparent" },
+          format: "png",
+          source: { expectedRevision: settingsRevision, path: "a4.svg" },
+          target: { kind: "file", overwrite: false, path: "batch-two.png" },
+        },
+      ],
+      workspaceId: workspace.id,
+    },
+    name: "document_export_batch",
+  });
+  if (
+    genericBatch.isError ||
+    genericBatch.structuredContent?.successes?.length !== 2 ||
+    genericBatch.structuredContent?.failures?.length !== 0
+  ) {
+    throw new Error("document_export_batch did not publish both PNG variants");
+  }
   const selectionSvg = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,

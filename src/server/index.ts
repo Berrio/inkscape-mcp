@@ -671,10 +671,19 @@ const groupOperationSchema = z.discriminatedUnion("action", [
   }),
   z.object({ action: z.literal("ungroup"), groupId: shapeIdSchema }),
 ]);
+const transactionAliasSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/u);
+const transactionReferenceSchema = z.union([
+  shapeIdSchema,
+  z.string().regex(/^@[a-z][a-z0-9_-]{0,63}$/u),
+]);
 const designOperationSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("create"),
     elements: z.array(shapeSchema).min(1).max(100),
+    aliases: z
+      .record(transactionAliasSchema, shapeIdSchema)
+      .refine((value) => Object.keys(value).length <= 100, "Too many aliases")
+      .optional(),
   }),
   z.object({
     kind: z.literal("update"),
@@ -682,7 +691,7 @@ const designOperationSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("transform"),
-    ids: z.array(shapeIdSchema).min(1).max(100),
+    ids: z.array(transactionReferenceSchema).min(1).max(100),
     transform: transformSchema,
   }),
   z.object({ kind: z.literal("arrange"), request: arrangeOperationSchema }),
@@ -1787,6 +1796,7 @@ export function buildServer(config: ServerConfig): McpServer {
       const document = await workspace.resolveExisting(workspaceId, path);
       const source = await readFile(document.absolutePath, "utf8");
       const estimatedCost = estimateDesignOperationCost(operations);
+      const aliases = new Map<string, string>();
       let svg = source;
       for (const operation of operations) {
         switch (operation.kind) {
@@ -1797,7 +1807,21 @@ export function buildServer(config: ServerConfig): McpServer {
               workspace,
               config,
             );
-            svg = createSvgShapes(svg, prepared).svg;
+            const created = createSvgShapes(svg, prepared);
+            if (operation.aliases !== undefined) {
+              for (const [alias, id] of Object.entries(
+                operation.aliases as Record<string, string>,
+              )) {
+                if (!created.ids.includes(id))
+                  throw new Error(
+                    "Transaction alias must name an ID created by its operation",
+                  );
+                if (aliases.has(alias))
+                  throw new Error("Transaction alias is already defined");
+                aliases.set(alias, id);
+              }
+            }
+            svg = created.svg;
             break;
           }
           case "update":
@@ -1806,7 +1830,7 @@ export function buildServer(config: ServerConfig): McpServer {
           case "transform":
             svg = transformSvgShapes(
               svg,
-              operation.ids,
+              resolveTransactionReferences(operation.ids, aliases),
               operation.transform,
             ).svg;
             break;
@@ -5000,6 +5024,19 @@ function estimateDesignOperationCost(
         return total + 1;
     }
   }, 0);
+}
+
+function resolveTransactionReferences(
+  references: readonly string[],
+  aliases: ReadonlyMap<string, string>,
+): string[] {
+  return references.map((reference) => {
+    if (!reference.startsWith("@")) return reference;
+    const resolved = aliases.get(reference.slice(1));
+    if (resolved === undefined)
+      throw new Error("Transaction alias is not defined");
+    return resolved;
+  });
 }
 
 /** Resolves public image requests before the DOM-only shape constructor runs. */

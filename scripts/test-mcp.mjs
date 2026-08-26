@@ -705,6 +705,7 @@ try {
       expectedRevision: updatedRevision,
       operations: [
         {
+          aliases: { transaction_rect: "tx_rect" },
           elements: [
             { height: 4, id: "tx_preview", kind: "rect", width: 4, x: 1, y: 1 },
           ],
@@ -745,7 +746,7 @@ try {
           kind: "create",
         },
         {
-          ids: ["tx_rect"],
+          ids: ["@transaction_rect"],
           kind: "transform",
           transform: { kind: "translate", x: 2, y: 3 },
         },

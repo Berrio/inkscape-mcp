@@ -1328,7 +1328,7 @@ try {
   }
   await writeFile(
     join(workspaceRoot, "css-selection.svg"),
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><style>.selected { fill: url(#paint); }</style><defs><linearGradient id="paint"><stop offset="0" stop-color="#ff0000"/><stop offset="1" stop-color="#0000ff"/></linearGradient></defs><rect id="selected" class="selected" width="10" height="10"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><style>#card .selected { fill: url(#paint); }</style><defs><linearGradient id="paint"><stop offset="0" stop-color="#ff0000"/><stop offset="1" stop-color="#0000ff"/></linearGradient></defs><g id="card"><rect id="selected" class="selected" width="10" height="10"/></g></svg>',
   );
   const cssInspection = await workspaceClient.callTool({
     arguments: {
@@ -1359,7 +1359,10 @@ try {
     ) ||
     !(
       await readFile(join(workspaceRoot, "css-selection-output.svg"), "utf8")
-    ).includes("linearGradient")
+    ).includes("linearGradient") ||
+    !(
+      await readFile(join(workspaceRoot, "css-selection-output.svg"), "utf8")
+    ).includes('id="card"')
   ) {
     throw new Error("export_svg did not preserve selection stylesheet closure");
   }

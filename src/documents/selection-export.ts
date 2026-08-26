@@ -140,8 +140,22 @@ export function extractSvgSelection(
   }
   for (const style of styles) target.appendChild(style.cloneNode(true));
   if (defs.childNodes.length > 0) target.appendChild(defs);
+  const ancestorCounts = new Map<string, number>();
   for (const element of selectedRoots)
-    target.appendChild(cloneWithAncestors(element, root));
+    forEachAncestor(element, root, (ancestor) => {
+      const id = ancestor.getAttribute("id");
+      if (id) ancestorCounts.set(id, (ancestorCounts.get(id) ?? 0) + 1);
+    });
+  const preservedAncestorIds =
+    styles.length === 0
+      ? new Set<string>()
+      : new Set(
+          [...ancestorCounts].flatMap(([id, count]) =>
+            count === 1 ? [id] : [],
+          ),
+        );
+  for (const element of selectedRoots)
+    target.appendChild(cloneWithAncestors(element, root, preservedAncestorIds));
   const normalized = normalizeSvgIds(
     new XMLSerializer().serializeToString(output),
     {
@@ -152,7 +166,14 @@ export function extractSvgSelection(
     ids: [...ids],
     svg: normalized.svg,
     warnings:
-      styles.length === 0 ? [] : ["SELECTION_STYLESHEET_PRESERVED_PARTIAL"],
+      styles.length === 0
+        ? []
+        : [
+            "SELECTION_STYLESHEET_PRESERVED_PARTIAL",
+            ...(ancestorCounts.size > preservedAncestorIds.size
+              ? ["SELECTION_STYLESHEET_CONTEXT_PARTIAL"]
+              : []),
+          ],
   };
 }
 
@@ -177,13 +198,19 @@ function forEachAncestor(
   }
 }
 
-function cloneWithAncestors(element: XmlElement, root: XmlElement): XmlNode {
+function cloneWithAncestors(
+  element: XmlElement,
+  root: XmlElement,
+  preservedAncestorIds: ReadonlySet<string>,
+): XmlNode {
   const ancestors: XmlElement[] = [];
   forEachAncestor(element, root, (ancestor) => ancestors.push(ancestor));
   let cloned = element.cloneNode(true);
   for (const ancestor of ancestors.reverse()) {
     const wrapper = ancestor.cloneNode(false) as XmlElement;
-    wrapper.removeAttribute("id");
+    const id = wrapper.getAttribute("id");
+    if (id !== null && !preservedAncestorIds.has(id))
+      wrapper.removeAttribute("id");
     wrapper.appendChild(cloned);
     cloned = wrapper;
   }

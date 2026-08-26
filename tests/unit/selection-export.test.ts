@@ -46,6 +46,16 @@ describe("selection SVG export", () => {
       ),
     ).toThrow("cyclic reference");
   });
+
+  it("keeps unique ancestor IDs needed by contextual stylesheet selectors", () => {
+    const result = extractSvgSelection(
+      '<svg viewBox="0 0 1 1"><style>#card .title { fill: #c00; }</style><g id="card" transform="translate(2)"><text id="title" class="title">Hi</text></g></svg>',
+      ["title"],
+    );
+    expect(result.svg).toContain('id="card"');
+    expect(result.svg).toContain("#card .title");
+    expect(result.warnings).toEqual(["SELECTION_STYLESHEET_PRESERVED_PARTIAL"]);
+  });
 });
 
 describe("selection asset publication", () => {

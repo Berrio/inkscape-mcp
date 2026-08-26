@@ -1518,8 +1518,8 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F02-T10` Implementar lock por ruta canónica para documentos y destinos de output, con orden para evitar deadlocks.
 - [x] `F02-T11` Implementar backup configurable y nombres sin colisión.
 - [x] `F02-T12` Implementar commit atómico en Windows; documentar fallback y crash consistency.
-- [ ] `F02-T13` Implementar snapshots opacos, TTL/retención y tools snapshot/restore.
-- [ ] `F02-T14` Probar dos writers concurrentes, revisión de documento/output obsoleta, cancelación y espacio insuficiente simulado.
+- [x] `F02-T13` Implementar snapshots opacos, TTL/retención y tools snapshot/restore. — `document_snapshot`/`document_restore` usan IDs opacos owner-bound, TTL persistente, retención por workspace, revisión optimista y backup atómico.
+- [x] `F02-T14` Probar dos writers concurrentes, revisión de documento/output obsoleta, cancelación y espacio insuficiente simulado. — Las pruebas de storage/runner cubren serialización, revisiones stale, abort/limpieza y `ENOSPC` sin publicación parcial.
 
 #### XML/SVG
 

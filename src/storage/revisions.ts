@@ -80,9 +80,13 @@ export type CommitFileRequest = {
   targetPath: string;
 };
 export type CommitFileResult = { backupPath?: string; revision: string };
+type TemporaryWriter = (path: string, contents: Uint8Array) => Promise<void>;
 
 export class AtomicFileStore {
-  public constructor(private readonly locks = new CanonicalPathLocks()) {}
+  public constructor(
+    private readonly locks = new CanonicalPathLocks(),
+    private readonly writeTemporary: TemporaryWriter = writeDurableTemporary,
+  ) {}
 
   public async commit(request: CommitFileRequest): Promise<CommitFileResult> {
     const target = resolve(request.targetPath);
@@ -104,13 +108,7 @@ export class AtomicFileStore {
         );
         let backupPath: string | undefined;
         try {
-          const handle = await open(temporary, "wx");
-          try {
-            await handle.writeFile(request.contents);
-            await handle.sync();
-          } finally {
-            await handle.close();
-          }
+          await this.writeTemporary(temporary, request.contents);
           if (exists) {
             backupPath = uniqueBackupPath(target);
             await copyFile(target, backupPath, 0);
@@ -125,6 +123,19 @@ export class AtomicFileStore {
         }
       },
     );
+  }
+}
+
+async function writeDurableTemporary(
+  path: string,
+  contents: Uint8Array,
+): Promise<void> {
+  const handle = await open(path, "wx");
+  try {
+    await handle.writeFile(contents);
+    await handle.sync();
+  } finally {
+    await handle.close();
   }
 }
 

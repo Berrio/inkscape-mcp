@@ -13,5 +13,9 @@ export {
   createNativeInputBundle,
   type NativeInputBundle,
 } from "./native-input.js";
-export { SnapshotStore, type Snapshot } from "./snapshots.js";
+export {
+  SnapshotStore,
+  type Snapshot,
+  type SnapshotRestore,
+} from "./snapshots.js";
 export { ArtifactStore, type Artifact } from "./artifacts.js";

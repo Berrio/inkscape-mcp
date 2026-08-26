@@ -1,6 +1,7 @@
 import {
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   utimes,
@@ -97,6 +98,37 @@ describe("file revisions and atomic store", () => {
     expect(await readFile(target, "utf8")).toBe("next");
     expect(result.backupPath).toBeDefined();
   });
+  it("keeps the destination intact when temporary storage reports no space", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const target = join(root, "target.svg");
+    await writeFile(source, "source");
+    await writeFile(target, "existing");
+    const store = new AtomicFileStore(
+      new CanonicalPathLocks(),
+      async (temporaryPath) => {
+        await writeFile(temporaryPath, "partial");
+        const error = new Error("No space left on device") as Error & {
+          code: string;
+        };
+        error.code = "ENOSPC";
+        throw error;
+      },
+    );
+    await expect(
+      store.commit({
+        contents: Buffer.from("replacement"),
+        expectedOutputRevision: await sha256File(target),
+        expectedRevision: await sha256File(source),
+        sourcePath: source,
+        targetPath: target,
+      }),
+    ).rejects.toMatchObject({ code: "ENOSPC" });
+    await expect(readFile(target, "utf8")).resolves.toBe("existing");
+    expect(
+      (await readdir(root)).filter((name) => name.includes("inkscape-mcp")),
+    ).toEqual([]);
+  });
   it("serializes conflicting writers in a deterministic lock order", async () => {
     const locks = new CanonicalPathLocks();
     const events: string[] = [];
@@ -125,6 +157,14 @@ describe("file revisions and atomic store", () => {
       async (directory) => directory,
     );
     await expect(readFile(path)).rejects.toBeDefined();
+    let failedPath = "";
+    await expect(
+      scratch.withDirectory("job", async (directory) => {
+        failedPath = directory;
+        throw new Error("cancelled");
+      }),
+    ).rejects.toThrow("cancelled");
+    await expect(readFile(failedPath)).rejects.toBeDefined();
   });
   it("restores an opaque owner-bound snapshot only against the expected revision", async () => {
     const root = await temporaryDirectory();
@@ -133,9 +173,16 @@ describe("file revisions and atomic store", () => {
     await writeFile(source, "before");
     await writeFile(target, "after");
     const snapshots = new SnapshotStore(join(root, "snapshots"));
-    const snapshot = await snapshots.create(source, "owner-a", 60_000);
+    const sourceRevision = await sha256File(source);
+    const snapshot = await snapshots.create(
+      source,
+      "owner-a",
+      60_000,
+      sourceRevision,
+    );
+    const reopened = new SnapshotStore(join(root, "snapshots"));
     await expect(
-      snapshots.restore(
+      reopened.restore(
         snapshot.id,
         "owner-b",
         target,
@@ -143,17 +190,48 @@ describe("file revisions and atomic store", () => {
       ),
     ).rejects.toBeInstanceOf(RevisionConflictError);
     await expect(
-      snapshots.restore(snapshot.id, "owner-a", target, "stale"),
+      reopened.restore(snapshot.id, "owner-a", target, "stale"),
     ).rejects.toBeInstanceOf(RevisionConflictError);
     await expect(
-      snapshots.restore(
+      reopened.restore(
         snapshot.id,
         "owner-a",
         target,
         await sha256File(target),
       ),
-    ).resolves.toBe(snapshot.revision);
+    ).resolves.toEqual({ backupCreated: true, revision: snapshot.revision });
     expect(await readFile(target, "utf8")).toBe("before");
+  });
+  it("rejects a source that changed during snapshot creation and retains a bounded history", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    await writeFile(source, "first");
+    const snapshots = new SnapshotStore(join(root, "snapshots"), undefined, 1);
+    const firstRevision = await sha256File(source);
+    const first = await snapshots.create(
+      source,
+      "owner-a",
+      60_000,
+      firstRevision,
+    );
+    await writeFile(source, "second");
+    const secondRevision = await sha256File(source);
+    const reopened = new SnapshotStore(join(root, "snapshots"), undefined, 1);
+    const second = await reopened.create(
+      source,
+      "owner-a",
+      60_000,
+      secondRevision,
+    );
+    await expect(
+      reopened.restore(first.id, "owner-a", source, secondRevision),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+    await expect(
+      reopened.restore(second.id, "owner-a", source, firstRevision),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+    await expect(
+      reopened.create(source, "owner-a", 60_000, firstRevision),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
   });
   it("serves bounded artifact chunks to only their owner", async () => {
     const root = await temporaryDirectory();

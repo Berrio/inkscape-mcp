@@ -78,6 +78,18 @@ try {
   if (typeof revision !== "string") {
     throw new Error("document_create did not return a revision");
   }
+  const snapshot = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: revision,
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_snapshot",
+  });
+  const snapshotId = snapshot.structuredContent?.snapshotId;
+  if (snapshot.isError || typeof snapshotId !== "string") {
+    throw new Error("document_snapshot did not return an opaque snapshot ID");
+  }
   const resized = await workspaceClient.callTool({
     arguments: {
       expectedRevision: revision,
@@ -100,6 +112,38 @@ try {
   const resizedRevision = resized.structuredContent?.revision;
   if (typeof resizedRevision !== "string") {
     throw new Error("document_resize did not return a revision");
+  }
+  const restored = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: resizedRevision,
+      path: "a4.svg",
+      snapshotId,
+      workspaceId: workspace.id,
+    },
+    name: "document_restore",
+  });
+  const restoredRevision = restored.structuredContent?.revision;
+  if (
+    restored.isError ||
+    restored.structuredContent?.backupCreated !== true ||
+    restoredRevision !== revision
+  ) {
+    throw new Error("document_restore did not restore the snapshot atomically");
+  }
+  const resizedAgain = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: restoredRevision,
+      height: 210,
+      path: "a4.svg",
+      unit: "mm",
+      width: 148,
+      workspaceId: workspace.id,
+    },
+    name: "document_resize",
+  });
+  const resizedAgainRevision = resizedAgain.structuredContent?.revision;
+  if (resizedAgain.isError || typeof resizedAgainRevision !== "string") {
+    throw new Error("document_resize did not resize a restored document");
   }
   const elements = await workspaceClient.callTool({
     arguments: {
@@ -143,7 +187,7 @@ try {
           style: { fill: "#0000ff" },
         },
       ],
-      expectedRevision: resizedRevision,
+      expectedRevision: resizedAgainRevision,
       path: "a4.svg",
       workspaceId: workspace.id,
     },

@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -42,6 +43,7 @@ import {
   createNativeInputBundle,
   ScratchManager,
   sha256File,
+  SnapshotStore,
 } from "../storage/index.js";
 import { WorkspaceService } from "../workspace/index.js";
 
@@ -442,6 +444,13 @@ export function buildServer(config: ServerConfig): McpServer {
   const scratch = new ScratchManager(
     config.scratchRoot === "auto" ? undefined : config.scratchRoot,
   );
+  const snapshots = new SnapshotStore(
+    join(
+      config.scratchRoot === "auto" ? tmpdir() : config.scratchRoot,
+      "inkscape-mcp-snapshots",
+    ),
+    fileStore,
+  );
   const workspaces = () => WorkspaceService.create(config.workspaceRoots);
 
   server.registerTool(
@@ -476,6 +485,86 @@ export function buildServer(config: ServerConfig): McpServer {
         },
         workspaceReady: report.workspaceReady,
       };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_snapshot",
+    {
+      description:
+        "Creates an opaque, owner-bound snapshot of a document after verifying its exact revision.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          ttlMs: z
+            .number()
+            .int()
+            .min(1_000)
+            .max(7 * 24 * 60 * 60 * 1_000)
+            .default(24 * 60 * 60 * 1_000),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        snapshotId: z.string().regex(/^snap_[a-f0-9]{32}$/u),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({ expectedRevision, path, ttlMs, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const snapshot = await snapshots.create(
+        document.absolutePath,
+        workspaceId,
+        ttlMs,
+        expectedRevision,
+      );
+      const output = { revision: snapshot.revision, snapshotId: snapshot.id };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_restore",
+    {
+      description:
+        "Restores an owner-bound snapshot only when the current document revision matches exactly.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          snapshotId: z.string().regex(/^snap_[a-f0-9]{32}$/u),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, path, snapshotId, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const output = await snapshots.restore(
+        snapshotId,
+        workspaceId,
+        document.absolutePath,
+        expectedRevision,
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

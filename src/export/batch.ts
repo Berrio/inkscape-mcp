@@ -7,6 +7,10 @@ export type PlannedExportVariant = {
   outputPath: string;
   spec: ExportSpec;
 };
+export type ExportBatchResult<T> = {
+  failures: readonly { index: number; message: string }[];
+  successes: readonly { index: number; value: T }[];
+};
 
 /** Validates deterministic, collision-free single-file variants before rendering. */
 export function planExportBatch(
@@ -30,4 +34,31 @@ export function planExportBatch(
       spec,
     };
   });
+}
+
+/** Executes variants deterministically. all_or_nothing stops before any later
+ * publication callback after the first failure; callers own staged rollback. */
+export async function executeExportBatch<T>(request: {
+  mode: ExportBatchMode;
+  variants: readonly PlannedExportVariant[];
+  execute: (variant: PlannedExportVariant) => Promise<T>;
+}): Promise<ExportBatchResult<T>> {
+  const successes: { index: number; value: T }[] = [];
+  const failures: { index: number; message: string }[] = [];
+  for (const variant of request.variants) {
+    try {
+      successes.push({
+        index: variant.index,
+        value: await request.execute(variant),
+      });
+    } catch (error) {
+      failures.push({
+        index: variant.index,
+        message:
+          error instanceof Error ? error.message : "Export variant failed",
+      });
+      if (request.mode === "all_or_nothing") break;
+    }
+  }
+  return { failures, successes };
 }

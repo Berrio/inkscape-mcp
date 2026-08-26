@@ -41,6 +41,8 @@ export { verifyExportArtifact, type ExportVerification } from "./verify.js";
 export { pruneSvgPagesForPdf } from "./pdf-pages.js";
 export {
   planExportBatch,
+  executeExportBatch,
+  type ExportBatchResult,
   type ExportBatchMode,
   type PlannedExportVariant,
 } from "./batch.js";

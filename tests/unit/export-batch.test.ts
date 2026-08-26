@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parseExportSpec, planExportBatch } from "../../src/export/index.js";
+import {
+  executeExportBatch,
+  parseExportSpec,
+  planExportBatch,
+} from "../../src/export/index.js";
 
 const png = (path: string) =>
   parseExportSpec({
@@ -23,5 +27,31 @@ describe("export batch planning", () => {
     expect(() => planExportBatch([png("same.png"), png("SAME.png")])).toThrow(
       "collide",
     );
+  });
+  it("continues best effort but stops all-or-nothing after a failure", async () => {
+    const variants = planExportBatch([png("one.png"), png("two.png")]);
+    const best = await executeExportBatch({
+      execute: async (variant) => {
+        if (variant.index === 0) throw new Error("first failed");
+        return variant.outputPath;
+      },
+      mode: "best_effort",
+      variants,
+    });
+    expect(best).toMatchObject({
+      failures: [{ index: 0, message: "first failed" }],
+      successes: [{ index: 1, value: "two.png" }],
+    });
+    const atomic = await executeExportBatch({
+      execute: async () => {
+        throw new Error("stop");
+      },
+      mode: "all_or_nothing",
+      variants,
+    });
+    expect(atomic).toMatchObject({
+      failures: [{ index: 0, message: "stop" }],
+      successes: [],
+    });
   });
 });

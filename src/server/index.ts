@@ -585,6 +585,13 @@ const elementSummarySchema = z.object({
       y: z.number().finite(),
     })
     .optional(),
+  computedStyle: z
+    .object({
+      fidelity: z.enum(["exact-supported", "partial"]),
+      limitations: z.array(z.string()),
+      properties: z.record(z.string(), z.string()),
+    })
+    .optional(),
   id: shapeIdSchema.optional(),
   kind: z.string(),
   layerId: shapeIdSchema.optional(),
@@ -1156,6 +1163,7 @@ export function buildServer(config: ServerConfig): McpServer {
             .regex(/^[a-f0-9]{64}$/u)
             .optional(),
           includeBounds: z.boolean().default(false),
+          includeComputedStyle: z.boolean().default(false),
           kinds: z
             .array(
               z.enum([
@@ -1193,6 +1201,7 @@ export function buildServer(config: ServerConfig): McpServer {
       expectedRevision,
       ids,
       includeBounds,
+      includeComputedStyle,
       kinds,
       layerId,
       limit,
@@ -1209,6 +1218,7 @@ export function buildServer(config: ServerConfig): McpServer {
         await readFile(document.absolutePath, "utf8"),
         {
           ...(ids === undefined ? {} : { ids }),
+          includeComputedStyle,
           ...(kinds === undefined ? {} : { kinds }),
           ...(layerId === undefined ? {} : { layerId }),
           ...(selector === undefined ? {} : { selector }),

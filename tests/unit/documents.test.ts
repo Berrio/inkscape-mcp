@@ -771,6 +771,24 @@ describe("basic SVG documents", () => {
     ).toThrow("class limit");
   });
 
+  it("reports a cascade-aware computed style and declares unsupported CSS", () => {
+    const result = querySvgElements(
+      '<svg xmlns="http://www.w3.org/2000/svg"><style>rect.card { fill: blue; stroke: #111; } #item { fill: green !important; } .outer .deep { opacity: 0; }</style><g fill="orange" font-family="Forte" font-weight="bold"><rect id="item" class="card" style="fill: purple; opacity: 0.4"/></g></svg>',
+      { ids: ["item"], includeComputedStyle: true, limit: 10, offset: 0 },
+    );
+    expect(result.elements[0]?.computedStyle).toEqual({
+      fidelity: "partial",
+      limitations: ["CSS_SELECTOR_UNSUPPORTED"],
+      properties: {
+        fill: "green",
+        "font-family": "Forte",
+        "font-weight": "bold",
+        opacity: "0.4",
+        stroke: "#111",
+      },
+    });
+  });
+
   it("bounds selector resource use before pagination", () => {
     const many = Array.from(
       { length: 10_001 },

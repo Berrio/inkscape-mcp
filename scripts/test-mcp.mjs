@@ -399,6 +399,7 @@ try {
       ids: ["demo_rect", "temporary_circle"],
       expectedRevision: transformedRevision,
       includeBounds: true,
+      includeComputedStyle: true,
       layerId: "layer_main",
       path: "a4.svg",
       selector: "#demo_rect",
@@ -413,6 +414,10 @@ try {
       "number" ||
     queried.structuredContent?.elements?.[0]?.bounds?.kind !== "visual" ||
     queried.structuredContent?.elements?.[0]?.bounds?.fidelity !== "partial" ||
+    queried.structuredContent?.elements?.[0]?.computedStyle?.properties
+      ?.fill !== "#ff0000" ||
+    queried.structuredContent?.elements?.[0]?.computedStyle?.fidelity !==
+      "exact-supported" ||
     queried.structuredContent?.missingIds?.[0] !== "temporary_circle"
   ) {
     throw new Error("elements_query did not return a bounded SVG summary");

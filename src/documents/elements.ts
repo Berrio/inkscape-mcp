@@ -1,4 +1,8 @@
-import { DOMParser, type Element as XmlElement } from "@xmldom/xmldom";
+import {
+  DOMParser,
+  type Document as XmlDocument,
+  type Element as XmlElement,
+} from "@xmldom/xmldom";
 
 import { sanitizeSvg } from "../svg/index.js";
 
@@ -52,6 +56,37 @@ const SAFE_SELECTOR = new RegExp(
   `^(?<kind>[A-Za-z][A-Za-z0-9-]*)?(?:#(?<id>${SAFE_SELECTOR_ID}))?(?<classes>(?:\\.${SAFE_SELECTOR_CLASS})*)$`,
   "u",
 );
+const COMPUTED_STYLE_PROPERTIES = new Set([
+  "color",
+  "display",
+  "fill",
+  "fill-opacity",
+  "filter",
+  "font-family",
+  "font-size",
+  "font-style",
+  "font-weight",
+  "opacity",
+  "stroke",
+  "stroke-opacity",
+  "stroke-width",
+  "text-anchor",
+  "visibility",
+]);
+const INHERITED_STYLE_PROPERTIES = new Set([
+  "color",
+  "fill",
+  "fill-opacity",
+  "font-family",
+  "font-size",
+  "font-style",
+  "font-weight",
+  "stroke",
+  "stroke-opacity",
+  "stroke-width",
+  "text-anchor",
+  "visibility",
+]);
 
 type CompiledSelector = {
   classes: readonly string[];
@@ -60,6 +95,7 @@ type CompiledSelector = {
 };
 
 export type ElementQuery = {
+  includeComputedStyle?: boolean | undefined;
   ids?: readonly string[] | undefined;
   kinds?: readonly string[] | undefined;
   layerId?: string | undefined;
@@ -80,6 +116,11 @@ export type ElementSummary = {
     y: number;
   };
   id?: string;
+  computedStyle?: {
+    fidelity: "exact-supported" | "partial";
+    limitations: readonly string[];
+    properties: Readonly<Record<string, string>>;
+  };
   kind: string;
   layerId?: string;
   parentId?: string;
@@ -135,6 +176,9 @@ export function querySvgElementTargets(
   const kinds = new Set(query.kinds ?? []);
   const all = Array.from(document.getElementsByTagName("*"));
   assertMaximumDepth(all);
+  const computedStyles = query.includeComputedStyle
+    ? createComputedStyleResolver(document)
+    : undefined;
   const presentIds = new Set(
     all.flatMap((element) => {
       const id = element.getAttribute("id");
@@ -163,7 +207,10 @@ export function querySvgElementTargets(
         ...(element.getAttribute("id") === null
           ? {}
           : { nativeId: element.getAttribute("id")! }),
-        summary: summarize(element),
+        summary: summarize(
+          element,
+          computedStyles === undefined ? undefined : computedStyles(element),
+        ),
       })),
     missingIds: [...ids].filter((id) => !presentIds.has(id)).sort(),
     total: matched.length,
@@ -224,7 +271,10 @@ function assertMaximumDepth(elements: readonly XmlElement[]): void {
   }
 }
 
-function summarize(element: XmlElement): ElementSummary {
+function summarize(
+  element: XmlElement,
+  computedStyle?: ElementSummary["computedStyle"],
+): ElementSummary {
   const attributes: Record<string, string> = {};
   for (let index = 0; index < element.attributes.length; index += 1) {
     const attribute = element.attributes.item(index);
@@ -236,11 +286,168 @@ function summarize(element: XmlElement): ElementSummary {
   const layerId = publicId(findLayerId(element) ?? null);
   return {
     attributes,
+    ...(computedStyle === undefined ? {} : { computedStyle }),
     ...(id === undefined ? {} : { id }),
     kind: element.localName ?? "unknown",
     ...(layerId === undefined ? {} : { layerId }),
     ...(parentId === undefined ? {} : { parentId }),
   };
+}
+
+type StyleDeclaration = {
+  important: boolean;
+  property: string;
+  value: string;
+};
+type StyleRule = {
+  declarations: readonly StyleDeclaration[];
+  order: number;
+  selector: CompiledSelector;
+  specificity: number;
+};
+type ComputedStyleResolver = (
+  element: XmlElement,
+) => NonNullable<ElementSummary["computedStyle"]>;
+
+/** Resolves the intentionally small, auditable CSS subset exposed by the API.
+ * Unsupported selector programs and custom-property expressions are retained in
+ * the source SVG but flagged instead of being represented as computed truth. */
+function createComputedStyleResolver(
+  document: XmlDocument,
+): ComputedStyleResolver {
+  const parsed = parseSupportedStyles(document);
+  const cache = new Map<XmlElement, Readonly<Record<string, string>>>();
+  const resolve = (element: XmlElement): Readonly<Record<string, string>> => {
+    const existing = cache.get(element);
+    if (existing) return existing;
+    const properties: Record<string, string> = {};
+    const parent = parentElement(element);
+    if (parent) {
+      const inherited = resolve(parent);
+      for (const property of INHERITED_STYLE_PROPERTIES) {
+        const value = inherited[property];
+        if (value !== undefined) properties[property] = value;
+      }
+    }
+    const candidates = new Map<
+      string,
+      {
+        important: number;
+        order: number;
+        origin: number;
+        specificity: number;
+        value: string;
+      }
+    >();
+    const set = (
+      declaration: StyleDeclaration,
+      origin: number,
+      specificity: number,
+      order: number,
+    ): void => {
+      if (!COMPUTED_STYLE_PROPERTIES.has(declaration.property)) return;
+      const next = {
+        important: declaration.important ? 1 : 0,
+        order,
+        origin,
+        specificity,
+        value: declaration.value,
+      };
+      const previous = candidates.get(declaration.property);
+      if (
+        previous === undefined ||
+        next.important > previous.important ||
+        (next.important === previous.important &&
+          next.origin > previous.origin) ||
+        (next.important === previous.important &&
+          next.origin === previous.origin &&
+          next.specificity > previous.specificity) ||
+        (next.important === previous.important &&
+          next.origin === previous.origin &&
+          next.specificity === previous.specificity &&
+          next.order >= previous.order)
+      )
+        candidates.set(declaration.property, next);
+    };
+    for (const property of COMPUTED_STYLE_PROPERTIES) {
+      const value = element.getAttribute(property);
+      if (value !== null) set({ important: false, property, value }, 0, 0, 0);
+    }
+    for (const rule of parsed.rules)
+      if (matchesSelector(element, rule.selector))
+        for (const declaration of rule.declarations)
+          set(declaration, 1, rule.specificity, rule.order);
+    for (const declaration of parseStyleDeclarations(
+      element.getAttribute("style") ?? "",
+    ))
+      set(declaration, 2, 1_000, Number.MAX_SAFE_INTEGER);
+    for (const [property, candidate] of candidates)
+      properties[property] = candidate.value;
+    cache.set(element, properties);
+    return properties;
+  };
+  return (element) => ({
+    fidelity: parsed.limitations.length === 0 ? "exact-supported" : "partial",
+    limitations: parsed.limitations,
+    properties: resolve(element),
+  });
+}
+
+function parseSupportedStyles(document: XmlDocument): {
+  limitations: readonly string[];
+  rules: readonly StyleRule[];
+} {
+  const limitations = new Set<string>();
+  const rules: StyleRule[] = [];
+  let order = 0;
+  for (const style of Array.from(document.getElementsByTagName("style"))) {
+    const source = style.textContent ?? "";
+    if (/@(?:import|media|supports|keyframes|font-face)\b/iu.test(source))
+      limitations.add("CSS_AT_RULE");
+    for (const match of source.matchAll(/([^{}]+)\{([^{}]*)\}/gu)) {
+      const declarations = parseStyleDeclarations(match[2]!);
+      if (
+        declarations.some((declaration) => /\bvar\(/iu.test(declaration.value))
+      )
+        limitations.add("CSS_CUSTOM_PROPERTY");
+      for (const rawSelector of match[1]!.split(",")) {
+        const selectorText = rawSelector.trim();
+        try {
+          const selector = compileSafeSelector(selectorText);
+          rules.push({
+            declarations,
+            order: order++,
+            selector,
+            specificity:
+              (selector.id === undefined ? 0 : 100) +
+              selector.classes.length * 10 +
+              (selector.kind === undefined ? 0 : 1),
+          });
+        } catch {
+          limitations.add("CSS_SELECTOR_UNSUPPORTED");
+        }
+      }
+    }
+  }
+  return { limitations: [...limitations].sort(), rules };
+}
+
+function parseStyleDeclarations(value: string): readonly StyleDeclaration[] {
+  const declarations: StyleDeclaration[] = [];
+  for (const source of value.split(";")) {
+    const separator = source.indexOf(":");
+    if (separator < 1) continue;
+    const property = source.slice(0, separator).trim().toLowerCase();
+    const rawValue = source.slice(separator + 1).trim();
+    if (!property || !rawValue) continue;
+    const important = /\s*!important\s*$/iu.test(rawValue);
+    declarations.push({
+      important,
+      property,
+      value: rawValue.replace(/\s*!important\s*$/iu, "").trim(),
+    });
+  }
+  return declarations;
 }
 
 function publicId(value: string | null): string | undefined {

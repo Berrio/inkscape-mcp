@@ -160,9 +160,29 @@ try {
   ) {
     throw new Error("elements_delete did not remove the selected element");
   }
-  const inspected = await workspaceClient.callTool({
+  const transformed = await workspaceClient.callTool({
     arguments: {
       expectedRevision: deletedRevision,
+      ids: ["demo_rect", "demo_text"],
+      path: "a4.svg",
+      transform: { kind: "translate", x: 5, y: 10 },
+      workspaceId: workspace.id,
+    },
+    name: "elements_transform",
+  });
+  const transformedRevision = transformed.structuredContent?.revision;
+  if (
+    transformed.isError ||
+    transformed.structuredContent?.ids?.length !== 2 ||
+    typeof transformedRevision !== "string"
+  ) {
+    throw new Error(
+      "elements_transform did not apply an allowlisted transform",
+    );
+  }
+  const inspected = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: transformedRevision,
       path: "a4.svg",
       workspaceId: workspace.id,
     },
@@ -191,7 +211,7 @@ try {
   const pageAdded = await workspaceClient.callTool({
     arguments: {
       action: "add",
-      expectedRevision: deletedRevision,
+      expectedRevision: transformedRevision,
       page: { height: 210, id: "page_back", width: 148, x: 160, y: 0 },
       path: "a4.svg",
       workspaceId: workspace.id,

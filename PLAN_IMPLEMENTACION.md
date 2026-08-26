@@ -1747,7 +1747,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Transformaciones y arrange
 
-- [ ] `F06-T23` Implementar translate/scale/rotate/skew/flip/matrix.
+- [x] `F06-T23` Implementar translate/scale/rotate/skew/flip/matrix.
 - [ ] `F06-T24` Definir anchor/origin por bbox, página, coordenada o elemento.
 - [ ] `F06-T25` Preservar o aplanar transforms solo según opción explícita.
 - [ ] `F06-T26` Implementar align left/center/right/top/middle/bottom.

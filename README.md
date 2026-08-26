@@ -57,6 +57,7 @@ tools de documentos.
 | `document_preflight`                                     | Detectar contenido activo, recursos externos y errores con perfiles basic/web/print/interchange.                                                               |
 | `elements_create`                                        | Crear formas, texto, grupos y capas tipados; soporta parentId dentro del batch.                                                                                |
 | `elements_delete`                                        | Borrar IDs seleccionados sin dejar referencias fragmentarias rotas.                                                                                            |
+| `elements_transform`                                     | Transformar elementos con translate, scale, rotate, skew, flip o matrix tipados.                                                                               |
 | `export_png`, `export_pdf`, `export_svg`                 | Exportar por Inkscape mediante staging y validar el artefacto; PNG acepta area/DPI/fondo, PDF informa paginas y MediaBox, y SVG puede convertir texto a paths. |
 
 Las mutaciones y exportaciones exigen `expectedRevision`. Si un archivo cambia

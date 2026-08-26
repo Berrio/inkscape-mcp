@@ -17,6 +17,26 @@ export type ShapeStyle = {
   strokeWidth?: number | undefined;
   textAnchor?: "end" | "middle" | "start" | undefined;
 };
+export type ElementTransform =
+  | {
+      angle: number;
+      cx?: number | undefined;
+      cy?: number | undefined;
+      kind: "rotate";
+    }
+  | { kind: "scale"; x: number; y?: number | undefined }
+  | { kind: "translate"; x: number; y: number }
+  | { angle: number; kind: "skew_x" | "skew_y" }
+  | { kind: "flip_x" | "flip_y" }
+  | {
+      a: number;
+      b: number;
+      c: number;
+      d: number;
+      e: number;
+      f: number;
+      kind: "matrix";
+    };
 type ShapeBase = {
   id?: string | undefined;
   parentId?: string | undefined;
@@ -134,6 +154,35 @@ export function deleteSvgShapes(
   };
 }
 
+export function transformSvgShapes(
+  source: string,
+  ids: readonly string[],
+  transform: ElementTransform,
+): { ids: readonly string[]; svg: string } {
+  if (ids.length < 1 || ids.length > 100)
+    throw new Error("Transform batch must contain between one and 100 IDs");
+  if (new Set(ids).size !== ids.length)
+    throw new Error("Transform IDs must be unique");
+  const document = parseSafeDocument(source);
+  const transformValue = serializeTransform(transform);
+  for (const id of ids) {
+    if (!SAFE_ID.test(id)) throw new Error("Shape ID is invalid");
+    const element = Array.from(document.getElementsByTagName("*")).find(
+      (candidate) => candidate.getAttribute("id") === id,
+    );
+    if (!element) throw new Error("Shape ID does not exist");
+    const existing = element.getAttribute("transform");
+    element.setAttribute(
+      "transform",
+      existing ? `${existing} ${transformValue}` : transformValue,
+    );
+  }
+  return {
+    ids: [...ids],
+    svg: new XMLSerializer().serializeToString(document),
+  };
+}
+
 function parseSafeDocument(source: string): XmlDocument {
   const sanitization = sanitizeSvg(source, {
     maxElements: 100_000,
@@ -235,6 +284,45 @@ function resolveParent(
     throw new Error("Shape parent must be an existing group or layer");
   return parent;
 }
+function serializeTransform(transform: ElementTransform): string {
+  switch (transform.kind) {
+    case "translate":
+      assertFinite(transform.x, "transform x");
+      assertFinite(transform.y, "transform y");
+      return `translate(${transform.x} ${transform.y})`;
+    case "scale": {
+      const y = transform.y ?? transform.x;
+      assertNonZero(transform.x, "scale x");
+      assertNonZero(y, "scale y");
+      return `scale(${transform.x} ${y})`;
+    }
+    case "rotate":
+      assertFinite(transform.angle, "rotation angle");
+      if (transform.cx === undefined && transform.cy === undefined)
+        return `rotate(${transform.angle})`;
+      if (transform.cx === undefined || transform.cy === undefined)
+        throw new Error("Rotation center requires both cx and cy");
+      assertFinite(transform.cx, "rotation cx");
+      assertFinite(transform.cy, "rotation cy");
+      return `rotate(${transform.angle} ${transform.cx} ${transform.cy})`;
+    case "skew_x":
+    case "skew_y":
+      assertFinite(transform.angle, "skew angle");
+      return `${transform.kind === "skew_x" ? "skewX" : "skewY"}(${transform.angle})`;
+    case "flip_x":
+      return "scale(-1 1)";
+    case "flip_y":
+      return "scale(1 -1)";
+    case "matrix": {
+      for (const [name, value] of Object.entries(transform)) {
+        if (name !== "kind") assertFinite(value as number, `matrix ${name}`);
+      }
+      if (transform.a * transform.d - transform.b * transform.c === 0)
+        throw new Error("Transform matrix must be invertible");
+      return `matrix(${transform.a} ${transform.b} ${transform.c} ${transform.d} ${transform.e} ${transform.f})`;
+    }
+  }
+}
 function isWithinDeletedTree(
   element: XmlElement,
   deleted: ReadonlySet<XmlElement>,
@@ -303,6 +391,10 @@ function color(value: string): string {
 }
 function assertFinite(value: number, name: string): void {
   if (!Number.isFinite(value)) throw new Error(`${name} must be finite`);
+}
+function assertNonZero(value: number, name: string): void {
+  assertFinite(value, name);
+  if (value === 0) throw new Error(`${name} must not be zero`);
 }
 function assertRange(
   value: number,

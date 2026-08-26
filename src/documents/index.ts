@@ -12,6 +12,8 @@ export { inspectSvgInventory, type DocumentInventory } from "./inventory.js";
 export {
   createSvgShapes,
   deleteSvgShapes,
+  transformSvgShapes,
+  type ElementTransform,
   type ShapeSpec,
   type ShapeStyle,
 } from "./shapes.js";

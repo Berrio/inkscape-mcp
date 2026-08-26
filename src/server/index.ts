@@ -10,6 +10,7 @@ import {
   createSvgDocument,
   createSvgShapes,
   deleteSvgShapes,
+  transformSvgShapes,
   deleteSvgPage,
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
@@ -204,6 +205,44 @@ const shapeSchema = z.discriminatedUnion("kind", [
     label: z.string().min(1).max(256).optional(),
     parentId: shapeIdSchema.optional(),
     style: shapeStyleSchema.optional(),
+  }),
+]);
+const transformSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("translate"),
+    x: z.number().finite(),
+    y: z.number().finite(),
+  }),
+  z.object({
+    kind: z.literal("scale"),
+    x: z
+      .number()
+      .finite()
+      .refine((value) => value !== 0),
+    y: z
+      .number()
+      .finite()
+      .refine((value) => value !== 0)
+      .optional(),
+  }),
+  z.object({
+    angle: z.number().finite(),
+    cx: z.number().finite().optional(),
+    cy: z.number().finite().optional(),
+    kind: z.literal("rotate"),
+  }),
+  z.object({ angle: z.number().finite(), kind: z.literal("skew_x") }),
+  z.object({ angle: z.number().finite(), kind: z.literal("skew_y") }),
+  z.object({ kind: z.literal("flip_x") }),
+  z.object({ kind: z.literal("flip_y") }),
+  z.object({
+    a: z.number().finite(),
+    b: z.number().finite(),
+    c: z.number().finite(),
+    d: z.number().finite(),
+    e: z.number().finite(),
+    f: z.number().finite(),
+    kind: z.literal("matrix"),
   }),
 ]);
 
@@ -470,6 +509,54 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         backupCreated: committed.backupPath !== undefined,
         deletedIds: deleted.deletedIds,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_transform",
+    {
+      description:
+        "Appends an allowlisted numeric SVG transform to selected elements without accepting transform strings.",
+      inputSchema: z.object({
+        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        ids: z.array(shapeIdSchema).min(1).max(100),
+        path: z.string().min(1).max(1024),
+        transform: transformSchema,
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        ids: z.array(shapeIdSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, ids, path, transform, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const transformed = transformSvgShapes(
+        await readFile(document.absolutePath, "utf8"),
+        ids,
+        transform,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(transformed.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        ids: transformed.ids,
         revision: committed.revision,
       };
       return {

@@ -15,6 +15,7 @@ import {
   resizeContentSvg,
   updateSvgPage,
   updateDocumentDisplaySettings,
+  transformSvgShapes,
 } from "../../src/documents/index.js";
 import { preflightSvg } from "../../src/documents/index.js";
 const mm = (value: number) => ({ unit: "mm" as const, value });
@@ -265,5 +266,22 @@ describe("basic SVG documents", () => {
         ["shape"],
       ),
     ).toThrow("would break an SVG reference");
+    const transformed = transformSvgShapes(created.svg, ["rect_1"], {
+      kind: "translate",
+      x: 4,
+      y: -2,
+    });
+    expect(transformed.svg).toContain('transform="translate(4 -2)"');
+    expect(() =>
+      transformSvgShapes(created.svg, ["rect_1"], {
+        a: 1,
+        b: 0,
+        c: 0,
+        d: 0,
+        e: 0,
+        f: 0,
+        kind: "matrix",
+      }),
+    ).toThrow("invertible");
   });
 });

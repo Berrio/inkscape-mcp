@@ -270,6 +270,8 @@ export function buildServer(config: ServerConfig): McpServer {
       }),
       outputSchema: z.object({
         height: z.string(),
+        heightUnit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
+        pages: z.array(pageSchema),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
         viewBox: z.object({
           height: z.number(),
@@ -278,6 +280,7 @@ export function buildServer(config: ServerConfig): McpServer {
           y: z.number(),
         }),
         width: z.string(),
+        widthUnit: z.enum(["mm", "cm", "in", "pt", "pc", "q", "px"]),
       }),
       annotations: { readOnlyHint: true },
     },
@@ -288,10 +291,15 @@ export function buildServer(config: ServerConfig): McpServer {
       const revision = await sha256File(document.absolutePath);
       if (expectedRevision !== undefined && expectedRevision !== revision)
         throw new Error("Document revision no longer matches");
-      const settings = inspectSvgSettings(
-        await readFile(document.absolutePath, "utf8"),
-      );
-      const output = { ...settings, revision };
+      const source = await readFile(document.absolutePath, "utf8");
+      const settings = inspectSvgSettings(source);
+      const output = {
+        ...settings,
+        heightUnit: parseViewportLength(settings.height).unit,
+        pages: listSvgPages(source),
+        revision,
+        widthUnit: parseViewportLength(settings.width).unit,
+      };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

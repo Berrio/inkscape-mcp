@@ -111,7 +111,9 @@ try {
   });
   if (
     inspected.isError ||
-    inspected.structuredContent?.viewBox?.width !== 148
+    inspected.structuredContent?.viewBox?.width !== 148 ||
+    inspected.structuredContent?.widthUnit !== "mm" ||
+    inspected.structuredContent?.pages?.[0]?.id !== "page_front"
   ) {
     throw new Error("document_inspect did not report the resized viewBox");
   }

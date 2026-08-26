@@ -1718,9 +1718,9 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [ ] `F06-T01` Definir `ElementSelector` por ID/IDs/tipo/layer/clase y subconjunto CSS seguro, alineado con el motor CSS/ADR de F03.
 - [ ] `F06-T02` Limitar complejidad de selector, cantidad de matches y profundidad.
-- [ ] `F06-T03` Implementar orden documental determinista y paginación.
+- [x] `F06-T03` Implementar orden documental determinista y paginación.
 - [ ] `F06-T04` Implementar `elements_query` con atributos, estilo computable, parent/layer y bounds; remapear IDs para `--query-id`/`--query-all` y probar IDs con coma, punto y coma, whitespace, Unicode y controles rechazados.
-- [ ] `F06-T05` Diferenciar elemento inexistente de selector vacío válido.
+- [x] `F06-T05` Diferenciar elemento inexistente de selector vacío válido.
 
 #### Creación
 

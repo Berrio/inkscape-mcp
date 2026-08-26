@@ -19,6 +19,7 @@ import {
   pageSizeFromPreset,
   parseViewportLength,
   preflightSvg,
+  querySvgElements,
   reorderSvgPages,
   resizeContentSvg,
   resizePageOnlySvg,
@@ -245,6 +246,13 @@ const transformSchema = z.discriminatedUnion("kind", [
     kind: z.literal("matrix"),
   }),
 ]);
+const elementSummarySchema = z.object({
+  attributes: z.record(z.string(), z.string()),
+  id: shapeIdSchema.optional(),
+  kind: z.string(),
+  layerId: shapeIdSchema.optional(),
+  parentId: shapeIdSchema.optional(),
+});
 
 export function buildServer(config: ServerConfig): McpServer {
   const server = new McpServer({
@@ -465,6 +473,63 @@ export function buildServer(config: ServerConfig): McpServer {
         ids: created.ids,
         revision: committed.revision,
       };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_query",
+    {
+      description:
+        "Lists bounded SVG element summaries by IDs, type, or Inkscape layer without exposing arbitrary XML attributes.",
+      inputSchema: z.object({
+        ids: z.array(shapeIdSchema).max(100).optional(),
+        kinds: z
+          .array(
+            z.enum([
+              "circle",
+              "ellipse",
+              "g",
+              "line",
+              "polygon",
+              "polyline",
+              "rect",
+              "text",
+            ]),
+          )
+          .max(20)
+          .optional(),
+        layerId: shapeIdSchema.optional(),
+        limit: z.number().int().min(1).max(1_000).default(100),
+        offset: z.number().int().min(0).max(100_000).default(0),
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        elements: z.array(elementSummarySchema),
+        missingIds: z.array(shapeIdSchema),
+        total: z.number().int().nonnegative(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ ids, kinds, layerId, limit, offset, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const output = querySvgElements(
+        await readFile(document.absolutePath, "utf8"),
+        {
+          ...(ids === undefined ? {} : { ids }),
+          ...(kinds === undefined ? {} : { kinds }),
+          ...(layerId === undefined ? {} : { layerId }),
+          limit,
+          offset,
+        },
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

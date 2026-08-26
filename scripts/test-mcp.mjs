@@ -180,6 +180,22 @@ try {
       "elements_transform did not apply an allowlisted transform",
     );
   }
+  const queried = await workspaceClient.callTool({
+    arguments: {
+      ids: ["demo_rect", "temporary_circle"],
+      layerId: "layer_main",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_query",
+  });
+  if (
+    queried.isError ||
+    queried.structuredContent?.elements?.[0]?.id !== "demo_rect" ||
+    queried.structuredContent?.missingIds?.[0] !== "temporary_circle"
+  ) {
+    throw new Error("elements_query did not return a bounded SVG summary");
+  }
   const inspected = await workspaceClient.callTool({
     arguments: {
       expectedRevision: transformedRevision,

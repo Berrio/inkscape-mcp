@@ -10,6 +10,7 @@ import {
   inspectSvgInventory,
   listSvgPages,
   pageSizeFromPreset,
+  querySvgElements,
   reorderSvgPages,
   resizePageOnlySvg,
   resizeContentSvg,
@@ -283,5 +284,42 @@ describe("basic SVG documents", () => {
         kind: "matrix",
       }),
     ).toThrow("invertible");
+  });
+  it("queries typed element summaries by layer, kind, and bounded offset", () => {
+    const source = createSvgShapes(
+      createSvgDocument({ page: { width: mm(10), height: mm(10) } }),
+      [
+        { id: "layer_main", kind: "layer", label: "Main" },
+        {
+          height: 2,
+          id: "rect_1",
+          kind: "rect",
+          parentId: "layer_main",
+          width: 3,
+          x: 1,
+          y: 2,
+        },
+      ],
+    ).svg;
+    expect(
+      querySvgElements(source, {
+        ids: ["missing", "rect_1"],
+        layerId: "layer_main",
+        limit: 10,
+        offset: 0,
+      }),
+    ).toEqual({
+      elements: [
+        {
+          attributes: { height: "2", width: "3", x: "1", y: "2" },
+          id: "rect_1",
+          kind: "rect",
+          layerId: "layer_main",
+          parentId: "layer_main",
+        },
+      ],
+      missingIds: ["missing"],
+      total: 1,
+    });
   });
 });

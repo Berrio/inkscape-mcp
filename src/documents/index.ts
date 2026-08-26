@@ -10,6 +10,11 @@ export {
 export { preflightSvg, type PreflightIssue } from "./preflight.js";
 export { inspectSvgInventory, type DocumentInventory } from "./inventory.js";
 export {
+  querySvgElements,
+  type ElementQuery,
+  type ElementSummary,
+} from "./elements.js";
+export {
   createSvgShapes,
   deleteSvgShapes,
   transformSvgShapes,

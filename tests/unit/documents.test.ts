@@ -200,19 +200,29 @@ describe("basic SVG documents", () => {
       page: { width: mm(210), height: mm(297) },
     });
     const created = createSvgShapes(source, [
+      { id: "layer_main", kind: "layer", label: "Main" },
       {
         height: 20,
         id: "rect_1",
         kind: "rect",
+        parentId: "layer_main",
         style: { fill: "#ff0000", stroke: "#000000", strokeWidth: 2 },
         width: 30,
         x: 10,
         y: 15,
       },
-      { cx: 50, cy: 60, id: "circle_1", kind: "circle", r: 10 },
+      {
+        cx: 50,
+        cy: 60,
+        id: "circle_1",
+        kind: "circle",
+        parentId: "layer_main",
+        r: 10,
+      },
       {
         id: "text_1",
         kind: "text",
+        parentId: "layer_main",
         style: { fontFamily: "Arial", fontSize: 12, fontWeight: "bold" },
         text: "Hello SVG",
         x: 5,
@@ -221,17 +231,25 @@ describe("basic SVG documents", () => {
       {
         id: "polyline_1",
         kind: "polyline",
+        parentId: "layer_main",
         points: [
           { x: 0, y: 0 },
           { x: 10, y: 20 },
         ],
       },
     ]);
-    expect(created.ids).toEqual(["rect_1", "circle_1", "text_1", "polyline_1"]);
+    expect(created.ids).toEqual([
+      "layer_main",
+      "rect_1",
+      "circle_1",
+      "text_1",
+      "polyline_1",
+    ]);
     expect(created.svg).toContain('id="rect_1" fill="#ff0000"');
     expect(created.svg).toContain('points="0,0 10,20"');
     expect(created.svg).toContain('font-family="Arial"');
     expect(created.svg).toContain(">Hello SVG</text>");
+    expect(created.svg).toContain('inkscape:groupmode="layer"');
     expect(() =>
       createSvgShapes(created.svg, [
         { height: 1, id: "rect_1", kind: "rect", width: 1, x: 0, y: 0 },

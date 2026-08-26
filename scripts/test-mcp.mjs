@@ -104,10 +104,12 @@ try {
   const elements = await workspaceClient.callTool({
     arguments: {
       elements: [
+        { id: "layer_main", kind: "layer", label: "Main" },
         {
           height: 50,
           id: "demo_rect",
           kind: "rect",
+          parentId: "layer_main",
           style: { fill: "#ff0000" },
           width: 50,
           x: 20,
@@ -116,6 +118,7 @@ try {
         {
           id: "demo_text",
           kind: "text",
+          parentId: "layer_main",
           style: { fill: "#000000", fontSize: 12 },
           text: "MCP",
           x: 30,
@@ -131,8 +134,9 @@ try {
   const elementsRevision = elements.structuredContent?.revision;
   if (
     elements.isError ||
-    elements.structuredContent?.ids?.[0] !== "demo_rect" ||
-    elements.structuredContent?.ids?.[1] !== "demo_text" ||
+    elements.structuredContent?.ids?.[0] !== "layer_main" ||
+    elements.structuredContent?.ids?.[1] !== "demo_rect" ||
+    elements.structuredContent?.ids?.[2] !== "demo_text" ||
     typeof elementsRevision !== "string"
   ) {
     throw new Error("elements_create did not publish a typed rectangle");

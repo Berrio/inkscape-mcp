@@ -17,7 +17,11 @@ export type ShapeStyle = {
   strokeWidth?: number | undefined;
   textAnchor?: "end" | "middle" | "start" | undefined;
 };
-type ShapeBase = { id?: string | undefined; style?: ShapeStyle | undefined };
+type ShapeBase = {
+  id?: string | undefined;
+  parentId?: string | undefined;
+  style?: ShapeStyle | undefined;
+};
 export type ShapeSpec =
   | (ShapeBase & {
       height: number;
@@ -52,6 +56,10 @@ export type ShapeSpec =
       text: string;
       x: number;
       y: number;
+    })
+  | (ShapeBase & {
+      kind: "group" | "layer";
+      label?: string | undefined;
     });
 
 const COLOR = /^#[a-fA-F0-9]{6}$/u;
@@ -81,7 +89,7 @@ export function createSvgShapes(
     const element = createShapeElement(document, shape);
     element.setAttribute("id", id);
     applyStyle(element, shape.style);
-    root.appendChild(element);
+    resolveParent(document, root, shape.parentId).appendChild(element);
     ids.push(id);
   }
   return { ids, svg: new XMLSerializer().serializeToString(document) };
@@ -106,7 +114,7 @@ function createShapeElement(
 ): XmlElement {
   const element = document.createElementNS(
     "http://www.w3.org/2000/svg",
-    shape.kind,
+    shape.kind === "layer" ? "g" : shape.kind,
   );
   switch (shape.kind) {
     case "rect":
@@ -158,8 +166,35 @@ function createShapeElement(
       setFinite(element, "y", shape.y);
       element.textContent = shape.text;
       break;
+    case "group":
+      break;
+    case "layer":
+      element.setAttributeNS(
+        "http://www.inkscape.org/namespaces/inkscape",
+        "inkscape:groupmode",
+        "layer",
+      );
+      element.setAttributeNS(
+        "http://www.inkscape.org/namespaces/inkscape",
+        "inkscape:label",
+        shape.label ?? shape.id ?? "Layer",
+      );
+      break;
   }
   return element;
+}
+function resolveParent(
+  document: XmlDocument,
+  root: XmlElement,
+  parentId: string | undefined,
+): XmlElement {
+  if (parentId === undefined) return root;
+  const parent = Array.from(document.getElementsByTagName("*")).find(
+    (element) => element.getAttribute("id") === parentId,
+  );
+  if (!parent || parent.localName !== "g")
+    throw new Error("Shape parent must be an existing group or layer");
+  return parent;
 }
 function applyStyle(element: XmlElement, style: ShapeStyle | undefined): void {
   if (!style) return;

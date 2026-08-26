@@ -52,4 +52,15 @@ describe("document geometry", () => {
       }).contentTransform,
     ).toEqual([1.8, 0, 0, 1.8, -180, 0]);
   });
+  it("keeps the requested resize anchor fixed", () => {
+    expect(
+      planResize({
+        anchor: "bottom_right",
+        currentPage: { width: mm(210), height: mm(297) },
+        currentViewBox: { x: 0, y: 0, width: 210, height: 297 },
+        mode: "page_only",
+        targetPage: { width: mm(148), height: mm(210) },
+      }).newViewBox,
+    ).toEqual({ x: 62, y: 87, width: 148, height: 210 });
+  });
 });

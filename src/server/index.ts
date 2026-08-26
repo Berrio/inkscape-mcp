@@ -353,6 +353,19 @@ export function buildServer(config: ServerConfig): McpServer {
       description:
         "Changes the SVG page size with page_only semantics while preserving element geometry. Requires the current document revision.",
       inputSchema: z.object({
+        anchor: z
+          .enum([
+            "top_left",
+            "top_center",
+            "top_right",
+            "center_left",
+            "center",
+            "center_right",
+            "bottom_left",
+            "bottom_center",
+            "bottom_right",
+          ])
+          .default("top_left"),
         expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
         height: z.number().finite().positive(),
         path: z.string().min(1).max(1024),
@@ -367,7 +380,15 @@ export function buildServer(config: ServerConfig): McpServer {
       }),
       annotations: { destructiveHint: true },
     },
-    async ({ expectedRevision, height, path, unit, width, workspaceId }) => {
+    async ({
+      anchor,
+      expectedRevision,
+      height,
+      path,
+      unit,
+      width,
+      workspaceId,
+    }) => {
       assertDocumentWorkspace(config);
       const workspace = await workspaces();
       const document = await workspace.resolveExisting(workspaceId, path);
@@ -377,10 +398,15 @@ export function buildServer(config: ServerConfig): McpServer {
         width: parseViewportLength(settings.width),
         height: parseViewportLength(settings.height),
       };
-      const resized = resizePageOnlySvg(source, currentPage, {
-        width: { unit, value: width },
-        height: { unit, value: height },
-      });
+      const resized = resizePageOnlySvg(
+        source,
+        currentPage,
+        {
+          width: { unit, value: width },
+          height: { unit, value: height },
+        },
+        anchor,
+      );
       const result = await fileStore.commit({
         contents: Buffer.from(resized.svg),
         expectedOutputRevision: expectedRevision,

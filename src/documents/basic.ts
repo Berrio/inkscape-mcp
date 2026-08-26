@@ -1,6 +1,11 @@
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 
-import { planResize, type PageSize, type UserRect } from "../geometry/index.js";
+import {
+  planResize,
+  type PageSize,
+  type ResizeAnchor,
+  type UserRect,
+} from "../geometry/index.js";
 import { sanitizeSvg } from "../svg/index.js";
 
 export type DocumentSpec = { page: PageSize; viewBox?: UserRect };
@@ -78,11 +83,13 @@ export function resizePageOnlySvg(
   source: string,
   currentPage: PageSize,
   targetPage: PageSize,
+  anchor: ResizeAnchor = "top_left",
 ): { svg: string; warnings: readonly string[] } {
   const settings = inspectSvgSettings(source);
   const plan = planResize({
     currentPage,
     currentViewBox: settings.viewBox,
+    anchor,
     mode: "page_only",
     targetPage,
   });

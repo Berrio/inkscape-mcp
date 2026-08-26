@@ -1,6 +1,7 @@
 export {
   planResize,
   type ResizeMode,
+  type ResizeAnchor,
   type ResizePlan,
   type ViewBoxPolicy,
 } from "./resize.js";

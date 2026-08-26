@@ -326,6 +326,15 @@ try {
           r2: 5,
           style: { fill: "#0000ff" },
         },
+        {
+          cx: 110,
+          cy: 120,
+          id: "demo_spiral",
+          kind: "spiral",
+          parentId: "layer_main",
+          r: 12,
+          turns: 2,
+        },
       ],
       expectedRevision: resizedAgainRevision,
       path: "a4.svg",
@@ -342,6 +351,7 @@ try {
     elements.structuredContent?.ids?.[3] !== "temporary_circle" ||
     elements.structuredContent?.ids?.[4] !== "demo_path" ||
     elements.structuredContent?.ids?.[5] !== "demo_star" ||
+    elements.structuredContent?.ids?.[6] !== "demo_spiral" ||
     typeof elementsRevision !== "string"
   ) {
     throw new Error("elements_create did not publish a typed rectangle");

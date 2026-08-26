@@ -132,6 +132,14 @@ export type ShapeSpec =
       r2: number;
       rotation?: number | undefined;
     })
+  | (ShapeBase & {
+      cx: number;
+      cy: number;
+      kind: "spiral";
+      r: number;
+      rotation?: number | undefined;
+      turns: number;
+    })
   | (ShapeBase & { d: string; kind: "path" })
   | (ShapeBase & {
       kind: "text";
@@ -449,7 +457,9 @@ function createShapeElement(
       ? "g"
       : shape.kind === "regular_polygon" || shape.kind === "star"
         ? "polygon"
-        : shape.kind,
+        : shape.kind === "spiral"
+          ? "path"
+          : shape.kind,
   );
   switch (shape.kind) {
     case "rect":
@@ -514,6 +524,18 @@ function createShapeElement(
           shape.cy,
           [shape.r1, shape.r2],
           shape.points,
+          shape.rotation,
+        ),
+      );
+      break;
+    case "spiral":
+      element.setAttribute(
+        "d",
+        generatedSpiralPath(
+          shape.cx,
+          shape.cy,
+          shape.r,
+          shape.turns,
           shape.rotation,
         ),
       );
@@ -758,6 +780,28 @@ function generatedPolygonPoints(
       ((angle + (360 * index) / (count * radii.length)) * Math.PI) / 180;
     const radius = radii[index % radii.length]!;
     return `${cx + Math.cos(radians) * radius},${cy + Math.sin(radians) * radius}`;
+  }).join(" ");
+}
+function generatedSpiralPath(
+  cx: number,
+  cy: number,
+  radius: number,
+  turns: number,
+  rotation: number | undefined,
+): string {
+  assertFinite(cx, "cx");
+  assertFinite(cy, "cy");
+  assertRange(radius, "radius", Number.MIN_VALUE, Number.POSITIVE_INFINITY);
+  assertRange(turns, "turns", 0.1, 100);
+  const angle = rotation ?? -90;
+  assertFinite(angle, "rotation");
+  const segments = Math.min(1_000, Math.max(16, Math.ceil(turns * 64)));
+  return Array.from({ length: segments + 1 }, (_, index) => {
+    const ratio = index / segments;
+    const radians = ((angle + ratio * turns * 360) * Math.PI) / 180;
+    const x = cx + Math.cos(radians) * radius * ratio;
+    const y = cy + Math.sin(radians) * radius * ratio;
+    return `${index === 0 ? "M" : "L"} ${x} ${y}`;
   }).join(" ");
 }
 function setOptionalFinite(

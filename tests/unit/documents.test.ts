@@ -683,6 +683,19 @@ describe("basic SVG documents", () => {
         .svg,
     ).not.toContain('id="shape_group"');
   });
+
+  it("creates a bounded standard SVG spiral path", () => {
+    const source = createSvgDocument({
+      page: { width: mm(20), height: mm(20) },
+    });
+    const result = createSvgShapes(source, [
+      { cx: 10, cy: 10, id: "spiral_1", kind: "spiral", r: 8, turns: 2 },
+    ]);
+    expect(result.ids).toEqual(["spiral_1"]);
+    expect(result.svg).toContain('id="spiral_1"');
+    expect(result.svg).toContain('d="M 10 10 L');
+    expect(result.svg).not.toContain("NaN");
+  });
   it("queries typed element summaries by layer, kind, and bounded offset", () => {
     const source = createSvgShapes(
       createSvgDocument({ page: { width: mm(10), height: mm(10) } }),

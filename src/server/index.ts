@@ -1363,6 +1363,133 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "document_render_preview",
+    {
+      description:
+        "Renders a bounded transparent PNG preview through Inkscape without changing the source document. Small results are returned inline and every preview is saved to an authorized workspace path.",
+      inputSchema: z.object({
+        area: z.enum(["drawing", "page"]).default("page"),
+        expectedOutputRevision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/u)
+          .optional(),
+        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        height: z.number().int().positive().max(2_048).optional(),
+        outputPath: z.string().min(1).max(1024),
+        path: z.string().min(1).max(1024),
+        width: z.number().int().positive().max(2_048).default(1_024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        area: z.enum(["drawing", "page"]),
+        documentPath: z.string(),
+        height: z.number().int().positive(),
+        inline: z.boolean(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        width: z.number().int().positive(),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({
+      area,
+      expectedOutputRevision,
+      expectedRevision,
+      height,
+      outputPath,
+      path,
+      width,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const input = await workspace.resolveExisting(workspaceId, path);
+      const output = await workspace.resolveNewOutput(workspaceId, outputPath);
+      if (!/\.png$/iu.test(output.relativePath))
+        throw new Error("document_render_preview requires a .png output path");
+      const discovery = await locateInkscape({
+        config,
+        cwd: process.cwd(),
+        runner,
+      });
+      const candidate = discovery.candidates[0];
+      if (!candidate) throw new Error("Inkscape executable is unavailable");
+      const probe = await probeInkscapeCandidate(
+        runner,
+        candidate,
+        process.cwd(),
+      );
+      if (!("version" in probe))
+        throw new Error("Inkscape executable could not be validated");
+      const preview = await scratch.withDirectory(
+        "staging",
+        async (directory) => {
+          const nativeInput = await createNativeInputBundle(
+            input.absolutePath,
+            expectedRevision,
+            directory,
+          );
+          const temporaryOutput = join(directory, "preview.png");
+          const result = await runner.run(candidate.executablePath, {
+            args: [
+              nativeInput.path,
+              "--export-type=png",
+              `--export-filename=${temporaryOutput}`,
+              area === "drawing"
+                ? "--export-area-drawing"
+                : "--export-area-page",
+              "--export-background-opacity=0",
+              `--export-width=${width}`,
+              ...(height === undefined ? [] : [`--export-height=${height}`]),
+            ],
+            cwd: directory,
+            maxStderrBytes: config.maxStderrBytes,
+            maxStdoutBytes: config.maxStdoutBytes,
+            timeoutMs: config.processTimeoutMs,
+          });
+          if (result.exitCode !== 0 || result.terminationReason !== "completed")
+            throw new Error("Inkscape preview render failed");
+          const bytes = await readFile(temporaryOutput);
+          if (bytes.byteLength > config.maxArtifactBytes)
+            throw new Error("Preview exceeds configured artifact size limit");
+          return { bytes, metadata: await verifyPng(temporaryOutput) };
+        },
+      );
+      const committed = await fileStore.commit({
+        contents: preview.bytes,
+        ...(expectedOutputRevision === undefined
+          ? {}
+          : { expectedOutputRevision }),
+        expectedRevision,
+        sourcePath: input.absolutePath,
+        targetPath: output.absolutePath,
+      });
+      const result = {
+        area,
+        documentPath: output.relativePath,
+        height: preview.metadata.height,
+        inline: preview.bytes.byteLength <= config.maxInlineBytes,
+        revision: committed.revision,
+        width: preview.metadata.width,
+      };
+      return {
+        content: [
+          { type: "text", text: JSON.stringify(result) },
+          ...(result.inline
+            ? [
+                {
+                  data: preview.bytes.toString("base64"),
+                  mimeType: "image/png",
+                  type: "image" as const,
+                },
+              ]
+            : []),
+        ],
+        structuredContent: result,
+      };
+    },
+  );
+
+  server.registerTool(
     "export_png",
     {
       description:

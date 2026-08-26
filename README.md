@@ -55,6 +55,7 @@ tools de documentos.
 | `document_pages`                                         | Listar o mutar paginas explicitas de Inkscape 1.4.                                                                                                             |
 | `document_settings`                                      | Leer o editar fondo de pagina, escritorio y borde.                                                                                                             |
 | `document_preflight`                                     | Detectar contenido activo, recursos externos y errores con perfiles basic/web/print/interchange.                                                               |
+| `document_render_preview`                                | Renderizar una preview PNG limitada, transparente y verificada; devuelve imagen inline si cabe.                                                                |
 | `elements_update`                                        | Actualizar geometría, estilo básico, texto o label de capa mediante patches tipados.                                                                           |
 | `elements_arrange`                                       | Cambiar orden Z de hermanos: front/back/raise/lower, sin índices u orden XML arbitrarios.                                                                      |
 | `elements_group`                                         | Agrupar hermanos o desagrupar un grupo SVG sin romper referencias `href` externas.                                                                             |

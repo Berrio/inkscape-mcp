@@ -346,6 +346,24 @@ try {
   if (typeof settingsRevision !== "string") {
     throw new Error("document_settings did not return a revision");
   }
+  const preview = await workspaceClient.callTool({
+    arguments: {
+      area: "drawing",
+      expectedRevision: settingsRevision,
+      outputPath: "a4-preview.png",
+      path: "a4.svg",
+      width: 256,
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  if (
+    preview.isError ||
+    preview.structuredContent?.documentPath !== "a4-preview.png" ||
+    preview.structuredContent?.width !== 256
+  ) {
+    throw new Error("document_render_preview did not render a bounded PNG");
+  }
   const exported = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,

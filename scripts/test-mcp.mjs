@@ -131,6 +131,60 @@ try {
     /<script|onclick=/iu.test(importedText)
   )
     throw new Error("document_import_svg published unsafe SVG content");
+  await writeFile(join(workspaceRoot, "package-texture.bin"), "texture-data");
+  await writeFile(
+    join(workspaceRoot, "package-source.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><image id="texture" href="package-texture.bin" width="1" height="1"/></svg>',
+  );
+  const packageRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "package-source.svg")))
+    .digest("hex");
+  const packagedAssets = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: packageRevision,
+      outputDirectory: "portable-package",
+      path: "package-source.svg",
+      workspaceId: workspace.id,
+    },
+    name: "assets_package",
+  });
+  if (
+    packagedAssets.isError ||
+    packagedAssets.structuredContent?.dependencyCount !== 1 ||
+    packagedAssets.structuredContent?.documentPath !==
+      "portable-package/document.svg" ||
+    !packagedAssets.structuredContent?.files?.some(
+      (file) => file.path === "assets/0000-package-texture.bin",
+    )
+  )
+    throw new Error("assets_package did not return the portable package");
+  const packagedDocument = await readFile(
+    join(workspaceRoot, "portable-package", "document.svg"),
+    "utf8",
+  );
+  const packagedManifest = JSON.parse(
+    await readFile(
+      join(workspaceRoot, "portable-package", "manifest.json"),
+      "utf8",
+    ),
+  );
+  if (
+    !packagedDocument.includes("assets/0000-package-texture.bin") ||
+    (await readFile(
+      join(
+        workspaceRoot,
+        "portable-package",
+        "assets",
+        "0000-package-texture.bin",
+      ),
+      "utf8",
+    )) !== "texture-data" ||
+    packagedManifest.schema !== "inkscape-mcp-assets-package/v1" ||
+    packagedManifest.source.path !== "package-source.svg"
+  )
+    throw new Error(
+      "assets_package did not publish a portable dependency tree",
+    );
   await writeFile(
     join(workspaceRoot, "fit.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 50"><rect id="fit_rect" x="10" y="5" width="30" height="20"/></svg>',

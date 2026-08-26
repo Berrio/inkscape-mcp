@@ -1104,6 +1104,142 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "assets_package",
+    {
+      description:
+        "Creates a portable workspace-local SVG package containing document.svg, rewritten local assets, and a revision manifest. Every package file is published together and existing files are never overwritten.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          outputDirectory: z.string().min(1).max(1024),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        dependencyCount: z.number().int().nonnegative(),
+        documentPath: z.string(),
+        files: z.array(
+          z.object({
+            path: z.string(),
+            revision: z.string().regex(/^[a-f0-9]{64}$/u),
+          }),
+        ),
+        manifestPath: z.string(),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({ expectedRevision, outputDirectory, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const input = await workspace.resolveExisting(workspaceId, path);
+      const output = await workspace.ensureOutputDirectory(
+        workspaceId,
+        outputDirectory,
+      );
+      const assets = await workspace.ensureOutputDirectory(
+        workspaceId,
+        `${output.relativePath}/assets`,
+      );
+      const packaged = await scratch.withDirectory(
+        "staging",
+        async (directory) => {
+          const nativeInput = await createNativeInputBundle(
+            input.absolutePath,
+            expectedRevision,
+            directory,
+            {
+              allowedRoot: input.workspaceRoot,
+              maxDependencyBytes: config.maxInputBytes,
+              maximumSanitizeMode: config.maximumSanitizeMode,
+            },
+          );
+          if (nativeInput.manifest.dependencies.length > 98)
+            throw new Error(
+              "assets_package supports at most 98 local dependencies",
+            );
+          const dependencies = await Promise.all(
+            nativeInput.manifest.dependencies.map(async (dependency) => ({
+              contents: await readFile(join(directory, dependency.path)),
+              path: dependency.path,
+              revision: dependency.revision,
+            })),
+          );
+          const manifest = {
+            dependencies: nativeInput.manifest.dependencies.map(
+              ({ path: dependencyPath, revision, uri }) => ({
+                path: dependencyPath,
+                revision,
+                sourceUri: uri,
+              }),
+            ),
+            document: {
+              path: "document.svg",
+              revision: nativeInput.bundleRevision,
+            },
+            schema: "inkscape-mcp-assets-package/v1",
+            source: { path: input.relativePath, revision: expectedRevision },
+          };
+          const manifestContents = Buffer.from(
+            `${JSON.stringify(manifest, null, 2)}\n`,
+            "utf8",
+          );
+          await nativeInput.assertCurrent();
+          const committed = await fileStore.commitBatch({
+            expectedRevision,
+            files: [
+              {
+                contents: await readFile(nativeInput.path),
+                targetPath: join(output.absolutePath, "document.svg"),
+              },
+              ...dependencies.map((dependency) => ({
+                contents: dependency.contents,
+                targetPath: join(assets.absolutePath, dependency.path.slice(7)),
+              })),
+              {
+                contents: manifestContents,
+                targetPath: join(output.absolutePath, "manifest.json"),
+              },
+            ],
+            sourcePath: input.absolutePath,
+          });
+          const revisions = new Map(
+            committed.files.map((file) => [file.targetPath, file.revision]),
+          );
+          return {
+            dependencies,
+            documentRevision: revisions.get(
+              join(output.absolutePath, "document.svg"),
+            ),
+            manifestRevision: revisions.get(
+              join(output.absolutePath, "manifest.json"),
+            ),
+          };
+        },
+      );
+      if (!packaged.documentRevision || !packaged.manifestRevision)
+        throw new Error("assets_package did not publish its complete package");
+      const result = {
+        dependencyCount: packaged.dependencies.length,
+        documentPath: `${output.relativePath}/document.svg`,
+        files: [
+          { path: "document.svg", revision: packaged.documentRevision },
+          ...packaged.dependencies.map((dependency) => ({
+            path: dependency.path,
+            revision: dependency.revision,
+          })),
+          { path: "manifest.json", revision: packaged.manifestRevision },
+        ],
+        manifestPath: `${output.relativePath}/manifest.json`,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
+
+  server.registerTool(
     "document_create",
     {
       description:

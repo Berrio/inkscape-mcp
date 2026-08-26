@@ -9,6 +9,7 @@ import {
   addSvgPage,
   createSvgDocument,
   createSvgShapes,
+  arrangeSvgShapes,
   deleteSvgShapes,
   transformSvgShapes,
   updateSvgShapes,
@@ -455,6 +456,56 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         backupCreated: committed.backupPath !== undefined,
         ids: updated.ids,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_arrange",
+    {
+      description:
+        "Moves same-parent SVG elements to front, back, one step up, or one step down without accepting arbitrary order indexes.",
+      inputSchema: z.object({
+        action: z.enum(["back", "front", "lower", "raise"]),
+        expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        ids: z.array(shapeIdSchema).min(1).max(100),
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        action: z.enum(["back", "front", "lower", "raise"]),
+        backupCreated: z.boolean(),
+        ids: z.array(shapeIdSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ action, expectedRevision, ids, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const arranged = arrangeSvgShapes(
+        await readFile(document.absolutePath, "utf8"),
+        ids,
+        action,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(arranged.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        action,
+        backupCreated: committed.backupPath !== undefined,
+        ids: arranged.ids,
         revision: committed.revision,
       };
       return {

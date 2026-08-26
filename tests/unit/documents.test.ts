@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addSvgPage,
+  arrangeSvgShapes,
   createSvgDocument,
   createSvgShapes,
   deleteSvgPage,
@@ -308,6 +309,13 @@ describe("basic SVG documents", () => {
     expect(() =>
       updateSvgShapes(created.svg, [{ id: "rect_1", text: "Not text" }]),
     ).toThrow("only update a text element");
+    const arranged = arrangeSvgShapes(created.svg, ["rect_1"], "front");
+    expect(arranged.svg.indexOf('id="polyline_1"')).toBeLessThan(
+      arranged.svg.indexOf('id="rect_1"'),
+    );
+    expect(() =>
+      arrangeSvgShapes(created.svg, ["rect_1", "circle_1"], "raise"),
+    ).toThrow("exactly one ID");
   });
   it("queries typed element summaries by layer, kind, and bounded offset", () => {
     const source = createSvgShapes(

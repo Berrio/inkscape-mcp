@@ -220,9 +220,27 @@ try {
   ) {
     throw new Error("elements_update did not apply typed patches");
   }
+  const arranged = await workspaceClient.callTool({
+    arguments: {
+      action: "front",
+      expectedRevision: updatedRevision,
+      ids: ["demo_rect"],
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_arrange",
+  });
+  const arrangedRevision = arranged.structuredContent?.revision;
+  if (
+    arranged.isError ||
+    arranged.structuredContent?.action !== "front" ||
+    typeof arrangedRevision !== "string"
+  ) {
+    throw new Error("elements_arrange did not apply a typed z-order change");
+  }
   const inspected = await workspaceClient.callTool({
     arguments: {
-      expectedRevision: updatedRevision,
+      expectedRevision: arrangedRevision,
       path: "a4.svg",
       workspaceId: workspace.id,
     },
@@ -251,7 +269,7 @@ try {
   const pageAdded = await workspaceClient.callTool({
     arguments: {
       action: "add",
-      expectedRevision: updatedRevision,
+      expectedRevision: arrangedRevision,
       page: { height: 210, id: "page_back", width: 148, x: 160, y: 0 },
       path: "a4.svg",
       workspaceId: workspace.id,

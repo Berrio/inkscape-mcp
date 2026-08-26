@@ -16,10 +16,12 @@ export {
 } from "./elements.js";
 export {
   createSvgShapes,
+  arrangeSvgShapes,
   deleteSvgShapes,
   transformSvgShapes,
   updateSvgShapes,
   type ElementGeometryPatch,
+  type ElementArrangeAction,
   type ElementTransform,
   type ElementUpdate,
   type ShapeSpec,

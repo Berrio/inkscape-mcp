@@ -79,6 +79,7 @@ export type ElementUpdate = {
   style?: ShapeStyle | undefined;
   text?: string | undefined;
 };
+export type ElementArrangeAction = "back" | "front" | "lower" | "raise";
 type ShapeBase = {
   id?: string | undefined;
   parentId?: string | undefined;
@@ -274,6 +275,59 @@ export function updateSvgShapes(
   }
   return {
     ids: updates.map((update) => update.id),
+    svg: new XMLSerializer().serializeToString(document),
+  };
+}
+
+export function arrangeSvgShapes(
+  source: string,
+  ids: readonly string[],
+  action: ElementArrangeAction,
+): { ids: readonly string[]; svg: string } {
+  if (ids.length < 1 || ids.length > 100)
+    throw new Error("Arrange batch must contain between one and 100 IDs");
+  if (new Set(ids).size !== ids.length)
+    throw new Error("Arrange IDs must be unique");
+  if ((action === "raise" || action === "lower") && ids.length !== 1)
+    throw new Error("Raise and lower require exactly one ID");
+  const document = parseSafeDocument(source);
+  const targets = ids.map((id) => {
+    if (!SAFE_ID.test(id)) throw new Error("Shape ID is invalid");
+    const target = Array.from(document.getElementsByTagName("*")).find(
+      (candidate) => candidate.getAttribute("id") === id,
+    );
+    if (!target) throw new Error("Shape ID does not exist");
+    return target;
+  });
+  const parent = parentElement(targets[0]!);
+  if (!parent || targets.some((target) => parentElement(target) !== parent))
+    throw new Error("Arrange targets must share the same parent");
+  const ordered = childElements(parent).filter((element) =>
+    targets.includes(element),
+  );
+  switch (action) {
+    case "front":
+      for (const target of ordered) parent.appendChild(target);
+      break;
+    case "back":
+      for (const target of ordered.toReversed())
+        parent.insertBefore(target, parent.firstChild);
+      break;
+    case "raise": {
+      const target = targets[0]!;
+      const next = nextElementSibling(target);
+      if (next) parent.insertBefore(target, next.nextSibling);
+      break;
+    }
+    case "lower": {
+      const target = targets[0]!;
+      const previous = previousElementSibling(target);
+      if (previous) parent.insertBefore(target, previous);
+      break;
+    }
+  }
+  return {
+    ids: [...ids],
     svg: new XMLSerializer().serializeToString(document),
   };
 }
@@ -512,6 +566,30 @@ function isLayer(element: XmlElement): boolean {
       "groupmode",
     ) === "layer"
   );
+}
+function childElements(parent: XmlElement): XmlElement[] {
+  const elements: XmlElement[] = [];
+  for (let node = parent.firstChild; node; node = node.nextSibling) {
+    if (node.nodeType === 1) elements.push(node as XmlElement);
+  }
+  return elements;
+}
+function parentElement(element: XmlElement): XmlElement | undefined {
+  return element.parentNode?.nodeType === 1
+    ? (element.parentNode as XmlElement)
+    : undefined;
+}
+function nextElementSibling(element: XmlElement): XmlElement | undefined {
+  for (let node = element.nextSibling; node; node = node.nextSibling) {
+    if (node.nodeType === 1) return node as XmlElement;
+  }
+  return undefined;
+}
+function previousElementSibling(element: XmlElement): XmlElement | undefined {
+  for (let node = element.previousSibling; node; node = node.previousSibling) {
+    if (node.nodeType === 1) return node as XmlElement;
+  }
+  return undefined;
 }
 function setFinite(element: XmlElement, name: string, value: number): void {
   assertFinite(value, name);

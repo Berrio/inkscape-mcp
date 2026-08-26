@@ -197,6 +197,20 @@ try {
   if (dpiPng.isError || (dpiPng.structuredContent?.width ?? 0) < 1) {
     throw new Error("export_png did not accept a bounded DPI request");
   }
+  const solidPng = await workspaceClient.callTool({
+    arguments: {
+      background: "solid",
+      backgroundColor: "#ff0000",
+      expectedRevision: settingsRevision,
+      outputPath: "a4-solid.png",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_png",
+  });
+  if (solidPng.isError || solidPng.structuredContent?.background !== "solid") {
+    throw new Error("export_png did not apply a solid background request");
+  }
   const pdf = await workspaceClient.callTool({
     arguments: {
       expectedRevision: settingsRevision,

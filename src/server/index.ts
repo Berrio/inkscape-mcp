@@ -683,6 +683,14 @@ export function buildServer(config: ServerConfig): McpServer {
       description:
         "Exports an SVG document to PNG through Inkscape using only bounded, allowlisted options.",
       inputSchema: z.object({
+        background: z
+          .enum(["document", "solid", "transparent"])
+          .default("document"),
+        backgroundColor: z
+          .string()
+          .regex(/^#[a-fA-F0-9]{6}$/u)
+          .optional(),
+        backgroundOpacity: z.number().finite().min(0).max(1).optional(),
         expectedOutputRevision: z
           .string()
           .regex(/^[a-f0-9]{64}$/u)
@@ -696,6 +704,7 @@ export function buildServer(config: ServerConfig): McpServer {
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
+        background: z.enum(["document", "solid", "transparent"]),
         dpiX: z.number().positive().optional(),
         dpiY: z.number().positive().optional(),
         height: z.number().int().positive(),
@@ -705,6 +714,9 @@ export function buildServer(config: ServerConfig): McpServer {
       annotations: { destructiveHint: false },
     },
     async ({
+      background,
+      backgroundColor,
+      backgroundOpacity,
       expectedOutputRevision,
       expectedRevision,
       dpi,
@@ -722,6 +734,16 @@ export function buildServer(config: ServerConfig): McpServer {
         throw new Error("export_png requires a .png output path");
       if (dpi !== undefined && (width !== undefined || height !== undefined))
         throw new Error("PNG export accepts DPI or pixel dimensions, not both");
+      if (background === "solid" && backgroundColor === undefined)
+        throw new Error("Solid PNG background requires backgroundColor");
+      if (background !== "solid" && backgroundColor !== undefined)
+        throw new Error(
+          "backgroundColor is only valid with a solid PNG background",
+        );
+      if (background !== "solid" && backgroundOpacity !== undefined)
+        throw new Error(
+          "backgroundOpacity is only valid with a solid PNG background",
+        );
       const discovery = await locateInkscape({
         config,
         cwd: process.cwd(),
@@ -742,12 +764,28 @@ export function buildServer(config: ServerConfig): McpServer {
           expectedRevision,
           directory,
         );
+        const displaySettings = inspectDocumentDisplaySettings(
+          await readFile(input.absolutePath, "utf8"),
+        );
+        const backgroundArguments =
+          background === "transparent"
+            ? ["--export-background-opacity=0"]
+            : background === "solid"
+              ? [
+                  `--export-background=${backgroundColor!}`,
+                  `--export-background-opacity=${backgroundOpacity ?? 1}`,
+                ]
+              : [
+                  `--export-background=${displaySettings.pageColor}`,
+                  `--export-background-opacity=${displaySettings.pageOpacity}`,
+                ];
         const temporaryOutput = join(directory, "export.png");
         const result = await runner.run(candidate.executablePath, {
           args: [
             nativeInput.path,
             "--export-type=png",
             `--export-filename=${temporaryOutput}`,
+            ...backgroundArguments,
             ...(dpi === undefined ? [] : [`--export-dpi=${dpi}`]),
             ...(width === undefined ? [] : [`--export-width=${width}`]),
             ...(height === undefined ? [] : [`--export-height=${height}`]),
@@ -774,7 +812,11 @@ export function buildServer(config: ServerConfig): McpServer {
         sourcePath: input.absolutePath,
         targetPath: output.absolutePath,
       });
-      const result = { ...png.metadata, revision: committed.revision };
+      const result = {
+        ...png.metadata,
+        background,
+        revision: committed.revision,
+      };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
         structuredContent: result,

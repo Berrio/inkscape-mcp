@@ -47,15 +47,15 @@ tools de documentos.
 
 ## Tools MCP actuales
 
-| Tool                                                     | Uso                                                                                                                  |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `inkscape_status`                                        | Estado, capacidades y postura de seguridad.                                                                          |
-| `workspace_list`, `workspace_list_documents`             | Workspaces disponibles y SVG/SVGZ permitidos.                                                                        |
-| `document_create`, `document_inspect`, `document_resize` | Crear y gestionar viewport, unidades, `viewBox`, paginas, anchors, contain/cover/stretch, revision e inventario SVG. |
-| `document_pages`                                         | Listar o mutar paginas explicitas de Inkscape 1.4.                                                                   |
-| `document_settings`                                      | Leer o editar fondo de pagina, escritorio y borde.                                                                   |
-| `document_preflight`                                     | Detectar contenido activo, recursos externos y errores basicos.                                                      |
-| `export_png`, `export_pdf`, `export_svg`                 | Exportar por Inkscape mediante staging y validar el artefacto; PNG acepta DPI y PDF informa paginas y MediaBox.      |
+| Tool                                                     | Uso                                                                                                                   |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `inkscape_status`                                        | Estado, capacidades y postura de seguridad.                                                                           |
+| `workspace_list`, `workspace_list_documents`             | Workspaces disponibles y SVG/SVGZ permitidos.                                                                         |
+| `document_create`, `document_inspect`, `document_resize` | Crear y gestionar viewport, unidades, `viewBox`, paginas, anchors, contain/cover/stretch, revision e inventario SVG.  |
+| `document_pages`                                         | Listar o mutar paginas explicitas de Inkscape 1.4.                                                                    |
+| `document_settings`                                      | Leer o editar fondo de pagina, escritorio y borde.                                                                    |
+| `document_preflight`                                     | Detectar contenido activo, recursos externos y errores basicos.                                                       |
+| `export_png`, `export_pdf`, `export_svg`                 | Exportar por Inkscape mediante staging y validar el artefacto; PNG acepta DPI/fondo y PDF informa paginas y MediaBox. |
 
 Las mutaciones y exportaciones exigen `expectedRevision`. Si un archivo cambia
 entre la lectura y el commit, la operacion falla en lugar de sobrescribir una

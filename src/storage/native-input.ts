@@ -344,7 +344,7 @@ function parseLocalReference(raw: string): LocalReference | undefined {
   };
 }
 function isSafeEmbeddedRasterDataUri(value: string): boolean {
-  return /^data:image\/(?:bmp|gif|jpeg|png|tiff|webp);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
+  return /^data:image\/(?:bmp|gif|jpeg|png|tiff|webp|x-tga);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
     value,
   );
 }

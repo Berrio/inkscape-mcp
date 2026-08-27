@@ -1876,7 +1876,7 @@ export function buildServer(
     "document_import_raster",
     {
       description:
-        "Imports one workspace-local uncompressed BMP/TIFF, PNG, JPEG, GIF, or WebP as a new SVG document with a byte-sniffed, megapixel-bounded raster wrapper and conversion manifest. It can embed the approved bytes or retain one workspace-local relative link; it never fetches a URL.",
+        "Imports one workspace-local uncompressed BMP/TIFF/TGA, PNG, JPEG, GIF, or WebP as a new SVG document with a byte-sniffed, megapixel-bounded raster wrapper and conversion manifest. It can embed the approved bytes or retain one workspace-local relative link; it never fetches a URL.",
       inputSchema: z
         .object({
           embedding: z.enum(["embed", "link"]).default("embed"),
@@ -1900,6 +1900,7 @@ export function buildServer(
             "image/png",
             "image/tiff",
             "image/webp",
+            "image/x-tga",
           ]),
           outputPath: z.string(),
           outputSha256: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -9049,6 +9050,7 @@ function matchesRasterExtension(path: string, mime: string): boolean {
     (mime === "image/bmp" && extension === "bmp") ||
     (mime === "image/png" && extension === "png") ||
     (mime === "image/tiff" && (extension === "tif" || extension === "tiff")) ||
+    (mime === "image/x-tga" && extension === "tga") ||
     (mime === "image/jpeg" && (extension === "jpg" || extension === "jpeg")) ||
     (mime === "image/gif" && extension === "gif") ||
     (mime === "image/webp" && extension === "webp")

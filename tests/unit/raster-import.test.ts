@@ -78,6 +78,15 @@ function tiff(width: number, height: number): Buffer {
   return bytes;
 }
 
+function tga(width: number, height: number): Buffer {
+  const bytes = Buffer.alloc(18 + width * height * 3);
+  bytes[2] = 2;
+  bytes.writeUInt16LE(width, 12);
+  bytes.writeUInt16LE(height, 14);
+  bytes[16] = 24;
+  return bytes;
+}
+
 describe("raster import", () => {
   it("sniffs and bounds PNG dimensions without trusting the filename", () => {
     const bytes = png(3, 2);
@@ -92,9 +101,10 @@ describe("raster import", () => {
     );
   });
 
-  it("recognizes BMP, TIFF, JPEG, GIF and WebP intrinsic dimensions", () => {
+  it("recognizes BMP, TIFF, TGA, JPEG, GIF and WebP intrinsic dimensions", () => {
     const bitmap = bmp(3, 2);
     const tagged = tiff(3, 2);
+    const targa = tga(3, 2);
     const jpeg = Buffer.from([
       0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x05, 0x00, 0x04, 0x01,
       0x11, 0x00, 0x00,
@@ -114,6 +124,11 @@ describe("raster import", () => {
     expect(inspectRasterImport(tagged, 1)).toMatchObject({
       height: 2,
       mime: "image/tiff",
+      width: 3,
+    });
+    expect(inspectRasterImport(targa, 1)).toMatchObject({
+      height: 2,
+      mime: "image/x-tga",
       width: 3,
     });
     expect(inspectRasterImport(jpeg, 1)).toMatchObject({
@@ -136,6 +151,9 @@ describe("raster import", () => {
     const compressedTiff = tiff(1, 1);
     compressedTiff.writeUInt16LE(5, 10 + 3 * 12 + 8);
     expect(() => inspectRasterImport(compressedTiff, 1)).toThrow("compression");
+    expect(() => inspectRasterImport(tga(1, 1).subarray(0, 18), 1)).toThrow(
+      "pixel data",
+    );
   });
 
   it("produces a self-contained XML-safe SVG wrapper", () => {

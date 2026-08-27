@@ -5,6 +5,7 @@ export type RasterImportMetadata = {
     | "image/gif"
     | "image/jpeg"
     | "image/png"
+    | "image/x-tga"
     | "image/tiff"
     | "image/webp";
   width: number;
@@ -72,6 +73,12 @@ export function sniffRasterMime(
         bytes[3] === 0x2a))
   )
     return "image/tiff";
+  if (
+    bytes.length >= 18 &&
+    bytes[1] === 0 &&
+    (bytes[2] === 2 || bytes[2] === 3)
+  )
+    return "image/x-tga";
   throw new Error("Image asset is not a supported raster format");
 }
 
@@ -94,7 +101,9 @@ export function inspectRasterImport(
             ? gifDimensions(bytes)
             : mime === "image/tiff"
               ? tiffDimensions(bytes)
-              : webpDimensions(bytes);
+              : mime === "image/x-tga"
+                ? tgaDimensions(bytes)
+                : webpDimensions(bytes);
   if (dimensions.width < 1 || dimensions.height < 1)
     throw new Error("Raster image has invalid intrinsic dimensions");
   if (dimensions.width * dimensions.height > maximumMegapixels * 1_000_000)
@@ -188,6 +197,28 @@ function tiffDimensions(bytes: Uint8Array): { height: number; width: number } {
     stripOffset > bytes.length - stripByteCount
   )
     throw new Error("TIFF image is missing strip data");
+  return { height, width };
+}
+
+function tgaDimensions(bytes: Uint8Array): { height: number; width: number } {
+  if (bytes.length < 18) throw new Error("TGA image header is truncated");
+  const imageType = bytes[2]!;
+  const width = readUInt16LE(bytes, 12);
+  const height = readUInt16LE(bytes, 14);
+  const bitsPerPixel = bytes[16]!;
+  const idLength = bytes[0]!;
+  const permitted =
+    (imageType === 2 && (bitsPerPixel === 24 || bitsPerPixel === 32)) ||
+    (imageType === 3 && bitsPerPixel === 8);
+  if (!permitted) throw new Error("TGA image has an unsupported pixel format");
+  const pixelBytes = bitsPerPixel / 8;
+  const pixelOffset = 18 + idLength;
+  if (
+    width < 1 ||
+    height < 1 ||
+    pixelOffset > bytes.length - width * height * pixelBytes
+  )
+    throw new Error("TGA image is missing pixel data or dimensions");
   return { height, width };
 }
 

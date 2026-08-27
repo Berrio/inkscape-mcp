@@ -1242,6 +1242,51 @@ try {
     throw new Error(
       "document_import_raster did not render a byte-sniffed TIFF document",
     );
+  const importedTgaBytes = Buffer.alloc(21);
+  importedTgaBytes[2] = 2;
+  importedTgaBytes.writeUInt16LE(1, 12);
+  importedTgaBytes.writeUInt16LE(1, 14);
+  importedTgaBytes[16] = 24;
+  await writeFile(
+    join(workspaceRoot, "raster-import-tga.bin"),
+    importedTgaBytes,
+  );
+  const importedTga = await workspaceClient.callTool({
+    arguments: {
+      embedding: "embed",
+      expectedRevision: createHash("sha256")
+        .update(importedTgaBytes)
+        .digest("hex"),
+      manifestPath: "raster-import-tga.svg.import.json",
+      outputPath: "raster-import-tga.svg",
+      path: "raster-import-tga.bin",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_raster",
+  });
+  const tgaRevision = importedTga.structuredContent?.revision;
+  if (
+    importedTga.isError ||
+    importedTga.structuredContent?.manifest?.mime !== "image/x-tga" ||
+    typeof tgaRevision !== "string"
+  )
+    throw new Error(
+      "document_import_raster did not import a byte-sniffed TGA document",
+    );
+  const tgaPreview = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: tgaRevision,
+      outputPath: "raster-import-tga-preview.png",
+      path: "raster-import-tga.svg",
+      width: 16,
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  if (tgaPreview.isError)
+    throw new Error(
+      "document_import_raster did not render a byte-sniffed TGA document",
+    );
   await writeFile(
     join(workspaceRoot, "normalize-ids.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="legacy:gradient"/></defs><style>#legacy\\:gradient { fill: url(#legacy:gradient); }</style><rect id="duplicate" fill="url(#legacy:gradient)"/><use href="#legacy:gradient"/><circle id="duplicate"/><path/></svg>',

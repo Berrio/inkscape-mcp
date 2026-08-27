@@ -14,6 +14,7 @@ const IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/tiff",
+  "image/x-tga",
   "image/webp",
 ]);
 
@@ -73,7 +74,7 @@ export function parseEmbeddedRasterDataUri(
 
 function isSafeImageHref(href: string): boolean {
   return (
-    /^data:image\/(?:bmp|gif|jpeg|png|tiff|webp);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
+    /^data:image\/(?:bmp|gif|jpeg|png|tiff|webp|x-tga);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
       href,
     ) ||
     (/^(?!\/|\\|[A-Za-z]:|\/\/)[A-Za-z0-9._~!$&'()*+,;=@%/\\-]+$/u.test(href) &&

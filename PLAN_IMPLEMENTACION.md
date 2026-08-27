@@ -38,6 +38,25 @@ Reglas de ejecución:
 - No sobrescribir un diseño por defecto. Toda mutación debe soportar revisión, copia de seguridad o escritura a un archivo nuevo.
 - Detener la fase si falla su puerta de salida. Corregirla antes de continuar.
 
+### 0.1 Cola de continuidad priorizada
+
+Esta cola sustituye el orden numérico de fases **para el trabajo restante**. Su objetivo es que, si se agota el presupuesto de tokens en cualquier corte, el servidor ya publicado siga siendo útil, seguro y verificable. Cada bloque se termina con `npm run check`, smoke MCP real y commit/push antes de iniciar el siguiente.
+
+| Prioridad | Funcionalidades nuevas, en este orden                                                                                                                                      | Corte utilizable al terminar                                                                        |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| P0        | Mantener la regresión verde; cerrar `F07-T20` (text-on-path complejo) y `F07-T25–T27` (imagen local linked, embed, relink y extract restringidos al workspace).            | Composiciones reales con texto, tipografía y fotos se editan/exportan sin rutas externas inseguras. |
+| P0        | `F07-T29` DPI efectivo, `F07-T31` diagnóstico de recursos remotos y `F07-T35` heurísticas de contraste/orden.                                                              | El usuario puede detectar imágenes insuficientes y riesgos de entrega antes de exportar.            |
+| P1        | `F07-T11` reutilización de gradients; `T32–T33` símbolos/clones y guías/grids; completar seguridad de refs de texto/defs.                                                  | Diseño vectorial reutilizable y diagramación cotidiana sin depender de XML manual.                  |
+| P1        | `F08-T01–T10`: importación práctica (SVGZ, raster y PDF) con manifests, límites y capability gates.                                                                        | El MCP incorpora materiales habituales de diseño de forma segura.                                   |
+| P1        | `F08-T18–T24`: presets versionados web, print e iconos con `dryRun`/token de ejecución.                                                                                    | Flujos repetibles de entrega PNG/PDF/SVG sin reescribir parámetros.                                 |
+| P1        | Cerrar las puertas críticas ya implementadas de F01–F07: carreras de rutas, crash/cancel cleanup, fixtures visuales de paths/export, package smoke y documentación de uso. | El release Windows/stdio es reproducible y no depende de memoria del operador.                      |
+| P2        | Paths avanzados `F07-T01–T10,T36–T40`: nodos, booleanas ampliadas, LPE, mesh, conectores y paletas.                                                                        | Cobertura profesional avanzada; no bloquea el uso normal del MCP.                                   |
+| P2        | Formatos/extensiones no centrales `F08-T11–T17,T31–T34`: PS/EPS/EMF/WMF/XAML, optimizadores y adapters.                                                                    | Compatibilidad ampliada únicamente donde la capability real lo permita.                             |
+| P2        | `F09` completo: prompts, recursos, progreso, catálogo/snapshots y endurecimiento de jobs; conservar las APIs ya funcionales durante la migración.                          | Experiencia MCP más rica para clientes sofisticados.                                                |
+| P3        | `F10` HTTP, matriz macOS/Linux/1.5; `F12` GUI bridge, shell persistente, sandbox y CMYK/PDF-X.                                                                             | Extensiones opcionales; no deben retrasar el release Windows/stdio.                                 |
+
+Regla de corte: si sólo queda tiempo para una tarea, elegir siempre la primera pendiente de P0 y **no** iniciar una capacidad P1–P3. No mezclar en un mismo commit una capacidad nueva con refactors no relacionados.
+
 ### Convenciones de estado
 
 - `[ ]`: pendiente.

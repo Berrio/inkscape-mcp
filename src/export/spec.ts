@@ -120,7 +120,14 @@ const sourceSchema = z
   .strict();
 export const exportPresetSchema = z
   .object({
-    name: z.enum(["print-a4-pdf", "web-png", "plain-svg", "icon-pack"]),
+    name: z.enum([
+      "print-a4-pdf",
+      "print-pdf-300dpi",
+      "web-png",
+      "web-asset-pack",
+      "plain-svg",
+      "icon-pack",
+    ]),
     outputDirectory: relativePathSchema,
     source: sourceSchema,
   })

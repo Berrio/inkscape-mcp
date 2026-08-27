@@ -30,6 +30,18 @@ export function expandExportPreset(
           text: "preserve",
         },
       ];
+    case "print-pdf-300dpi":
+      return [
+        {
+          area: { kind: "document" },
+          filterRasterDpi: 300,
+          filters: "preserve",
+          format: "pdf",
+          source,
+          target: target("print-300dpi.pdf"),
+          text: "preserve",
+        },
+      ];
     case "web-png":
       return [
         {
@@ -40,6 +52,25 @@ export function expandExportPreset(
           source,
           target: target("web-1200.png"),
         },
+      ];
+    case "web-asset-pack":
+      return [
+        {
+          area: { kind: "document" },
+          format: "plain-svg",
+          resourcePolicy: "preserve-local",
+          source,
+          target: target("web.svg"),
+          text: "preserve",
+        },
+        ...[1, 2, 3].map((scale) => ({
+          area: { kind: "drawing" as const },
+          background: { mode: "transparent" as const },
+          format: "png" as const,
+          size: { mode: "width" as const, widthPx: 1200 * scale },
+          source,
+          target: target(`web-${scale}x.png`),
+        })),
       ];
     case "plain-svg":
       return [

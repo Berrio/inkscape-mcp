@@ -2638,6 +2638,30 @@ try {
   ) {
     throw new Error("document_export_batch did not expand the web PNG preset");
   }
+  const webAssetPresetBatch = await workspaceClient.callTool({
+    arguments: {
+      mode: "all_or_nothing",
+      preset: {
+        name: "web-asset-pack",
+        outputDirectory: "preset-web-assets",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export_batch",
+  });
+  if (
+    webAssetPresetBatch.isError ||
+    webAssetPresetBatch.structuredContent?.successes?.length !== 4 ||
+    webAssetPresetBatch.structuredContent.successes?.[0]?.outputPath !==
+      "preset-web-assets/web.svg" ||
+    webAssetPresetBatch.structuredContent.successes?.[3]?.outputPath !==
+      "preset-web-assets/web-3x.png"
+  ) {
+    throw new Error(
+      "document_export_batch did not expand the web asset deliverable",
+    );
+  }
   const rejectedAtomicBatch = await workspaceClient.callTool({
     arguments: {
       mode: "all_or_nothing",

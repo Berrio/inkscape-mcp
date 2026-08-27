@@ -15,7 +15,9 @@ describe("export presets", () => {
   it("expands every public preset into collision-free ordinary specs", () => {
     for (const name of [
       "print-a4-pdf",
+      "print-pdf-300dpi",
       "web-png",
+      "web-asset-pack",
       "plain-svg",
       "icon-pack",
     ] as const) {
@@ -25,7 +27,9 @@ describe("export presets", () => {
         source,
       });
       const specs = expandExportPreset(preset);
-      expect(specs.length).toBe(name === "icon-pack" ? 8 : 1);
+      expect(specs.length).toBe(
+        name === "icon-pack" ? 8 : name === "web-asset-pack" ? 4 : 1,
+      );
       expect(planExportBatch(specs)).toHaveLength(specs.length);
       expect(specs.every((spec) => spec.source.path === source.path)).toBe(
         true,

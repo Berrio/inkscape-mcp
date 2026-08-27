@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createSvgConnector,
+  retargetSvgConnector,
   addSvgPage,
   adjustPageMarginsSvg,
   expandPdfMarginsSvg,
@@ -57,6 +58,20 @@ describe("basic SVG documents", () => {
     expect(result).toContain('id="connector"');
     expect(result).toContain('inkscape:connection-start="#from"');
     expect(result).toContain('inkscape:connection-end="#to"');
+  });
+  it("retargets a semantic connector without changing its route", () => {
+    const result = retargetSvgConnector(
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><rect id="from"/><rect id="to"/><rect id="next"/><path id="connector" d="M 0 0 L 5 2 L 10 0" inkscape:connector-type="polyline" inkscape:connection-start="#from" inkscape:connection-end="#to"/></svg>',
+      "connector",
+      "next",
+      "to",
+    );
+    expect(result).toContain('inkscape:connection-start="#next"');
+    expect(result).toContain('inkscape:connection-end="#to"');
+    expect(result).toContain('d="M 0 0 L 5 2 L 10 0"');
+    expect(() =>
+      retargetSvgConnector(result, "connector", "next", "missing"),
+    ).toThrow("endpoint ID");
   });
   it("provides immutable, versioned named page sizes", () => {
     const a4 = pageSizeFromPreset("a4-portrait");

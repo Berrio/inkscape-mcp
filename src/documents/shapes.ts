@@ -263,6 +263,41 @@ export function createSvgConnector(
   root.appendChild(path);
   return new XMLSerializer().serializeToString(document);
 }
+
+/** Retargets an existing semantic connector while preserving its routed polyline. */
+export function retargetSvgConnector(
+  source: string,
+  id: string,
+  fromId: string,
+  toId: string,
+): string {
+  if (
+    !SAFE_ID.test(id) ||
+    !SAFE_ID.test(fromId) ||
+    !SAFE_ID.test(toId) ||
+    fromId === toId
+  )
+    throw new Error("Connector retarget specification is invalid");
+  const document = parseSafeDocument(source);
+  const elements = Array.from(document.getElementsByTagName("*"));
+  const connector = elements.find(
+    (element) => element.getAttribute("id") === id,
+  );
+  if (
+    !connector ||
+    connector.localName !== "path" ||
+    connector.getAttribute("inkscape:connector-type") === null
+  )
+    throw new Error("Connector ID does not reference a semantic connector");
+  if (
+    !elements.some((element) => element.getAttribute("id") === fromId) ||
+    !elements.some((element) => element.getAttribute("id") === toId)
+  )
+    throw new Error("Connector endpoint ID does not exist");
+  connector.setAttribute("inkscape:connection-start", `#${fromId}`);
+  connector.setAttribute("inkscape:connection-end", `#${toId}`);
+  return new XMLSerializer().serializeToString(document);
+}
 const SAFE_CLASS = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/u;
 
 export function createSvgShapes(

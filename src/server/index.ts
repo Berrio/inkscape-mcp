@@ -34,6 +34,7 @@ import {
   editSvgPathNode,
   createSvgShapes,
   createSvgConnector,
+  retargetSvgConnector,
   attachSvgTextToPath,
   detachSvgTextFromPath,
   updateSvgDocumentMetadata,
@@ -2689,6 +2690,58 @@ export function buildServer(
       const output = {
         backupCreated: committed.backupPath !== undefined,
         ids: created.ids,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "connector_retarget",
+    {
+      description:
+        "Retargets an existing semantic Inkscape connector to two explicit local endpoints while preserving its current polyline route.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          fromId: shapeIdSchema,
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          toId: shapeIdSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        id: shapeIdSchema,
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, fromId, id, path, toId, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const changed = retargetSvgConnector(
+        await readFile(document.absolutePath, "utf8"),
+        id,
+        fromId,
+        toId,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        id,
         revision: committed.revision,
       };
       return {

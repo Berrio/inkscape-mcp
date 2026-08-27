@@ -2061,7 +2061,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [x] `F11-T03` Stress de archivos grandes, pages, objetos, DPI, lotes y concurrencia. — `tests/unit/stress-limits.test.ts` cubre 10.000 objetos SVG, 128 páginas, DPI 0.1/10.000, 50 variantes y 64 escritores contendiendo el mismo lock canónico.
 - [x] `F11-T04` Crash/cancel/kill tests y escaneo de temporales/procesos huérfanos. — El runner prueba timeout, abort y árbol padre/nieto en Windows; `recoverStaleScratch` barre sólo temporales propios vencidos al arrancar. Los procesos desacoplados deliberadamente siguen siendo un riesgo residual documentado hasta contar con Job Object/helper nativo.
 - [x] `F11-T05` Revisar dependencias, advisories, licencias y SBOM. — Auditoría npm sin vulnerabilidades, revisión de licencias runtime y generación local de SPDX 2.3 documentadas en `docs/dependency-audit.md`; el SBOM versionado de release se genera en F11-T22.
-- [ ] `F11-T06` Revisión manual del threat model y de todo uso de filesystem/process/XML.
+- [x] `F11-T06` Revisión manual del threat model y de todo uso de filesystem/process/XML. — `docs/security-surface-audit.md` registra la revisión y riesgos residuales; se corrigió `rewriteStagedAssetReferences` para sanitizar y rechazar SVG activo/remoto antes de parsearlo.
 - [ ] `F11-T07` Auditoría de logs para secretos/rutas/contenido.
 
 #### Documentación

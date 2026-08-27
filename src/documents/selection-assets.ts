@@ -1,5 +1,7 @@
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 
+import { sanitizeSvg } from "../svg/index.js";
+
 const DIRECT_REFERENCE_ATTRIBUTES = new Set(["href", "src", "xlink:href"]);
 const CSS_URL = /url\(\s*(['"]?)([^'"\s)]+)\1\s*\)/giu;
 const CSS_IMPORT = /@import\s+(['"])([^'"]+)\1/giu;
@@ -9,8 +11,18 @@ export function rewriteStagedAssetReferences(
   source: string,
   replacements: ReadonlyMap<string, string>,
 ): string {
-  if (replacements.size === 0) return source;
-  const document = new DOMParser().parseFromString(source, "image/svg+xml");
+  const sanitized = sanitizeSvg(source, {
+    maxElements: 100_000,
+    maxInputBytes: 50 * 1024 * 1024,
+    mode: "preserve-local",
+  });
+  if (sanitized.removed.length > 0)
+    throw new Error("SVG must be sanitized before publishing staged assets");
+  if (replacements.size === 0) return sanitized.svg;
+  const document = new DOMParser().parseFromString(
+    sanitized.svg,
+    "image/svg+xml",
+  );
   for (const element of Array.from(document.getElementsByTagName("*"))) {
     for (let index = 0; index < element.attributes.length; index += 1) {
       const attribute = element.attributes.item(index);

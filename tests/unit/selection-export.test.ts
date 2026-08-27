@@ -71,4 +71,13 @@ describe("selection asset publication", () => {
     expect(result).toContain("export.svg.assets/0001-font.css");
     expect(result).toContain("<text>assets/0000-image.png</text>");
   });
+
+  it("rejects active or remote SVG before parsing it for publication", () => {
+    expect(() =>
+      rewriteStagedAssetReferences(
+        '<svg><script>run()</script><image href="https://evil.invalid/x.png"/></svg>',
+        new Map([["assets/a.png", "export.svg.assets/a.png"]]),
+      ),
+    ).toThrow("sanitized before publishing");
+  });
 });

@@ -1979,7 +1979,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [ ] `F09-T13` Emitir progreso monotónico y rate-limited por etapas.
 - [ ] `F09-T14` Propagar `AbortSignal` a servicios y subprocesso.
 - [ ] `F09-T15` Implementar jobs explícitos para lotes largos con TTL y ownership.
-- [ ] `F09-T16` Implementar `job_get` y `job_cancel` idempotente.
+- [x] `F09-T16` Implementar `job_get` y `job_cancel` idempotente. — Jobs owner-bound devuelven el mismo snapshot terminal ante cancelación repetida; el smoke MCP real cancela un PNG en curso, verifica que no publica output y repite la cancelación.
 - [ ] `F09-T17` Limpiar outputs parciales y no publicar recursos de jobs cancelados.
 
 #### Compatibilidad y test MCP

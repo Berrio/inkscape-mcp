@@ -2960,6 +2960,16 @@ try {
     .catch(() => false);
   if (completedCancellation === undefined || cancelOutputExists)
     throw new Error("cancelled export job published a partial output");
+  const repeatedCancellation = await workspaceClient.callTool({
+    arguments: { jobId, workspaceId: workspace.id },
+    name: "job_cancel",
+  });
+  if (
+    repeatedCancellation.isError ||
+    repeatedCancellation.structuredContent?.status !== "cancelled"
+  ) {
+    throw new Error("job_cancel is not idempotent after cancellation");
+  }
   const bestEffortBatch = await workspaceClient.callTool({
     arguments: {
       mode: "best_effort",

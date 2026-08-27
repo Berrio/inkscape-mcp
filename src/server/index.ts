@@ -5365,7 +5365,7 @@ export function buildServer(
     "path_node_move",
     {
       description:
-        "Moves one explicit absolute moveto, line, horizontal, vertical, quadratic, cubic, smooth, or arc endpoint by zero-based segment index without accepting raw SVG path data.",
+        "Moves one path endpoint by zero-based segment index without accepting raw SVG path data; relative commands are normalized to equivalent absolute SVG.",
       inputSchema: z
         .object({
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),

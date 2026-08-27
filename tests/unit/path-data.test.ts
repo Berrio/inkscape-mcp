@@ -57,9 +57,9 @@ describe("SVG path AST", () => {
     expect(
       moveAbsoluteSvgPathNode("M 0 0 L 4 2 T 8 1", 1, { x: 5, y: 3 }),
     ).toBe("M 0 0 L 5 3 T 8 1");
-    expect(() =>
-      moveAbsoluteSvgPathNode("M 0 0 l 4 2", 1, { x: 5, y: 3 }),
-    ).toThrow("currently supports");
+    expect(moveAbsoluteSvgPathNode("m 1 2 l 4 2", 1, { x: 7, y: 6 })).toBe(
+      "M 1 2 L 7 6",
+    );
     expect(
       moveAbsoluteSvgPathNode("M 0 0 C 1 2 3 4 5 6 A 2 3 0 0 1 8 9", 1, {
         x: 7,
@@ -114,6 +114,13 @@ describe("SVG path AST", () => {
         index: 1,
       }),
     ).toBe("M 0 0 Q 2 3 3 4 C 5 6 7 8 9 10");
+    expect(
+      editAbsoluteLinearSvgPathNode("m 1 2 q 2 3 4 5", {
+        action: "set_quadratic_handle",
+        control: { x: 7, y: 8 },
+        index: 1,
+      }),
+    ).toBe("M 1 2 Q 7 8 5 7");
     expect(
       editAbsoluteLinearSvgPathNode("M 0 0 C 1 2 3 4 5 6", {
         action: "set_cubic_handles",

@@ -157,7 +157,7 @@ export function moveAbsoluteSvgPathNode(
     throw new Error("Path node index is invalid");
   if (!Number.isFinite(point.x) || !Number.isFinite(point.y))
     throw new Error("Path node coordinates must be finite");
-  const segments = parseSvgPathData(value);
+  const segments = absolutizeSvgPathSegments(parseSvgPathData(value));
   const segment = segments[index];
   if (!segment) throw new Error("Path node index does not exist");
   const endpointOffset = absoluteEndpointOffset(segment.command);
@@ -209,7 +209,7 @@ export function editAbsoluteLinearSvgPathNode(
       }
     | { action: "set_command"; command: "L" | "T"; index: number },
 ): string {
-  const segments = parseSvgPathData(value);
+  const segments = absolutizeSvgPathSegments(parseSvgPathData(value));
   if (!Number.isInteger(request.index) || request.index < 0)
     throw new Error("Path node index is invalid");
   if (request.action === "insert") {
@@ -330,6 +330,98 @@ function absoluteEndpointOffset(
     default:
       return undefined;
   }
+}
+
+function absolutizeSvgPathSegments(
+  segments: readonly SvgPathSegment[],
+): SvgPathSegment[] {
+  let current = { x: 0, y: 0 };
+  let start = current;
+  return segments.map((segment) => {
+    const values = segment.values;
+    const relative = segment.command === segment.command.toLowerCase();
+    const point = (offset: number) =>
+      relative
+        ? { x: current.x + values[offset]!, y: current.y + values[offset + 1]! }
+        : { x: values[offset]!, y: values[offset + 1]! };
+    switch (segment.command.toUpperCase()) {
+      case "M": {
+        current = point(0);
+        start = current;
+        return { command: "M", values: [current.x, current.y] };
+      }
+      case "L":
+      case "T": {
+        current = point(0);
+        return {
+          command: segment.command.toUpperCase() as "L" | "T",
+          values: [current.x, current.y],
+        };
+      }
+      case "H": {
+        const x = relative ? current.x + values[0]! : values[0]!;
+        current = { x, y: current.y };
+        return { command: "H", values: [x] };
+      }
+      case "V": {
+        const y = relative ? current.y + values[0]! : values[0]!;
+        current = { x: current.x, y };
+        return { command: "V", values: [y] };
+      }
+      case "C": {
+        const control1 = point(0);
+        const control2 = point(2);
+        current = point(4);
+        return {
+          command: "C",
+          values: [
+            control1.x,
+            control1.y,
+            control2.x,
+            control2.y,
+            current.x,
+            current.y,
+          ],
+        };
+      }
+      case "S": {
+        const control = point(0);
+        current = point(2);
+        return {
+          command: "S",
+          values: [control.x, control.y, current.x, current.y],
+        };
+      }
+      case "Q": {
+        const control = point(0);
+        current = point(2);
+        return {
+          command: "Q",
+          values: [control.x, control.y, current.x, current.y],
+        };
+      }
+      case "A": {
+        current = point(5);
+        return {
+          command: "A",
+          values: [
+            values[0]!,
+            values[1]!,
+            values[2]!,
+            values[3]!,
+            values[4]!,
+            current.x,
+            current.y,
+          ],
+        };
+      }
+      case "Z":
+        current = start;
+        return { command: "Z", values: [] };
+      default:
+        throw new Error("Path command is unsupported");
+    }
+  });
 }
 
 function locateSubpath(

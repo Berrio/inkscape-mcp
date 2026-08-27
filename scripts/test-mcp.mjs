@@ -181,6 +181,50 @@ try {
   )
     throw new Error("paths_boolean did not run Inkscape path union");
   await writeFile(
+    join(workspaceRoot, "path-effects.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><defs><inkscape:path-effect id="round" effect="fillet_chamfer"/><inkscape:path-effect id="bend" effect="bend_path"/></defs><path id="lpe_path" d="M 0 0 L 10 0" inkscape:path-effect="#round;#bend"/></svg>',
+  );
+  const effectsRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "path-effects.svg")))
+    .digest("hex");
+  const detachedEffect = await workspaceClient.callTool({
+    arguments: {
+      action: "detach",
+      effectId: "round",
+      expectedRevision: effectsRevision,
+      path: "path-effects.svg",
+      pathIds: ["lpe_path"],
+      workspaceId: workspace.id,
+    },
+    name: "path_effects_manage",
+  });
+  const detachedEffectsRevision = detachedEffect.structuredContent?.revision;
+  if (
+    detachedEffect.isError ||
+    detachedEffect.structuredContent?.changedPathIds?.[0] !== "lpe_path" ||
+    typeof detachedEffectsRevision !== "string"
+  )
+    throw new Error("path_effects_manage did not detach a local path");
+  const deletedEffect = await workspaceClient.callTool({
+    arguments: {
+      action: "delete",
+      effectId: "round",
+      expectedRevision: detachedEffectsRevision,
+      path: "path-effects.svg",
+      workspaceId: workspace.id,
+    },
+    name: "path_effects_manage",
+  });
+  if (
+    deletedEffect.isError ||
+    (await readFile(join(workspaceRoot, "path-effects.svg"), "utf8")).includes(
+      'id="round"',
+    )
+  )
+    throw new Error(
+      "path_effects_manage did not delete an unused local effect",
+    );
+  await writeFile(
     join(workspaceRoot, "symbols.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><rect id="badge" width="10" height="5"/></svg>',
   );

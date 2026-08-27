@@ -88,6 +88,7 @@ exportación: inspección → `document_export_preset_plan` →
 | `path_node_move`       | Path, índice de segmento y punto finito tipado.                             | Mover un endpoint sin enviar `d` libre.                  |
 | `path_node_edit`       | Nodos lineales, open/close, handles Q/C/A y expansión smooth tipada.        | Ajustar una geometría sin enviar `d` libre.              |
 | `path_effects_inspect` | Efectos LPE locales y paths que los referencian.                            | Auditar efectos sin editar sus parámetros.               |
+| `path_effects_manage`  | Desadjuntar paths o borrar LPE local sin referencias.                       | Retirar una asociación LPE sin editar sus parámetros.    |
 | `flowed_text_inspect`  | Flow roots y número de párrafos.                                            | Localizar texto heredado de Inkscape.                    |
 | `flowed_text_convert`  | Flow simple de una región y confirmación de pérdida.                        | Recuperar texto SVG editable con warning.                |
 

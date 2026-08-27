@@ -63,6 +63,7 @@ import {
   inspectSvgPalette,
   applySvgPalette,
   inspectSvgPathEffects,
+  manageSvgPathEffect,
   inspectSvgAccessibility,
   inspectSvgColorManagement,
   inspectSvgFlowedText,
@@ -4801,6 +4802,83 @@ export function buildServer(
       const output = inspectSvgPathEffects(
         await readFile(document.absolutePath, "utf8"),
       );
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "path_effects_manage",
+    {
+      description:
+        "Detaches explicit local paths from an Inkscape Live Path Effect or deletes an already unreferenced local effect. It never edits effect parameters or invokes GUI-dependent LPE rendering.",
+      inputSchema: z
+        .object({
+          action: z.enum(["delete", "detach"]),
+          effectId: shapeIdSchema,
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          pathIds: z.array(shapeIdSchema).min(1).max(100).optional(),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict()
+        .superRefine((value, context) => {
+          if (value.action === "detach" && value.pathIds === undefined)
+            context.addIssue({
+              code: "custom",
+              message: "pathIds is required when detaching a path effect",
+              path: ["pathIds"],
+            });
+          if (value.action === "delete" && value.pathIds !== undefined)
+            context.addIssue({
+              code: "custom",
+              message: "pathIds is only valid when detaching a path effect",
+              path: ["pathIds"],
+            });
+        }),
+      outputSchema: z.object({
+        action: z.enum(["delete", "detach"]),
+        backupCreated: z.boolean(),
+        changedPathIds: z.array(shapeIdSchema),
+        effectId: shapeIdSchema,
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({
+      action,
+      effectId,
+      expectedRevision,
+      path,
+      pathIds,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const changed = manageSvgPathEffect(
+        await readFile(document.absolutePath, "utf8"),
+        action === "delete"
+          ? { action, effectId }
+          : { action, effectId, pathIds: pathIds! },
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        action,
+        backupCreated: committed.backupPath !== undefined,
+        changedPathIds: changed.changedPathIds,
+        effectId,
+        revision: committed.revision,
+      };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

@@ -96,7 +96,7 @@ export {
   type FlowedTextInspection,
 } from "./flowed-text.js";
 export { applySvgPalette, inspectSvgPalette } from "./palette.js";
-export { inspectSvgPathEffects } from "./path-effects.js";
+export { inspectSvgPathEffects, manageSvgPathEffect } from "./path-effects.js";
 export {
   updateSvgText,
   type SvgTextLayout,

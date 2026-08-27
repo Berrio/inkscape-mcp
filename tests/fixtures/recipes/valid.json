@@ -1,0 +1,18 @@
+{
+  "schema": "inkscape-mcp-recipe/v1",
+  "source": "labels.svg",
+  "workspaceIndex": 0,
+  "operations": [
+    { "kind": "inspect" },
+    {
+      "kind": "preflight",
+      "preset": "plain-svg",
+      "outputDirectory": "planned"
+    },
+    {
+      "kind": "export",
+      "preset": "web-png",
+      "outputDirectory": "exports"
+    }
+  ]
+}

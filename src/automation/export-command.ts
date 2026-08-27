@@ -63,6 +63,12 @@ export type AutonomousExportResult =
       successes: readonly unknown[];
     };
 
+export type AutonomousMcpSession = {
+  client: Client;
+  workspaceId: string;
+};
+export type AutonomousPresetPlan = z.output<typeof presetPlanSchema>;
+
 /** Parses only the autonomous-export flags, preserving normal server config flags. */
 export function parseAutonomousExportArguments(
   argumentsList: readonly string[],
@@ -136,15 +142,12 @@ function parseSafeRelativePath(value: string): string {
   return value;
 }
 
-/**
- * Runs one named export through a private stdio MCP child.  It intentionally
- * uses the public MCP tools, so the human CLI cannot bypass workspace,
- * revision, capability, staging, or output-publication policies.
- */
-export async function runAutonomousExport(
-  request: AutonomousExportRequest,
+/** Opens one private stdio MCP session without bypassing its public contracts. */
+export async function withAutonomousMcp<T>(
+  request: Pick<AutonomousExportRequest, "configArguments" | "workspaceIndex">,
   serverEntry: string,
-): Promise<AutonomousExportResult> {
+  operation: (session: AutonomousMcpSession) => Promise<T>,
+): Promise<T> {
   const client = new Client(
     { name: "inkscape-mcp-autonomous-cli", version: "0.0.0" },
     { versionNegotiation: { mode: { pin: "2026-07-28" } } },
@@ -171,32 +174,85 @@ export async function runAutonomousExport(
       throw new Error(
         `--workspace-index ${request.workspaceIndex} is not configured`,
       );
-    const inspection = await client.callTool({
-      arguments: {
-        level: "summary",
-        path: request.source,
-        workspaceId: workspace.id,
+    return await operation({ client, workspaceId: workspace.id });
+  } finally {
+    await client.close();
+  }
+}
+
+export async function inspectAutonomousSource(
+  session: AutonomousMcpSession,
+  source: string,
+): Promise<string> {
+  const inspection = await session.client.callTool({
+    arguments: {
+      level: "summary",
+      path: source,
+      workspaceId: session.workspaceId,
+    },
+    name: "document_inspect",
+  });
+  if (inspection.isError) throw new Error("Unable to inspect the source SVG");
+  return documentInspectionSchema.parse(inspection.structuredContent).revision;
+}
+
+export async function createAutonomousPresetPlan(
+  session: AutonomousMcpSession,
+  request: Pick<
+    AutonomousExportRequest,
+    "outputDirectory" | "preset" | "source"
+  > & { revision: string; ttlMs?: number },
+): Promise<AutonomousPresetPlan> {
+  const planResponse = await session.client.callTool({
+    arguments: {
+      preset: {
+        name: request.preset,
+        outputDirectory: request.outputDirectory,
+        source: { expectedRevision: request.revision, path: request.source },
       },
-      name: "document_inspect",
+      ...(request.ttlMs === undefined ? {} : { ttlMs: request.ttlMs }),
+      workspaceId: session.workspaceId,
+    },
+    name: "document_export_preset_plan",
+  });
+  if (planResponse.isError)
+    throw new Error("Unable to preflight the export preset");
+  return presetPlanSchema.parse(planResponse.structuredContent);
+}
+
+export async function executeAutonomousPresetPlan(
+  session: AutonomousMcpSession,
+  planToken: string,
+): Promise<{ manifest: unknown; successes: readonly unknown[] }> {
+  const execution = await session.client.callTool({
+    arguments: {
+      mode: "all_or_nothing",
+      planToken,
+      workspaceId: session.workspaceId,
+    },
+    name: "document_export_batch",
+  });
+  if (execution.isError) throw new Error("Export preset failed");
+  return z
+    .object({ manifest: z.unknown(), successes: z.array(z.unknown()) })
+    .parse(execution.structuredContent);
+}
+
+/**
+ * Runs one named export through a private stdio MCP child.  It intentionally
+ * uses the public MCP tools, so the human CLI cannot bypass workspace,
+ * revision, capability, staging, or output-publication policies.
+ */
+export async function runAutonomousExport(
+  request: AutonomousExportRequest,
+  serverEntry: string,
+): Promise<AutonomousExportResult> {
+  return await withAutonomousMcp(request, serverEntry, async (session) => {
+    const revision = await inspectAutonomousSource(session, request.source);
+    const plan = await createAutonomousPresetPlan(session, {
+      ...request,
+      revision,
     });
-    if (inspection.isError) throw new Error("Unable to inspect the source SVG");
-    const revision = documentInspectionSchema.parse(
-      inspection.structuredContent,
-    ).revision;
-    const planResponse = await client.callTool({
-      arguments: {
-        preset: {
-          name: request.preset,
-          outputDirectory: request.outputDirectory,
-          source: { expectedRevision: revision, path: request.source },
-        },
-        workspaceId: workspace.id,
-      },
-      name: "document_export_preset_plan",
-    });
-    if (planResponse.isError)
-      throw new Error("Unable to preflight the export preset");
-    const plan = presetPlanSchema.parse(planResponse.structuredContent);
     const common = {
       outputDirectory: plan.outputDirectory,
       preset: request.preset,
@@ -213,20 +269,7 @@ export async function runAutonomousExport(
         variantCount: plan.variantCount,
       };
 
-    const execution = await client.callTool({
-      arguments: {
-        mode: "all_or_nothing",
-        planToken: plan.planToken,
-        workspaceId: workspace.id,
-      },
-      name: "document_export_batch",
-    });
-    if (execution.isError) throw new Error("Export preset failed");
-    const result = z
-      .object({ manifest: z.unknown(), successes: z.array(z.unknown()) })
-      .parse(execution.structuredContent);
+    const result = await executeAutonomousPresetPlan(session, plan.planToken);
     return { ...common, ...result, status: "completed" };
-  } finally {
-    await client.close();
-  }
+  });
 }

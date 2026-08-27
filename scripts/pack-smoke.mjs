@@ -126,6 +126,56 @@ try {
     throw new Error("Packed CLI did not complete an autonomous export");
   }
 
+  const recipePath = join(workspaceDirectory, "package-recipe.json");
+  writeFileSync(
+    recipePath,
+    JSON.stringify({
+      operations: [
+        { kind: "inspect" },
+        {
+          kind: "preflight",
+          outputDirectory: "package-recipe-plan",
+          preset: "plain-svg",
+        },
+        {
+          kind: "export",
+          outputDirectory: "package-recipe-output",
+          preset: "web-png",
+        },
+      ],
+      schema: "inkscape-mcp-recipe/v1",
+      source: "package-cli.svg",
+    }),
+  );
+  const autonomousRecipe = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        npmCli,
+        "exec",
+        "--prefix",
+        installDirectory,
+        "--",
+        "inkscape-mcp",
+        "run",
+        recipePath,
+        "--workspace-root",
+        workspaceDirectory,
+      ],
+      { encoding: "utf8" },
+    ),
+  );
+  if (
+    autonomousRecipe.schema !== "inkscape-mcp-recipe-receipt/v1" ||
+    autonomousRecipe.operations?.[2]?.status !== "completed" ||
+    existsSync(join(workspaceDirectory, "package-recipe-plan")) ||
+    !existsSync(
+      join(workspaceDirectory, "package-recipe-output", "web-1200.png"),
+    )
+  ) {
+    throw new Error("Packed CLI did not execute an autonomous recipe");
+  }
+
   const doctorOutput = execFileSync(
     process.execPath,
     [

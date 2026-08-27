@@ -21,6 +21,19 @@ async function runExport(argumentsList) {
   return JSON.parse(result.stdout);
 }
 
+async function runRecipe(recipePath) {
+  const result = await executeFile(
+    process.execPath,
+    ["dist/cli.js", "run", recipePath, "--workspace-root", workspaceRoot],
+    {
+      cwd: process.cwd(),
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    },
+  );
+  return JSON.parse(result.stdout);
+}
+
 try {
   await writeFile(
     join(workspaceRoot, "label.svg"),
@@ -58,7 +71,67 @@ try {
   ) {
     throw new Error("Autonomous CLI did not publish its verified PNG");
   }
+  const recipePath = join(workspaceRoot, "recipe.json");
+  await writeFile(
+    recipePath,
+    JSON.stringify({
+      operations: [
+        { kind: "inspect" },
+        {
+          kind: "preflight",
+          outputDirectory: "recipe-plan",
+          preset: "plain-svg",
+        },
+        {
+          kind: "export",
+          outputDirectory: "recipe-output",
+          preset: "web-png",
+        },
+      ],
+      schema: "inkscape-mcp-recipe/v1",
+      source: "label.svg",
+    }),
+  );
+  const recipe = await runRecipe(recipePath);
+  if (
+    recipe.schema !== "inkscape-mcp-recipe-receipt/v1" ||
+    recipe.operations?.[0]?.status !== "completed" ||
+    recipe.operations?.[1]?.status !== "planned" ||
+    recipe.operations?.[2]?.status !== "completed" ||
+    existsSync(join(workspaceRoot, "recipe-plan")) ||
+    !existsSync(join(workspaceRoot, "recipe-output", "web-1200.png"))
+  ) {
+    throw new Error("Autonomous recipe did not preflight and publish safely");
+  }
+  const invalidRecipePath = join(workspaceRoot, "invalid-recipe.json");
+  await writeFile(
+    invalidRecipePath,
+    JSON.stringify({
+      schema: "inkscape-mcp-recipe/v1",
+      source: "../escape.svg",
+    }),
+  );
+  try {
+    await runRecipe(invalidRecipePath);
+    throw new Error("Autonomous recipe accepted an invalid schema");
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("invalid schema"))
+      throw error;
+    if (!isExitCode(error, 2))
+      throw new Error("Autonomous invalid recipe did not exit with code 2", {
+        cause: error,
+      });
+  }
   process.stdout.write("Autonomous CLI export smoke test passed.\n");
 } finally {
   await rm(workspaceRoot, { force: true, recursive: true });
+}
+
+function isExitCode(error, expected) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === expected
+  );
 }

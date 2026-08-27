@@ -96,6 +96,38 @@ JSON con las rutas, digest y vencimiento del plan sin crear directorios ni
 publicar archivos. Si se configuran varios workspaces, selecciona uno por su
 índice estable de la sesión con `--workspace-index 0` a `31`.
 
+Para varios pasos, guarda una receta JSON cerrada y ejecútala sin IA:
+
+```json
+{
+  "schema": "inkscape-mcp-recipe/v1",
+  "source": "etiquetas.svg",
+  "operations": [
+    { "kind": "inspect" },
+    {
+      "kind": "preflight",
+      "preset": "print-pdf-300dpi",
+      "outputDirectory": "entregables"
+    },
+    {
+      "kind": "export",
+      "preset": "web-asset-pack",
+      "outputDirectory": "web"
+    }
+  ]
+}
+```
+
+```powershell
+inkscape-mcp run .\exportaciones.json --workspace-root C:\ruta\a\tus\disenos
+```
+
+`run` devuelve un recibo JSON `inkscape-mcp-recipe-receipt/v1`; redirígelo a
+un archivo si deseas conservarlo. Sus códigos de salida son `0` (éxito), `2`
+(receta inválida) y `3` (fallo de ejecución). Se validan esquema, fuente,
+capabilities, rutas y colisiones entre outputs previstos antes de publicar el
+primer export; cada export se publica mediante su lote atómico habitual.
+
 ## Tools MCP actuales
 
 | Grupo              | Tools principales                                                                                                                                                                                                                                       |

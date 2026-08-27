@@ -202,6 +202,50 @@ try {
   )
     throw new Error("gradients_manage did not update a gradient");
   await writeFile(
+    join(workspaceRoot, "metadata.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><image id="accessible_image" href="data:image/png;base64,AA==" width="1" height="1"/></svg>',
+  );
+  const metadataRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "metadata.svg")))
+    .digest("hex");
+  const documentMetadata = await workspaceClient.callTool({
+    arguments: {
+      action: "document",
+      description: "Accessible preview",
+      expectedRevision: metadataRevision,
+      license: "MIT",
+      path: "metadata.svg",
+      title: "Preview",
+      workspaceId: workspace.id,
+    },
+    name: "metadata_manage",
+  });
+  const documentMetadataRevision = documentMetadata.structuredContent?.revision;
+  if (documentMetadata.isError || typeof documentMetadataRevision !== "string")
+    throw new Error("metadata_manage did not update document metadata");
+  const elementMetadata = await workspaceClient.callTool({
+    arguments: {
+      action: "elements",
+      elements: [
+        {
+          description: "One pixel image",
+          id: "accessible_image",
+          label: "Preview image",
+          title: "Preview",
+        },
+      ],
+      expectedRevision: documentMetadataRevision,
+      path: "metadata.svg",
+      workspaceId: workspace.id,
+    },
+    name: "metadata_manage",
+  });
+  if (
+    elementMetadata.isError ||
+    elementMetadata.structuredContent?.ids?.[0] !== "accessible_image"
+  )
+    throw new Error("metadata_manage did not update element accessibility");
+  await writeFile(
     join(workspaceRoot, "percentage.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="50%" viewBox="0 0 20 10"/>',
   );

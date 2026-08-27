@@ -186,6 +186,7 @@ export function editAbsoluteLinearSvgPathNode(
     | { action: "delete"; index: number }
     | { action: "insert"; index: number; point: { x: number; y: number } }
     | { action: "close_subpath"; index: number }
+    | { action: "expand_smooth"; index: number }
     | { action: "open_subpath"; index: number }
     | {
         action: "set_quadratic_handle";
@@ -236,6 +237,36 @@ export function editAbsoluteLinearSvgPathNode(
     } else {
       if (!subpath.closed) throw new Error("Path subpath is already open");
       segments.splice(subpath.end - 1, 1);
+    }
+    return serializeSvgPathData(segments);
+  }
+  if (request.action === "expand_smooth") {
+    const segment = segments[request.index];
+    if (!segment || (segment.command !== "S" && segment.command !== "T"))
+      throw new Error("Path segment must be an absolute S or T command");
+    const state = pathStateBefore(segments, request.index);
+    if (segment.command === "S") {
+      const control1 = reflectedControl(state.current, state.lastCubicControl);
+      segments[request.index] = {
+        command: "C",
+        values: [
+          control1.x,
+          control1.y,
+          segment.values[0]!,
+          segment.values[1]!,
+          segment.values[2]!,
+          segment.values[3]!,
+        ],
+      };
+    } else {
+      const control = reflectedControl(
+        state.current,
+        state.lastQuadraticControl,
+      );
+      segments[request.index] = {
+        command: "Q",
+        values: [control.x, control.y, segment.values[0]!, segment.values[1]!],
+      };
     }
     return serializeSvgPathData(segments);
   }
@@ -438,6 +469,91 @@ function locateSubpath(
   while (end < segments.length && segments[end]?.command !== "M") end += 1;
   const tail = segments[end - 1]?.command;
   return { closed: tail === "Z" || tail === "z", end, start };
+}
+
+function pathStateBefore(
+  segments: readonly SvgPathSegment[],
+  index: number,
+): {
+  current: { x: number; y: number };
+  lastCubicControl?: { x: number; y: number } | undefined;
+  lastQuadraticControl?: { x: number; y: number } | undefined;
+} {
+  if (index < 0 || index >= segments.length)
+    throw new Error("Path node index does not exist");
+  let current = { x: 0, y: 0 };
+  let start = current;
+  let lastCubicControl: { x: number; y: number } | undefined;
+  let lastQuadraticControl: { x: number; y: number } | undefined;
+  for (const segment of segments.slice(0, index)) {
+    const values = segment.values;
+    switch (segment.command) {
+      case "M":
+        current = { x: values[0]!, y: values[1]! };
+        start = current;
+        lastCubicControl = undefined;
+        lastQuadraticControl = undefined;
+        break;
+      case "L":
+      case "T":
+        if (segment.command === "T")
+          lastQuadraticControl = reflectedControl(
+            current,
+            lastQuadraticControl,
+          );
+        else lastQuadraticControl = undefined;
+        lastCubicControl = undefined;
+        current = { x: values[0]!, y: values[1]! };
+        break;
+      case "H":
+        current = { x: values[0]!, y: current.y };
+        lastCubicControl = undefined;
+        lastQuadraticControl = undefined;
+        break;
+      case "V":
+        current = { x: current.x, y: values[0]! };
+        lastCubicControl = undefined;
+        lastQuadraticControl = undefined;
+        break;
+      case "C":
+        current = { x: values[4]!, y: values[5]! };
+        lastCubicControl = { x: values[2]!, y: values[3]! };
+        lastQuadraticControl = undefined;
+        break;
+      case "S":
+        current = { x: values[2]!, y: values[3]! };
+        lastCubicControl = { x: values[0]!, y: values[1]! };
+        lastQuadraticControl = undefined;
+        break;
+      case "Q":
+        current = { x: values[2]!, y: values[3]! };
+        lastQuadraticControl = { x: values[0]!, y: values[1]! };
+        lastCubicControl = undefined;
+        break;
+      case "A":
+        current = { x: values[5]!, y: values[6]! };
+        lastCubicControl = undefined;
+        lastQuadraticControl = undefined;
+        break;
+      case "Z":
+        current = start;
+        lastCubicControl = undefined;
+        lastQuadraticControl = undefined;
+        break;
+      default:
+        throw new Error("Path must be normalized before smooth expansion");
+    }
+  }
+  return { current, lastCubicControl, lastQuadraticControl };
+}
+
+function reflectedControl(
+  current: { x: number; y: number },
+  previous: { x: number; y: number } | undefined,
+): { x: number; y: number } {
+  return previous === undefined
+    ? { ...current }
+    : { x: 2 * current.x - previous.x, y: 2 * current.y - previous.y };
 }
 
 function requireAbsoluteSegment(

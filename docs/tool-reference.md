@@ -84,7 +84,7 @@ exportación: inspección → `document_export_preset_plan` →
 | `path_break_apart`     | Path compuesto y nuevos IDs explícitos.                                     | Separar subpaths preservando referencias seguras.        |
 | `path_reverse`         | Path lineal explícito.                                                      | Invertir dirección; curvas/arcos se rechazan.            |
 | `path_node_move`       | Path, índice de segmento y punto finito tipado.                             | Mover un endpoint sin enviar `d` libre.                  |
-| `path_node_edit`       | Nodos lineales, open/close, handles Q/C y parámetros de arco tipados.       | Ajustar una geometría sin enviar `d` libre.              |
+| `path_node_edit`       | Nodos lineales, open/close, handles Q/C/A y expansión smooth tipada.        | Ajustar una geometría sin enviar `d` libre.              |
 | `path_effects_inspect` | Efectos LPE locales y paths que los referencian.                            | Auditar efectos sin editar sus parámetros.               |
 
 ## Defs, estilos y reutilización

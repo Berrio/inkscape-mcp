@@ -540,6 +540,7 @@ export function editSvgPathNode(
     | { action: "delete"; index: number }
     | { action: "insert"; index: number; point: { x: number; y: number } }
     | { action: "close_subpath"; index: number }
+    | { action: "expand_smooth"; index: number }
     | { action: "open_subpath"; index: number }
     | {
         action: "set_quadratic_handle";

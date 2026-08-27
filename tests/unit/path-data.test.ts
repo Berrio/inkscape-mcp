@@ -140,5 +140,17 @@ describe("SVG path AST", () => {
         sweep: false,
       }),
     ).toBe("M 0 0 A 4 5 45 1 0 8 9");
+    expect(
+      editAbsoluteLinearSvgPathNode("M 0 0 C 1 2 3 4 5 6 S 7 8 9 10", {
+        action: "expand_smooth",
+        index: 2,
+      }),
+    ).toBe("M 0 0 C 1 2 3 4 5 6 C 7 8 7 8 9 10");
+    expect(
+      editAbsoluteLinearSvgPathNode("M 0 0 Q 1 2 3 4 T 5 6", {
+        action: "expand_smooth",
+        index: 2,
+      }),
+    ).toBe("M 0 0 Q 1 2 3 4 Q 5 6 5 6");
   });
 });

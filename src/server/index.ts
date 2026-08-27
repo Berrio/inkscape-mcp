@@ -5324,6 +5324,12 @@ export function buildServer(
               .strict(),
             z
               .object({
+                action: z.literal("expand_smooth"),
+                index: z.number().int().min(1).max(9_999),
+              })
+              .strict(),
+            z
+              .object({
                 action: z.literal("set_quadratic_handle"),
                 control: z
                   .object({

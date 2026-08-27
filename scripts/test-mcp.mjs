@@ -669,6 +669,23 @@ try {
       "resources_inspect_remote did not report a no-download remediation",
     );
   await writeFile(
+    join(workspaceRoot, "accessibility.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><text id="low_contrast" fill="#777777">Low</text><text id="high_contrast" fill="#000000">High</text></svg>',
+  );
+  const accessibility = await workspaceClient.callTool({
+    arguments: { path: "accessibility.svg", workspaceId: workspace.id },
+    name: "accessibility_inspect",
+  });
+  if (
+    accessibility.isError ||
+    accessibility.structuredContent?.lowContrastText?.[0]?.id !==
+      "low_contrast" ||
+    accessibility.structuredContent?.readingOrder?.[1] !== "high_contrast"
+  )
+    throw new Error(
+      "accessibility_inspect did not report contrast and document order",
+    );
+  await writeFile(
     join(workspaceRoot, "clips.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><rect id="clipped_target" width="10" height="8"/></svg>',
   );

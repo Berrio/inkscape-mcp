@@ -98,6 +98,10 @@ export {
   type RemoteSvgResource,
 } from "./remote-resources.js";
 export {
+  inspectSvgAccessibility,
+  type SvgAccessibilityInspection,
+} from "./accessibility.js";
+export {
   applySvgFilter,
   createSvgFilter,
   createSvgBlurFilter,

@@ -49,6 +49,7 @@ import {
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
   inspectSvgImageDpi,
+  inspectSvgAccessibility,
   inspectSvgRemoteResources,
   normalizeFontFamilies,
   inspectSvgSettings,
@@ -2966,6 +2967,42 @@ export function buildServer(config: ServerConfig): McpServer {
           await readFile(document.absolutePath, "utf8"),
         ),
       };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "accessibility_inspect",
+    {
+      description:
+        "Provides explicitly heuristic SVG text contrast and document reading-order diagnostics; contrast assumes a white background and direct hex fill only.",
+      inputSchema: z.object({
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        lowContrastText: z.array(
+          z.object({
+            id: shapeIdSchema.optional(),
+            ratio: z.number().finite().positive(),
+          }),
+        ),
+        readingOrder: z.array(shapeIdSchema),
+        warnings: z.array(z.string()),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const output = inspectSvgAccessibility(
+        await readFile(document.absolutePath, "utf8"),
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

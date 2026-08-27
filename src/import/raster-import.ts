@@ -80,11 +80,24 @@ export function inspectRasterImport(
 
 function pngDimensions(bytes: Uint8Array): { height: number; width: number } {
   if (
-    bytes.length < 24 ||
-    String.fromCharCode(...bytes.subarray(12, 16)) !== "IHDR"
+    bytes.length < 33 ||
+    readUInt32BE(bytes, 8) !== 13 ||
+    String.fromCharCode(...bytes.subarray(12, 16)) !== "IHDR" ||
+    crc32(bytes.subarray(12, 29)) !== readUInt32BE(bytes, 29)
   )
     throw new Error("PNG image is missing its IHDR dimensions");
   return { height: readUInt32(bytes, 20), width: readUInt32(bytes, 16) };
+}
+
+function readUInt32BE(bytes: Uint8Array, offset: number): number {
+  if (offset + 4 > bytes.length)
+    throw new Error("Raster dimension header is truncated");
+  return (
+    bytes[offset]! * 0x1_00_00_00 +
+    (bytes[offset + 1]! << 16) +
+    (bytes[offset + 2]! << 8) +
+    bytes[offset + 3]!
+  );
 }
 
 function gifDimensions(bytes: Uint8Array): { height: number; width: number } {
@@ -190,6 +203,16 @@ function readUInt32LE(bytes: Uint8Array, offset: number): number {
     (bytes[offset + 2]! << 16) +
     bytes[offset + 3]! * 0x1_00_00_00
   );
+}
+
+function crc32(bytes: Uint8Array): number {
+  let value = 0xffffffff;
+  for (const byte of bytes) {
+    value ^= byte;
+    for (let bit = 0; bit < 8; bit += 1)
+      value = (value >>> 1) ^ (value & 1 ? 0xedb88320 : 0);
+  }
+  return (value ^ 0xffffffff) >>> 0;
 }
 
 function escapeAttribute(value: string): string {

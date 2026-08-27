@@ -6,12 +6,26 @@ import {
   sniffRasterMime,
 } from "../../src/import/raster-import.js";
 
+function crc32(bytes: Uint8Array): number {
+  let value = 0xffffffff;
+  for (const byte of bytes) {
+    value ^= byte;
+    for (let bit = 0; bit < 8; bit += 1)
+      value = (value >>> 1) ^ (value & 1 ? 0xedb88320 : 0);
+  }
+  return (value ^ 0xffffffff) >>> 0;
+}
+
 function png(width: number, height: number): Buffer {
-  const bytes = Buffer.alloc(24);
+  const bytes = Buffer.alloc(33);
   bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  bytes.writeUInt32BE(13, 8);
   bytes.write("IHDR", 12, "ascii");
   bytes.writeUInt32BE(width, 16);
   bytes.writeUInt32BE(height, 20);
+  bytes[24] = 8;
+  bytes[25] = 6;
+  bytes.writeUInt32BE(crc32(bytes.subarray(12, 29)), 29);
   return bytes;
 }
 

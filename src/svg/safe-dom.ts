@@ -1,5 +1,7 @@
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 
+const MAX_SVG_DEPTH = 256;
+
 export type SanitizeMode = "preserve-local" | "strict" | "trusted";
 export type SafeSvgOptions = {
   maxElements: number;
@@ -39,9 +41,12 @@ export function sanitizeSvg(
   const root = document.documentElement;
   if (!root || root.localName !== "svg")
     throw new SvgSecurityError("Root element must be svg");
-  const elements = [...walk(root as unknown as XmlElement)];
-  if (elements.length > options.maxElements)
-    throw new SvgSecurityError("SVG exceeds element limit");
+  const elements: XmlElement[] = [];
+  for (const element of walk(root as unknown as XmlElement)) {
+    elements.push(element);
+    if (elements.length > options.maxElements)
+      throw new SvgSecurityError("SVG exceeds element limit");
+  }
   const removed: string[] = [];
   for (const element of elements) {
     const name = element.localName.toLowerCase();
@@ -95,9 +100,24 @@ type XmlElement = {
 type XmlNode = XmlElement;
 
 function* walk(root: XmlElement): Generator<XmlElement> {
-  yield root;
-  for (let child = root.firstChild; child; child = child.nextSibling)
-    if (child.nodeType === 1) yield* walk(child);
+  const pending: Array<{ depth: number; element: XmlElement }> = [
+    { depth: 1, element: root },
+  ];
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (current.depth > MAX_SVG_DEPTH)
+      throw new SvgSecurityError("SVG exceeds element nesting limit");
+    yield current.element;
+    const children: XmlElement[] = [];
+    for (
+      let child = current.element.firstChild;
+      child;
+      child = child.nextSibling
+    )
+      if (child.nodeType === 1) children.push(child);
+    for (let index = children.length - 1; index >= 0; index -= 1)
+      pending.push({ depth: current.depth + 1, element: children[index]! });
+  }
 }
 function remove(element: XmlElement, name: string, removed: string[]): void {
   element.parentNode?.removeChild(element);

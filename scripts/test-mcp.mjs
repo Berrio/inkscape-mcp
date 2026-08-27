@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { gzipSync } from "node:zlib";
+import { PDFDocument } from "pdf-lib";
 
 const server = {
   args: ["dist/cli.js"],
@@ -2948,6 +2949,32 @@ try {
   )
     throw new Error(
       "document_import_pdf did not reject an encrypted PDF before publication",
+    );
+  const hugePdfDocument = await PDFDocument.create();
+  hugePdfDocument.addPage([14_401, 72]);
+  const hugePdfBytes = Buffer.from(await hugePdfDocument.save());
+  await writeFile(join(workspaceRoot, "huge.pdf"), hugePdfBytes);
+  const hugePdf = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: createHash("sha256").update(hugePdfBytes).digest("hex"),
+      manifestPath: "huge.pdf.import.json",
+      mode: "internal",
+      outputPath: "huge.svg",
+      page: 1,
+      path: "huge.pdf",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_pdf",
+  });
+  if (
+    !hugePdf.isError ||
+    !hugePdf.content.some(
+      (item) => item.type === "text" && item.text.includes("exceeds the 200in"),
+    ) ||
+    existsSync(join(workspaceRoot, "huge.svg"))
+  )
+    throw new Error(
+      "document_import_pdf did not reject a huge page before publication",
     );
   const importedPdf = await workspaceClient.callTool({
     arguments: {

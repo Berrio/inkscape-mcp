@@ -129,7 +129,7 @@ exportación: inspección → `document_export_preset_plan` →
 | `document_import`              | SVG/SVGZ local, output y política de sanitización permitida.                             | Convertir SVGZ a SVG saneado con manifest.              |
 | `document_import_svg`          | SVG local, output y política.                                                            | Importar un SVG como documento editable nuevo.          |
 | `document_import_raster`       | BMP/TIFF/TGA no comprimidos, PNG/JPEG/GIF/WebP local, link/embed, límite de megapíxeles. | Crear SVG desde un raster aprobado.                     |
-| `document_import_pdf`          | PDF local, página e importador internal/Poppler gateado.                                 | Importar una página declarando pérdida de editabilidad. |
+| `document_import_pdf`          | PDF local, página dentro de política e importador internal/Poppler gateado.              | Importar una página declarando pérdida de editabilidad. |
 | `assets_package`               | Documento/revisión y directorio nuevo.                                                   | Publicar SVG, assets locales y manifest juntos.         |
 
 ## Exportación, presets y jobs

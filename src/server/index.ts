@@ -14,6 +14,7 @@ import {
   sniffRasterMime,
 } from "../import/raster-import.js";
 import { inspectNativeImportGates } from "../import/native-import-gates.js";
+import { inspectPdfImportPage } from "../import/pdf-import.js";
 import { importSanitizedSvg } from "../import/svg-import.js";
 import {
   addSvgPage,
@@ -2172,6 +2173,7 @@ export function buildServer(
         throw new Error("PDF import source does not have a PDF signature");
       if (isLikelyEncryptedPdf(sourceBytes))
         throw new Error("Encrypted PDF import is unsupported");
+      await inspectPdfImportPage(sourceBytes, input.page);
       const discovery = await locateInkscape({
         config,
         cwd: process.cwd(),

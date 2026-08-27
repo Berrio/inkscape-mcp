@@ -2089,6 +2089,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [ ] `F11-T25` Tag/release/announcement solo con autorización explícita.
 - [x] `F11-T26` CLI autónoma `export` sin IA: schema cerrado para SVG/preset/output, revisión automática, `--dry-run`, selección de workspace y salida JSON; reutiliza el MCP privado por stdio, sin bypass de políticas.
 - [x] `F11-T27` Recetas declarativas `run`: JSON `inkscape-mcp-recipe/v1` cerrado para inspección, preflight y hasta 20 exports; se validan source, capabilities y colisiones antes de publicar, y devuelve un recibo JSON con códigos de salida estables.
+- [x] `F11-T28` Automatización Windows sin IA: runner PowerShell no interactivo con log, rutas con espacios y propagación de exit code; script opt-in para tarea diaria del usuario actual con `-WhatIf`, sin GUI ni credenciales almacenadas.
 
 #### Puerta 1.0 F11
 

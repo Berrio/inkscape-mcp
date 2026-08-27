@@ -128,6 +128,38 @@ un archivo si deseas conservarlo. Sus códigos de salida son `0` (éxito), `2`
 capabilities, rutas y colisiones entre outputs previstos antes de publicar el
 primer export; cada export se publica mediante su lote atómico habitual.
 
+### Automatización de Windows
+
+El paquete incluye los scripts PowerShell
+`scripts\windows\Invoke-InkscapeMcpRecipe.ps1` y
+`scripts\windows\Register-InkscapeMcpDailyTask.ps1`. El primero ejecuta una
+receta y deja un log, sin abrir GUI ni solicitar credenciales:
+
+```powershell
+& .\scripts\windows\Invoke-InkscapeMcpRecipe.ps1 `
+  -RecipePath C:\disenos\exportaciones.json `
+  -WorkspaceRoot C:\disenos `
+  -LogPath C:\disenos\logs\exportaciones.log `
+  -NonInteractive
+```
+
+El segundo **sólo cuando tú lo ejecutes** registra una tarea diaria para el
+usuario actual en modo `Interactive`, sin contraseña almacenada; por tanto se
+ejecuta mientras ese usuario haya iniciado sesión. Antes puedes inspeccionarlo
+con `-WhatIf`:
+
+```powershell
+& .\scripts\windows\Register-InkscapeMcpDailyTask.ps1 `
+  -TaskName "Inkscape MCP - etiquetas" `
+  -RecipePath C:\disenos\exportaciones.json `
+  -WorkspaceRoot C:\disenos `
+  -LogPath C:\disenos\logs\exportaciones.log `
+  -DailyAt "02:00" -WhatIf
+```
+
+Después de verificar la salida, elimina `-WhatIf` para registrar la tarea.
+El script no añade privilegios, no expone HTTP y no guarda credenciales.
+
 ## Tools MCP actuales
 
 | Grupo              | Tools principales                                                                                                                                                                                                                                       |

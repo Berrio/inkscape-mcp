@@ -71,6 +71,12 @@ try {
   if (!existsSync(binPath)) {
     throw new Error("npm did not create the inkscape-mcp executable shim");
   }
+  for (const scriptName of [
+    "Invoke-InkscapeMcpRecipe.ps1",
+    "Register-InkscapeMcpDailyTask.ps1",
+  ])
+    if (!existsSync(join(installedPackage, "scripts", "windows", scriptName)))
+      throw new Error(`Packed CLI is missing Windows automation ${scriptName}`);
 
   const output = execFileSync(
     process.execPath,

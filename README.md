@@ -85,7 +85,7 @@ una revisión después de que otra operación haya cambiado el documento.
 | Recursos SVG       | `gradients_manage`, `patterns_manage`, `markers_manage`, `filters_manage`, `clips_manage`, `masks_manage`, `defs_vacuum`, `symbols_manage`, `guides_grids_manage`, `metadata_manage`                                                                    |
 | Imágenes y calidad | `images_manage`, `images_crop`, `images_inspect_dpi`, `resources_inspect_remote`, `accessibility_inspect`, `fonts_list`, `fonts_preflight`                                                                                                              |
 | Importación        | `document_import`, `document_import_capabilities`, `document_import_svg`, `assets_package`, `document_normalize_ids`                                                                                                                                    |
-| Exportación        | `document_export`, `document_export_batch`, `export_png`, `export_pdf`, `export_pdf_pages`, `export_svg`, `job_get`, `job_cancel`                                                                                                                       |
+| Exportación        | `document_export`, `document_export_preset_plan`, `document_export_batch`, `export_png`, `export_pdf`, `export_pdf_pages`, `export_svg`, `job_get`, `job_cancel`                                                                                        |
 
 Las mutaciones y exportaciones exigen `expectedRevision`. Si un archivo cambia
 entre la lectura y el commit, la operación falla en lugar de sobrescribir una

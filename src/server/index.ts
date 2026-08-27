@@ -140,6 +140,7 @@ import {
 } from "../inkscape/index.js";
 import { ProcessRunner } from "../runner/index.js";
 import { PreviewCache } from "../preview/index.js";
+import { ExportPlanStore } from "./export-plans.js";
 import { JobStore } from "./jobs.js";
 import {
   AtomicFileStore,
@@ -150,6 +151,7 @@ import {
   SnapshotStore,
 } from "../storage/index.js";
 import {
+  assertSafeRelativePath,
   WorkspaceService,
   type ResolvedWorkspacePath,
 } from "../workspace/index.js";
@@ -1034,6 +1036,8 @@ const elementSummarySchema = z.object({
 });
 const nativeVisualBounds = nativeVisualBoundsDescriptor();
 const PREVIEW_CACHE_TTL_MS = 10 * 60 * 1_000;
+const EXPORT_PRESET_PLAN_TTL_MS = 5 * 60 * 1_000;
+const EXPORT_PRESET_PLAN_MAX_TTL_MS = 15 * 60 * 1_000;
 const PREVIEW_MAX_AXIS = 2_048;
 
 function pngCapabilityLabel(flag: string): string {
@@ -1064,6 +1068,7 @@ export function buildServer(config: ServerConfig): McpServer {
     version: packageMetadata.version,
   });
   const fileStore = new AtomicFileStore();
+  const exportPlans = new ExportPlanStore();
   const jobs = new JobStore();
   const runner = new ProcessRunner(config.maxConcurrency);
   const capabilities = new CapabilityService();
@@ -5903,6 +5908,104 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "document_export_preset_plan",
+    {
+      description:
+        "Preflights one named export preset without publishing files and returns an owner-bound, single-use plan token. Execution must use the token before it expires, so the plan stays tied to the source revision and observed Inkscape capabilities.",
+      inputSchema: z
+        .object({
+          preset: exportPresetSchema,
+          ttlMs: z
+            .number()
+            .int()
+            .min(1)
+            .max(EXPORT_PRESET_PLAN_MAX_TTL_MS)
+            .default(EXPORT_PRESET_PLAN_TTL_MS),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        digest: z.string().regex(/^[a-f0-9]{64}$/u),
+        expiresAt: z.number().int().positive(),
+        outputDirectory: z.string().min(1).max(1024),
+        outputPaths: z.array(z.string().min(1).max(1024)).min(1).max(50),
+        planToken: z.string().regex(/^plan_[a-f0-9]{32}$/u),
+        variantCount: z.number().int().positive().max(50),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ preset, ttlMs, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const specs = expandExportPreset(preset).map(parseExportSpec);
+      const variants = planExportBatch(specs);
+      if (variants.some((variant) => !isBaselineBatchSpec(variant.spec)))
+        throw new Error(
+          "Preset plan supports baseline PNG, PDF, SVG, and plain SVG variants only",
+        );
+      const workspace = await workspaces();
+      const source = await workspace.resolveExisting(
+        workspaceId,
+        preset.source.path,
+      );
+      if (
+        (await sha256File(source.absolutePath)) !==
+        preset.source.expectedRevision
+      )
+        throw new Error("Preset source revision no longer matches");
+      for (const variant of variants)
+        assertSafeRelativePath(variant.outputPath);
+      const discovery = await locateInkscape({
+        config,
+        cwd: process.cwd(),
+        runner,
+      });
+      const candidate = discovery.candidates[0];
+      if (!candidate) throw new Error("Inkscape executable is unavailable");
+      const probe = await probeInkscapeCandidate(
+        runner,
+        candidate,
+        process.cwd(),
+      );
+      if (!("version" in probe))
+        throw new Error("Inkscape executable could not be validated");
+      const observed = await capabilities.inspect(
+        runner,
+        candidate,
+        probe.version,
+        process.cwd(),
+      );
+      const digest = createHash("sha256")
+        .update(
+          JSON.stringify({
+            capabilities: observed.fingerprint,
+            preset,
+            specs,
+            version: probe.version,
+          }),
+        )
+        .digest("hex");
+      const plan = exportPlans.create(workspaceId, {
+        digest,
+        outputDirectory: preset.outputDirectory,
+        specs,
+        ttlMs,
+      });
+      const output = {
+        digest: plan.digest,
+        expiresAt: plan.expiresAt,
+        outputDirectory: plan.outputDirectory,
+        outputPaths: plan.outputPaths,
+        planToken: plan.token,
+        variantCount: plan.specs.length,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
     "document_export_batch",
     {
       description:
@@ -5912,6 +6015,10 @@ export function buildServer(config: ServerConfig): McpServer {
           mode: z.enum(["all_or_nothing", "best_effort"]),
           delivery: z.enum(["sync", "job"]).default("sync"),
           preset: exportPresetSchema.optional(),
+          planToken: z
+            .string()
+            .regex(/^plan_[a-f0-9]{32}$/u)
+            .optional(),
           specs: z.array(exportSpecSchema).min(1).max(50).optional(),
           timeoutMs: z
             .number()
@@ -5923,10 +6030,13 @@ export function buildServer(config: ServerConfig): McpServer {
         })
         .strict()
         .superRefine((value, context) => {
-          if ((value.specs === undefined) === (value.preset === undefined))
+          const provided = [value.specs, value.preset, value.planToken].filter(
+            (item) => item !== undefined,
+          ).length;
+          if (provided !== 1)
             context.addIssue({
               code: "custom",
-              message: "Provide exactly one of specs or preset",
+              message: "Provide exactly one of specs, preset or planToken",
               path: ["specs"],
             });
         }),
@@ -5972,7 +6082,19 @@ export function buildServer(config: ServerConfig): McpServer {
       ]),
       annotations: { destructiveHint: false },
     },
-    async ({ delivery, mode, preset, specs, timeoutMs, workspaceId }) => {
+    async ({
+      delivery,
+      mode,
+      planToken,
+      preset,
+      specs,
+      timeoutMs,
+      workspaceId,
+    }) => {
+      const savedPlan =
+        planToken === undefined
+          ? undefined
+          : exportPlans.consume(planToken, workspaceId);
       const execute = async (execution?: {
         onProgress: (progress: { detail?: string; stage: string }) => void;
         signal: AbortSignal;
@@ -5982,14 +6104,18 @@ export function buildServer(config: ServerConfig): McpServer {
         assertDocumentWorkspace(config);
         const startedAt = Date.now();
         const expandedSpecs =
-          specs === undefined
-            ? expandExportPreset(preset!)
-            : specs.map(parseExportSpec);
+          savedPlan !== undefined
+            ? savedPlan.specs
+            : specs === undefined
+              ? expandExportPreset(preset!)
+              : specs.map(parseExportSpec);
         const variants = planExportBatch(expandedSpecs);
-        if (preset !== undefined)
+        const outputDirectory =
+          savedPlan?.outputDirectory ?? preset?.outputDirectory;
+        if (outputDirectory !== undefined)
           await (
             await workspaces()
-          ).ensureOutputDirectory(workspaceId, preset.outputDirectory);
+          ).ensureOutputDirectory(workspaceId, outputDirectory);
         const source = variants[0]!.spec.source;
         if (
           variants.some(

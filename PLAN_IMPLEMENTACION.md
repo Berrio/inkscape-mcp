@@ -38,22 +38,35 @@ Reglas de ejecución:
 - No sobrescribir un diseño por defecto. Toda mutación debe soportar revisión, copia de seguridad o escritura a un archivo nuevo.
 - Detener la fase si falla su puerta de salida. Corregirla antes de continuar.
 
-### 0.1 Cola de continuidad priorizada
+### 0.1 Cola de continuidad y autonomía sin IA
 
-Esta cola sustituye el orden numérico de fases **para el trabajo restante**. Su objetivo es que, si se agota el presupuesto de tokens en cualquier corte, el servidor ya publicado siga siendo útil, seguro y verificable. Cada bloque se termina con `npm run check`, smoke MCP real y commit/push antes de iniciar el siguiente.
+Esta cola sustituye el orden numérico de fases **para el trabajo restante**.
+“Sin tokens” significa que se agotó el presupuesto del cliente de IA/Codex:
+un MCP por sí solo todavía necesita un cliente que invoque tools. Por ello la
+primera prioridad nueva es una interfaz local no conversacional, que reutilice
+los contratos seguros ya publicados y pueda ser llamada por una persona,
+PowerShell o el Programador de tareas de Windows. No se confunde con los
+`planToken` efímeros de exportación, que sólo previenen repetir un plan.
 
-| Prioridad | Funcionalidades nuevas, en este orden                                                                                                                                      | Corte utilizable al terminar                                                        |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| P0        | Mantener regresión verde y revisar de forma conservadora las referencias de texto/`defs` ya creadas antes de ampliar su edición.                                           | Lo ya publicado permanece seguro, atómico y verificable aunque se corte el trabajo. |
-| P1        | `F08-T01–T10`: importación práctica (SVGZ, raster y PDF) con manifests, límites y capability gates.                                                                        | El MCP incorpora materiales habituales de diseño de forma segura.                   |
-| P1        | `F08-T18–T24`: presets versionados web, print e iconos con `dryRun`/token de ejecución.                                                                                    | Flujos repetibles de entrega PNG/PDF/SVG sin reescribir parámetros.                 |
-| P1        | Cerrar las puertas críticas ya implementadas de F01–F07: carreras de rutas, crash/cancel cleanup, fixtures visuales de paths/export, package smoke y documentación de uso. | El release Windows/stdio es reproducible y no depende de memoria del operador.      |
-| P2        | Paths avanzados `F07-T01–T10,T36–T40`: nodos, booleanas ampliadas, LPE, mesh, conectores y paletas.                                                                        | Cobertura profesional avanzada; no bloquea el uso normal del MCP.                   |
-| P2        | Formatos/extensiones no centrales `F08-T11–T17,T31–T34`: PS/EPS/EMF/WMF/XAML, optimizadores y adapters.                                                                    | Compatibilidad ampliada únicamente donde la capability real lo permita.             |
-| P2        | `F09` completo: prompts, recursos, progreso, catálogo/snapshots y endurecimiento de jobs; conservar las APIs ya funcionales durante la migración.                          | Experiencia MCP más rica para clientes sofisticados.                                |
-| P3        | `F10` HTTP, matriz macOS/Linux/1.5; `F12` GUI bridge, shell persistente, sandbox y CMYK/PDF-X.                                                                             | Extensiones opcionales; no deben retrasar el release Windows/stdio.                 |
+Cada bloque se termina con `npm run check`, smoke real, commit/push y una
+instrucción copiable en README antes de iniciar el siguiente.
 
-Regla de corte: si sólo queda tiempo para una tarea, elegir siempre la primera pendiente de P0; si P0 está cerrado, elegir la primera de P1 y **no** iniciar una capacidad P2–P3. No mezclar en un mismo commit una capacidad nueva con refactors no relacionados.
+| Prioridad | Funcionalidad nueva, en este orden                                                                                                                                                              | Corte utilizable al terminar                                                       |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| P0        | Mantener regresión verde y cerrar el preset preflight/token ya iniciado.                                                                                                                        | La entrega actual PNG/PDF/SVG permanece atómica y comprobada.                      |
+| P0        | **CLI autónoma `export`**: un comando humano `inkscape-mcp export` para un SVG local, preset, directorio y `--dry-run`; obtiene la revisión, llama al MCP por stdio y devuelve JSON/exit code.  | Se exporta sin chat ni modelo, desde PowerShell.                                   |
+| P0        | **Recetas declarativas**: `inkscape-mcp run receta.json` con schema cerrado para inspección, preflight y uno o varios exports; validación previa, manifest/recibo y códigos de salida estables. | Un lote repetible puede guardarse en Git y ejecutarse sin recordar tools MCP.      |
+| P0        | **Integración Windows**: ejemplos `.ps1` y Programador de tareas, rutas con espacios, logs a fichero y modo `--non-interactive`; no GUI ni credenciales.                                        | Las exportaciones de etiquetas se programan o lanzan con una instrucción copiable. |
+| P1        | **Cola local durable**: recetas encoladas, reintento explícito, cancelación y recibos; nunca publicar un resultado parcial en modo atómico.                                                     | Un cierre de sesión o fallo transitorio no obliga a rehacer manualmente el lote.   |
+| P1        | `F08-T01–T10`: completar los importadores prácticos restantes (raster, fuentes/perfiles bajo policy) con manifests y capability gates.                                                          | Materiales habituales entran de forma segura.                                      |
+| P1        | Cerrar puertas F01–F09 y release Windows/stdio: carreras, cleanup, fixtures visuales, Inspector, package smoke y documentación.                                                                 | Paquete instalable y operable sin memoria del operador.                            |
+| P2        | Paths avanzados y formatos/extensiones no centrales: LPE, mesh, conectores, PS/EPS/EMF/WMF/XAML y optimizadores, todos gateados.                                                                | Cobertura profesional que no bloquea el flujo autónomo base.                       |
+| P3        | HTTP, matriz macOS/Linux/1.5, GUI bridge, sandbox y CMYK/PDF-X.                                                                                                                                 | Opcionales; no retrasan Windows/stdio ni la automatización local.                  |
+
+Regla de corte: si queda tiempo para una tarea, elegir la primera pendiente de
+P0. La CLI no aceptará shell, XML ni rutas fuera del workspace; ejecutará el
+propio servidor por stdio y sus schemas existentes. No mezclar en un commit una
+capacidad nueva con refactors no relacionados.
 
 ### Convenciones de estado
 
@@ -1908,7 +1921,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F08-T21` Preset web asset (SVG plano + PNG 1x/2x/3x). — `web-asset-pack` expande a SVG plano y PNG transparentes de 1200, 2400 y 3600 px mediante el mismo lote verificado que las exportaciones explícitas.
 - [~] `F08-T22` Preset print PDF con filtro 300 dpi, texto configurable y preflight. — `print-pdf-300dpi` fija PDF con `filterRasterDpi: 300` y texto preservado; quedan texto configurable y preflight integrado como plan bloqueado previo a ejecución.
 - [ ] `F08-T23` Presets sociales con metadata de fecha/fuente y custom override.
-- [ ] `F08-T24` Implementar protocolo de dos pasos para presets: dryRun devuelve `planToken`/digest ligado a sourceRevision, spec normalizado, capabilities y TTL; ejecución exige ese token aún válido.
+- [x] `F08-T24` Implementar protocolo de dos pasos para presets: `document_export_preset_plan` hace preflight, devuelve `planToken`/digest ligado a sourceRevision, spec normalizado, capabilities observadas y TTL; `document_export_batch` exige y consume el token una sola vez.
 
 #### Packaging de assets
 

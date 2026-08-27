@@ -2688,14 +2688,29 @@ try {
   ) {
     throw new Error("document_export_batch did not expand the web PNG preset");
   }
-  const webAssetPresetBatch = await workspaceClient.callTool({
+  const webAssetPresetPlan = await workspaceClient.callTool({
     arguments: {
-      mode: "all_or_nothing",
       preset: {
         name: "web-asset-pack",
         outputDirectory: "preset-web-assets",
         source: { expectedRevision: settingsRevision, path: "a4.svg" },
       },
+      workspaceId: workspace.id,
+    },
+    name: "document_export_preset_plan",
+  });
+  const webAssetPlanToken = webAssetPresetPlan.structuredContent?.planToken;
+  if (
+    webAssetPresetPlan.isError ||
+    typeof webAssetPlanToken !== "string" ||
+    webAssetPresetPlan.structuredContent?.variantCount !== 4
+  ) {
+    throw new Error("document_export_preset_plan did not create a web plan");
+  }
+  const webAssetPresetBatch = await workspaceClient.callTool({
+    arguments: {
+      mode: "all_or_nothing",
+      planToken: webAssetPlanToken,
       workspaceId: workspace.id,
     },
     name: "document_export_batch",
@@ -2712,6 +2727,16 @@ try {
       "document_export_batch did not expand the web asset deliverable",
     );
   }
+  const consumedPlan = await workspaceClient.callTool({
+    arguments: {
+      mode: "all_or_nothing",
+      planToken: webAssetPlanToken,
+      workspaceId: workspace.id,
+    },
+    name: "document_export_batch",
+  });
+  if (!consumedPlan.isError)
+    throw new Error("document_export_batch accepted an already consumed plan");
   const rejectedAtomicBatch = await workspaceClient.callTool({
     arguments: {
       mode: "all_or_nothing",

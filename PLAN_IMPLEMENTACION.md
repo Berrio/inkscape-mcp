@@ -2095,11 +2095,11 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 - [ ] `F11-G01` Todas las puertas F00–F09 están cerradas; F10 puede constar como `[w]` diferido con alcance Windows/stdio explícito.
 - [ ] `F11-G02` Suite P0/P1 e Inspector stdio pasan desde paquete instalado; conformance HTTP es obligatoria solo si F10 se incluye en ese release.
-- [ ] `F11-G03` Auditoría de seguridad no tiene hallazgos altos/críticos abiertos.
-- [ ] `F11-G04` Documentación reproduce los escenarios de aceptación desde cero.
-- [ ] `F11-G05` La matriz no promete capabilities no probadas.
-- [ ] `F11-G06` Evidencia/notas de versión en `docs/progress/F11.md`.
-- [ ] `F11-G07` `doctor`, status, README y SECURITY coinciden: 1.0 no anuncia procesamiento seguro de binarios/SVG de origen hostil sin sandbox nativo.
+- [x] `F11-G03` Auditoría de seguridad no tiene hallazgos altos/críticos abiertos. — `npm audit` completo y runtime informaron cero vulnerabilidades; la revisión manual mantiene explícitos los riesgos nativos residuales.
+- [x] `F11-G04` Documentación reproduce los escenarios de aceptación desde cero. — README y guías cubren instalación Windows, doctor, stdio, tests MCP/paquete, automatización y evidencia de release.
+- [x] `F11-G05` La matriz no promete capabilities no probadas. — `docs/compatibility-matrix.md` separa baseline probado, gating y funciones no anunciadas/P2.
+- [x] `F11-G06` Evidencia/notas de versión en `docs/progress/F11.md`. — WP20–WP21 registran metadata 0.1.0, artefactos reproducibles y gates ejecutados.
+- [x] `F11-G07` `doctor`, status, README y SECURITY coinciden: 1.0 no anuncia procesamiento seguro de binarios/SVG de origen hostil sin sandbox nativo. — Todos declaran `workspace-guarded-native-unsandboxed` y `trusted-local-only`.
 
 ---
 

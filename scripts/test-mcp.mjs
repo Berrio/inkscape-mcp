@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { comparePngVisual, decodePngRgba } from "../dist/export/index.js";
+import packageMetadata from "../package.json" with { type: "json" };
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -23,7 +24,7 @@ for (const versionNegotiation of [
   { mode: "legacy" },
 ]) {
   const client = new Client(
-    { name: "inkscape-mcp-test-client", version: "0.0.0" },
+    { name: "inkscape-mcp-test-client", version: packageMetadata.version },
     { versionNegotiation },
   );
   const transport = new StdioClientTransport(server);
@@ -64,7 +65,7 @@ const workspaceTransport = new StdioClientTransport({
   args: ["dist/cli.js", "--workspace-root", workspaceRoot],
 });
 const workspaceClient = new Client(
-  { name: "inkscape-mcp-workspace-client", version: "0.0.0" },
+  { name: "inkscape-mcp-workspace-client", version: packageMetadata.version },
   { versionNegotiation: { mode: { pin: "2026-07-28" } } },
 );
 try {

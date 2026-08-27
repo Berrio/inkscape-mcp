@@ -56,6 +56,7 @@ import {
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
   inspectSvgImageDpi,
+  inspectSvgMeshGradients,
   inspectSvgAccessibility,
   inspectSvgRemoteResources,
   normalizeFontFamilies,
@@ -4462,6 +4463,47 @@ export function buildServer(config: ServerConfig): McpServer {
         id,
         revision: committed.revision,
       };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "mesh_gradients_inspect",
+    {
+      description:
+        "Lists preserved SVG mesh gradients and their structural counts without exposing unsupported editing or rewriting their patch geometry.",
+      inputSchema: z
+        .object({
+          limit: z.number().int().min(1).max(1_000).default(100),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        gradients: z.array(
+          z.object({
+            id: shapeIdSchema,
+            meshRowCount: z.number().int().nonnegative(),
+            patchCount: z.number().int().nonnegative(),
+            referenced: z.boolean(),
+          }),
+        ),
+        truncated: z.boolean(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ limit, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const output = inspectSvgMeshGradients(
+        await readFile(document.absolutePath, "utf8"),
+        limit,
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

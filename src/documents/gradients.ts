@@ -36,6 +36,51 @@ export type GradientSpec = {
   r?: number | undefined;
 };
 
+export type MeshGradientSummary = {
+  id: string;
+  meshRowCount: number;
+  patchCount: number;
+  referenced: boolean;
+};
+
+/** Reads mesh gradients without normalizing or editing their unsupported geometry. */
+export function inspectSvgMeshGradients(
+  source: string,
+  limit = 100,
+): { gradients: readonly MeshGradientSummary[]; truncated: boolean } {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 1_000)
+    throw new Error("Mesh gradient limit is invalid");
+  const document = parseDocument(source);
+  const all = Array.from(document.getElementsByTagName("*"));
+  const gradients: MeshGradientSummary[] = [];
+  let truncated = false;
+  for (const element of all) {
+    if (element.localName !== "meshgradient") continue;
+    if (gradients.length >= limit) {
+      truncated = true;
+      break;
+    }
+    const id = element.getAttribute("id");
+    if (!id) continue;
+    const reference = `url(#${id})`;
+    gradients.push({
+      id,
+      meshRowCount: Array.from(element.childNodes).filter(
+        (child) => child.nodeType === 1 && child.localName === "meshrow",
+      ).length,
+      patchCount: Array.from(element.getElementsByTagName("meshpatch")).length,
+      referenced: all.some(
+        (candidate) =>
+          candidate !== element &&
+          Array.from(candidate.attributes).some((attribute) =>
+            attribute.value.includes(reference),
+          ),
+      ),
+    });
+  }
+  return { gradients, truncated };
+}
+
 export function createSvgGradient(source: string, spec: GradientSpec): string {
   const document = parseDocument(source);
   if (findById(document, spec.id))

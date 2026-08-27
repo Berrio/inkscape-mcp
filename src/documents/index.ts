@@ -70,9 +70,11 @@ export {
   applySvgGradient,
   createSvgGradient,
   deleteSvgGradient,
+  inspectSvgMeshGradients,
   updateSvgGradient,
   type GradientSpec,
   type GradientStop,
+  type MeshGradientSummary,
 } from "./gradients.js";
 export {
   updateSvgDocumentMetadata,

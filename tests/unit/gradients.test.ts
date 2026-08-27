@@ -4,6 +4,7 @@ import {
   applySvgGradient,
   createSvgGradient,
   deleteSvgGradient,
+  inspectSvgMeshGradients,
   updateSvgGradient,
 } from "../../src/documents/index.js";
 
@@ -81,5 +82,17 @@ describe("SVG gradient definitions", () => {
         kind: "radial",
       }),
     ).toThrow("same kind");
+  });
+
+  it("inspects mesh gradients without rewriting their patches", () => {
+    const result = inspectSvgMeshGradients(
+      '<svg xmlns="http://www.w3.org/2000/svg"><defs><meshgradient id="fabric"><meshrow><meshpatch/><meshpatch/></meshrow></meshgradient></defs><rect fill="url(#fabric)"/></svg>',
+    );
+    expect(result).toEqual({
+      gradients: [
+        { id: "fabric", meshRowCount: 1, patchCount: 2, referenced: true },
+      ],
+      truncated: false,
+    });
   });
 });

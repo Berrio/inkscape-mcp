@@ -22,6 +22,7 @@ export default tseslint.config(
     files: ["src/**/*.ts", "tests/**/*.ts"],
     rules: {
       "@typescript-eslint/consistent-type-imports": "error",
+      "no-console": "error",
     },
   },
 );

@@ -21,6 +21,7 @@ import { loadConfigFromCli, redactDiagnostic } from "./config/index.js";
 import { formatDoctor, runDoctor } from "./doctor/index.js";
 import { readHttpBearerToken, startHttpMcpServer } from "./http.js";
 import { buildServer } from "./server/index.js";
+import { writeStdioLog } from "./server/stdio-logging.js";
 import { recoverStaleScratch } from "./storage/index.js";
 
 const usage = `inkscape-mcp ${packageMetadata.version}
@@ -117,12 +118,11 @@ if (argument === "--help" || argument === "-h") {
       process.once("SIGINT", stop);
       process.once("SIGTERM", stop);
     } else {
+      writeStdioLog("stdio_listening");
       serveStdio(() => buildServer(config), {
         legacy: "serve",
         onerror: (error) =>
-          process.stderr.write(
-            `MCP stdio error: ${redactDiagnostic(error.message)}\n`,
-          ),
+          writeStdioLog("stdio_error", { error: error.message }),
       });
     }
   } catch (error: unknown) {

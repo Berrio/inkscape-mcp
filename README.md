@@ -61,7 +61,7 @@ anunciadas.
 Para añadir el servidor a Codex CLI o VS Code sin confundirlo con una receta de
 exportación, sigue la [guía de configuración de clientes](./docs/client-configuration.md).
 
-La [referencia de tools](./docs/tool-reference.md) cubre las 77 tools
+La [referencia de tools](./docs/tool-reference.md) cubre las 78 tools
 registradas, sus flujos, errores y la forma de obtener el schema MCP exacto
 mediante `tools/list`.
 
@@ -196,16 +196,16 @@ El script no añade privilegios, no expone HTTP y no guarda credenciales.
 
 ## Tools MCP actuales
 
-| Grupo              | Tools principales                                                                                                                                                                                                                                                           |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Estado y archivos  | `inkscape_status`, `workspace_list`, `workspace_list_documents`, `document_snapshot`, `document_restore`                                                                                                                                                                    |
-| Documento          | `document_create`, `document_inspect`, `document_resize`, `document_fit_page`, `document_page_adjust`, `document_pages`, `document_page_validate`, `document_settings`, `document_preflight`, `document_render_preview`                                                     |
-| Diseño             | `elements_create`, `connector_create`, `elements_query`, `elements_update`, `elements_delete`, `elements_transform`, `elements_flatten_transform`, `elements_arrange`, `elements_group`, `elements_duplicate`, `elements_reparent`, `elements_align`, `elements_distribute` |
-| Texto y paths      | `text_manage`, `text_path_manage`, `text_to_paths`, `paths_combine`, `paths_boolean`, `path_modify`, `path_break_apart`, `path_reverse`, `path_node_move`, `path_node_edit`, `path_effects_inspect`                                                                         |
-| Recursos SVG       | `gradients_manage`, `mesh_gradients_inspect`, `palette_inspect`, `palette_apply`, `patterns_manage`, `markers_manage`, `filters_manage`, `clips_manage`, `masks_manage`, `defs_vacuum`, `symbols_manage`, `guides_grids_manage`, `metadata_manage`                          |
-| Imágenes y calidad | `images_manage`, `images_crop`, `images_inspect_dpi`, `resources_inspect_remote`, `accessibility_inspect`, `fonts_list`, `fonts_preflight`                                                                                                                                  |
-| Importación        | `document_import`, `document_import_raster`, `document_import_pdf`, `document_import_capabilities`, `document_import_svg`, `assets_package`, `document_normalize_ids`                                                                                                       |
-| Exportación        | `document_export`, `document_export_preset_plan`, `document_export_batch`, `export_png`, `export_pdf`, `export_pdf_pages`, `export_svg`, `job_get`, `job_cancel`                                                                                                            |
+| Grupo              | Tools principales                                                                                                                                                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Estado y archivos  | `inkscape_status`, `workspace_list`, `workspace_list_documents`, `document_snapshot`, `document_restore`                                                                                                                                                                       |
+| Documento          | `document_create`, `document_inspect`, `document_resize`, `document_fit_page`, `document_page_adjust`, `document_pages`, `document_page_validate`, `document_settings`, `document_preflight`, `document_render_preview`                                                        |
+| Diseño             | `elements_create`, `connector_create`, `elements_query`, `elements_update`, `elements_delete`, `elements_transform`, `elements_flatten_transform`, `elements_arrange`, `elements_group`, `elements_duplicate`, `elements_reparent`, `elements_align`, `elements_distribute`    |
+| Texto y paths      | `text_manage`, `text_path_manage`, `text_to_paths`, `paths_combine`, `paths_boolean`, `path_modify`, `path_break_apart`, `path_reverse`, `path_node_move`, `path_node_edit`, `path_effects_inspect`                                                                            |
+| Recursos SVG       | `gradients_manage`, `mesh_gradients_inspect`, `palette_inspect`, `palette_apply`, `color_management_inspect`, `patterns_manage`, `markers_manage`, `filters_manage`, `clips_manage`, `masks_manage`, `defs_vacuum`, `symbols_manage`, `guides_grids_manage`, `metadata_manage` |
+| Imágenes y calidad | `images_manage`, `images_crop`, `images_inspect_dpi`, `resources_inspect_remote`, `accessibility_inspect`, `fonts_list`, `fonts_preflight`                                                                                                                                     |
+| Importación        | `document_import`, `document_import_raster`, `document_import_pdf`, `document_import_capabilities`, `document_import_svg`, `assets_package`, `document_normalize_ids`                                                                                                          |
+| Exportación        | `document_export`, `document_export_preset_plan`, `document_export_batch`, `export_png`, `export_pdf`, `export_pdf_pages`, `export_svg`, `job_get`, `job_cancel`                                                                                                               |
 
 Las mutaciones y exportaciones exigen `expectedRevision`. Si un archivo cambia
 entre la lectura y el commit, la operación falla en lugar de sobrescribir una

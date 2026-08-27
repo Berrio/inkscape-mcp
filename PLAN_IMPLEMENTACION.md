@@ -2113,7 +2113,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [ ] `F12-T04` Definir handshake/versionado entre extensión y MCP.
 - [ ] `F12-T05` Mantener GUI bridge deshabilitado por defecto y con permisos separados.
 - [ ] `F12-T06` Evaluar sandbox de SO/contenedor para documentos no confiables.
-- [ ] `F12-T07` Evaluar pipeline profesional CMYK/PDF-X/preprensa externo con especialista y fixtures.
+- [~] `F12-T07` Evaluar pipeline profesional CMYK/PDF-X/preprensa externo con especialista y fixtures. — `color_management_inspect` inventaría perfiles SVG locales y referencias `icc-color()` y declara que no convierte CMYK ni valida output intents; falta el pipeline externo, especialista y fixtures PDF/X.
 - [ ] `F12-T08` Evaluar adapters de optimización/render externos sin sustituir Inkscape silenciosamente.
 - [ ] `F12-T09` Diseñar plugin API interna allowlisted sin carga arbitraria desde el cliente.
 - [ ] `F12-T10` Evaluar helper handle-based/ACL/sandbox nativo si se exige resistencia a un atacante local concurrente que altera reparse points.

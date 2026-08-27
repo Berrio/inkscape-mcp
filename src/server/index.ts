@@ -62,6 +62,7 @@ import {
   applySvgPalette,
   inspectSvgPathEffects,
   inspectSvgAccessibility,
+  inspectSvgColorManagement,
   inspectSvgRemoteResources,
   normalizeFontFamilies,
   inspectSvgSettings,
@@ -4590,6 +4591,48 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const output = inspectSvgPathEffects(
+        await readFile(document.absolutePath, "utf8"),
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "color_management_inspect",
+    {
+      description:
+        "Lists local SVG color-profile metadata and ICC paint references without claiming CMYK conversion or PDF/X output-intent validation.",
+      inputSchema: z
+        .object({
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        iccReferenceCount: z.number().int().nonnegative(),
+        limitations: z.tuple([
+          z.literal("NO_CMYK_CONVERSION"),
+          z.literal("NO_OUTPUT_INTENT_VALIDATION"),
+        ]),
+        profiles: z.array(
+          z.object({
+            id: shapeIdSchema.optional(),
+            name: z.string().optional(),
+            renderingIntent: z.string().optional(),
+          }),
+        ),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const output = inspectSvgColorManagement(
         await readFile(document.absolutePath, "utf8"),
       );
       return {

@@ -89,21 +89,22 @@ exportación: inspección → `document_export_preset_plan` →
 
 ## Defs, estilos y reutilización
 
-| Tool                     | Schema/operación                                                | Ejemplo de uso                                         |
-| ------------------------ | --------------------------------------------------------------- | ------------------------------------------------------ |
-| `gradients_manage`       | Crear/reemplazar/aplicar/eliminar gradientes lineales/radiales. | Reutilizar un degradado en varios objetos.             |
-| `mesh_gradients_inspect` | Lista mesh gradients preservados, filas, patches y referencias. | Auditar un degradado de malla sin editarlo.            |
-| `palette_inspect`        | Colores hex locales directos y número de usos.                  | Inventariar colores de un documento.                   |
-| `palette_apply`          | Mapa explícito `from`/`to` de colores hex directos locales.     | Sustituir una paleta sin CSS ni preferencias globales. |
-| `patterns_manage`        | Crear/reemplazar/aplicar/eliminar dots/stripes tipados.         | Aplicar patrón sin CSS/XML libre.                      |
-| `markers_manage`         | Crear/reemplazar/aplicar/eliminar marcadores arrow/dot.         | Añadir punta de flecha a una línea.                    |
-| `filters_manage`         | Blur, shadow, blend o color matrix tipados.                     | Aplicar sombra declarada; revisar fidelidad visual.    |
-| `clips_manage`           | Crear/aplicar/liberar/eliminar clipPath rectangular.            | Recortar vector sin destruirlo.                        |
-| `masks_manage`           | Crear/aplicar/liberar/eliminar máscara rectangular opaca.       | Ocultar una zona mediante máscara local.               |
-| `symbols_manage`         | Listar/crear/eliminar símbolos y crear clones `use`.            | Crear instancias de un icono.                          |
-| `guides_grids_manage`    | Inspeccionar/editar guías y xygrids documentales.               | Configurar una cuadrícula del archivo, no global.      |
-| `defs_vacuum`            | `dryRun` por defecto o eliminación conservadora.                | Ver defs que se pueden retirar antes de optimizar.     |
-| `metadata_manage`        | Title, description, ARIA y metadatos tipados.                   | Añadir título y descripción accesibles.                |
+| Tool                       | Schema/operación                                                | Ejemplo de uso                                         |
+| -------------------------- | --------------------------------------------------------------- | ------------------------------------------------------ |
+| `gradients_manage`         | Crear/reemplazar/aplicar/eliminar gradientes lineales/radiales. | Reutilizar un degradado en varios objetos.             |
+| `mesh_gradients_inspect`   | Lista mesh gradients preservados, filas, patches y referencias. | Auditar un degradado de malla sin editarlo.            |
+| `palette_inspect`          | Colores hex locales directos y número de usos.                  | Inventariar colores de un documento.                   |
+| `palette_apply`            | Mapa explícito `from`/`to` de colores hex directos locales.     | Sustituir una paleta sin CSS ni preferencias globales. |
+| `color_management_inspect` | Perfiles SVG locales y usos `icc-color()`.                      | Detectar límites CMYK sin convertir el documento.      |
+| `patterns_manage`          | Crear/reemplazar/aplicar/eliminar dots/stripes tipados.         | Aplicar patrón sin CSS/XML libre.                      |
+| `markers_manage`           | Crear/reemplazar/aplicar/eliminar marcadores arrow/dot.         | Añadir punta de flecha a una línea.                    |
+| `filters_manage`           | Blur, shadow, blend o color matrix tipados.                     | Aplicar sombra declarada; revisar fidelidad visual.    |
+| `clips_manage`             | Crear/aplicar/liberar/eliminar clipPath rectangular.            | Recortar vector sin destruirlo.                        |
+| `masks_manage`             | Crear/aplicar/liberar/eliminar máscara rectangular opaca.       | Ocultar una zona mediante máscara local.               |
+| `symbols_manage`           | Listar/crear/eliminar símbolos y crear clones `use`.            | Crear instancias de un icono.                          |
+| `guides_grids_manage`      | Inspeccionar/editar guías y xygrids documentales.               | Configurar una cuadrícula del archivo, no global.      |
+| `defs_vacuum`              | `dryRun` por defecto o eliminación conservadora.                | Ver defs que se pueden retirar antes de optimizar.     |
+| `metadata_manage`          | Title, description, ARIA y metadatos tipados.                   | Añadir título y descripción accesibles.                |
 
 ## Imágenes, recursos y accesibilidad
 

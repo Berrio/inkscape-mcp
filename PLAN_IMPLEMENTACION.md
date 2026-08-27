@@ -2693,9 +2693,53 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
       recetas y recibos, recupera worker interrumpido como fallo explícito,
       permite reintento y registra cancelación cooperativa tras el batch
       atómico en curso.
-- [ ] Después: cerrar gates reales F01–F09/F11 que impiden declarar el release
-      Windows/stdio como 1.0.
+- [x] Evidencia local reproducible del paquete Windows/stdio: `check`, MCP por
+      stdio, automatización PowerShell, paquete aislado y candidate con SBOM,
+      provenance y checksums. No publica npm ni un registry.
 
-**Siguiente acción recomendada:** iniciar una sesión nueva con `gpt-5.6-terra`
-(`high`) y pedir únicamente el WP de **cola durable local** descrito en §0.1;
-no retomar F00-WP01 ni una fase ya iniciada.
+#### Cola priorizada para un modelo menor
+
+Regla de ejecución: tomar **una** tarjeta, conservar el scope, ejecutar sus
+tests antes de hacer commit/push y continuar con la siguiente. No deshacer
+cambios ajenos, no publicar paquetes ni activar HTTP/GUI sin autorización.
+
+1. **P0 - Mantener operable el flujo sin IA.** Ante un cambio de dependencia,
+   Inkscape o Windows, ejecutar `npm run check`, `npm run test:mcp`,
+   `npm run test:windows` y `npm run test:pack`; regenerar una carpeta
+   candidata de `release:provenance` con nombre nuevo. Corregir primero
+   cualquier regresión de CLI, receta, cola, PowerShell o paquete instalado.
+2. **P0 - Cerrar seguridad y concurrencia que afectan el uso local.** Completar
+   gates pendientes F01/F02: acciones nativas permitidas con mapeo de IDs,
+   carreras de outputs/revisiones y el aislamiento de procesos Windows que
+   falta. Cada caso debe tener fixture de fallo y no ampliar workspaces.
+3. **P1 - Completar importación segura y visible.** Mantener SVG/SVGZ,
+   raster y PDF como adaptadores separados mientras no haya una transacción
+   común probada. Añadir primero manifests comparables y preflight de
+   fuentes/perfiles; los formatos AI/EPS/PS/EMF/WMF/XAML/DXF permanecen
+   `detected-but-blocked` hasta un fixture real headless por formato.
+4. **P1 - Terminar los recursos MCP de documentos grandes.** Priorizar F09:
+   registry opaco con TTL/owner, `resource_link` y lectura por chunks para que
+   stdio no devuelva blobs o SVG grandes al contexto. Probar aislamiento entre
+   workspaces antes de anunciar cada resource.
+5. **P1 - Diseño avanzado con fidelidad comprobable.** Cerrar solo las
+   operaciones F07 que tienen contrato mecánico: orden/selección y remapeo de
+   IDs, corpus visual de booleanas y transforms, y bitmap trace únicamente
+   tras medir costo y resultado. No prometer LPE paramétrico o mesh editable
+   sin fixtures nativos.
+6. **P1 - Presets y empaquetado práctico.** Completar los presets de canal y
+   empaquetado de assets con manifests, colisiones y verificación visual. No
+   agregar formatos de exportación secundarios sin sonda y round-trip.
+7. **P2 - HTTP y matriz de plataformas.** Solo después del release stdio:
+   principals/ownership HTTP, rotación sin reinicio, logging/telemetría y
+   conformance HTTP. Luego validar Inkscape 1.5, macOS y Linux de forma
+   independiente; nunca heredar la etiqueta Windows probado.
+8. **P3 - Investigación aislada.** GUI bridge, sandbox nativo, CMYK/PDF-X,
+   extensiones/optimizadores y formatos profesionales requieren ADR, experto o
+   adapter externo, capability gate, fixtures y documentación antes de entrar
+   al catálogo público.
+
+**Siguiente acción recomendada:** `gpt-5.6-luna` con razonamiento `high` puede
+tomar las tarjetas mecánicas de P0/P1 (tests, manifests, resources y docs).
+Usar `gpt-5.6-terra` con `high` para cambios de seguridad, concurrencia,
+geometría, contratos MCP o cualquier decisión de alcance. Empezar por la
+primera tarjeta no cerrada, no por una fase ya completada.

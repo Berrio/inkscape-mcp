@@ -1808,7 +1808,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F07-T14` Crear/aplicar/liberar clip paths y masks. — `clips_manage` y `masks_manage` crean recursos rectangulares tipados, los aplican/liberan sobre IDs explícitos y evitan borrar referencias SVG/CSS activas; las máscaras usan una región opaca de espacio de usuario sin admitir markup arbitrario. Pruebas unitarias y MCP por stdio verificadas.
 - [ ] `F07-T15` Detectar y limpiar defs no usados mediante plan/dryRun antes de vacuum.
 - [ ] `F07-T16` Implementar filtros seleccionados: blur, drop shadow, blend y color matrix con schemas tipados.
-- [ ] `F07-T17` Preservar filtros desconocidos aunque no se puedan editar.
+- [x] `F07-T17` Preservar filtros desconocidos aunque no se puedan editar. — El saneador conserva `filter`/primitivas locales y sus refs `url(#id)` sin exponer edición XML libre; prueba unitaria cubre un filtro desconocido de dos primitivas y sigue rechazando URLs externas.
 
 #### Texto
 

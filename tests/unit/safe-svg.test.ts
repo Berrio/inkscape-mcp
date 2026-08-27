@@ -69,4 +69,12 @@ describe("safe SVG", () => {
       }).svg,
     ).not.toContain("data:image/png");
   });
+  it("preserves unknown local SVG filters while still rejecting external filter URLs", () => {
+    const source =
+      '<svg><defs><filter id="vendor_effect"><feTurbulence baseFrequency="0.2"/><feDisplacementMap scale="3"/></filter></defs><rect filter="url(#vendor_effect)"/></svg>';
+    const result = sanitizeSvg(source, { ...limits, mode: "preserve-local" });
+    expect(result.removed).toEqual([]);
+    expect(result.svg).toContain('filter id="vendor_effect"');
+    expect(result.svg).toContain('filter="url(#vendor_effect)"');
+  });
 });

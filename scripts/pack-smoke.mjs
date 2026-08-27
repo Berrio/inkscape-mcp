@@ -222,8 +222,11 @@ try {
   try {
     await client.connect(transport);
     const listed = await client.listTools();
-    if (!listed.tools.some((tool) => tool.name === "inkscape_status"))
-      throw new Error("Packed CLI did not list inkscape_status over stdio");
+    if (
+      !listed.tools.some((tool) => tool.name === "inkscape_status") ||
+      !listed.tools.some((tool) => tool.name === "document_import_raster")
+    )
+      throw new Error("Packed CLI did not list the expected stdio tools");
     const status = await client.callTool({
       arguments: {},
       name: "inkscape_status",

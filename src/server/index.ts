@@ -8,6 +8,11 @@ import { z } from "zod";
 import packageMetadata from "../../package.json" with { type: "json" };
 import { CapabilityService } from "../capabilities/index.js";
 import { assertDocumentWorkspace, type ServerConfig } from "../config/index.js";
+import {
+  createRasterImportSvg,
+  inspectRasterImport,
+  sniffRasterMime,
+} from "../import/raster-import.js";
 import { importSanitizedSvg } from "../import/svg-import.js";
 import {
   addSvgPage,
@@ -1826,6 +1831,151 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "document_import_raster",
+    {
+      description:
+        "Imports one workspace-local PNG, JPEG, GIF, or WebP as a new SVG document with a byte-sniffed, megapixel-bounded raster wrapper and conversion manifest. It can embed the approved bytes or retain one workspace-local relative link; it never fetches a URL.",
+      inputSchema: z
+        .object({
+          embedding: z.enum(["embed", "link"]).default("embed"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          manifestPath: z.string().min(1).max(1024),
+          outputPath: z.string().min(1).max(1024),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        manifest: z.object({
+          embedding: z.enum(["embed", "link"]),
+          format: z.literal("raster"),
+          height: z.number().int().positive(),
+          inputBytes: z.number().int().positive(),
+          mime: z.enum(["image/gif", "image/jpeg", "image/png", "image/webp"]),
+          outputPath: z.string(),
+          outputSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+          removed: z.array(z.string()),
+          schema: z.literal("inkscape-mcp-document-import/v1"),
+          sourcePath: z.string(),
+          sourceSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+          warnings: z.array(z.string()),
+          width: z.number().int().positive(),
+        }),
+        manifestPath: z.string(),
+        manifestRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        outputPath: z.string(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({
+      embedding,
+      expectedRevision,
+      manifestPath,
+      outputPath,
+      path,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const source = await workspace.resolveExisting(workspaceId, path);
+      const output = await workspace.resolveNewOutput(workspaceId, outputPath);
+      const manifestOutput = await workspace.resolveNewOutput(
+        workspaceId,
+        manifestPath,
+      );
+      if (!/\.svg$/iu.test(output.relativePath))
+        throw new Error("document_import_raster requires a .svg output path");
+      if (!/\.json$/iu.test(manifestOutput.relativePath))
+        throw new Error(
+          "document_import_raster requires a .json manifest path",
+        );
+      if (
+        output.absolutePath.toLocaleLowerCase() ===
+        manifestOutput.absolutePath.toLocaleLowerCase()
+      )
+        throw new Error("Import output and manifest paths must differ");
+      const sourceBytes = await readBoundedRasterAsset(
+        source.absolutePath,
+        config.maxInputBytes,
+      );
+      const raster = inspectRasterImport(
+        sourceBytes,
+        config.maxRasterMegapixels,
+      );
+      const href =
+        embedding === "embed"
+          ? `data:${raster.mime};base64,${sourceBytes.toString("base64")}`
+          : relative(
+              dirname(output.absolutePath),
+              source.absolutePath,
+            ).replaceAll("\\", "/");
+      if (!href || href.startsWith("/"))
+        throw new Error(
+          "Raster import link must be workspace-local and relative",
+        );
+      const contents = Buffer.from(createRasterImportSvg(href, raster), "utf8");
+      const warnings = [
+        ...(embedding === "embed"
+          ? ["RASTER_EMBEDDED_DOCUMENT_SIZE_INCREASE"]
+          : ["RASTER_LINKED_SOURCE_DEPENDENCY"]),
+        ...(raster.mime === "image/gif"
+          ? ["RASTER_GIF_ANIMATION_RENDERER_DEPENDENT"]
+          : []),
+        ...(raster.mime === "image/jpeg"
+          ? ["RASTER_JPEG_EXIF_ORIENTATION_NOT_APPLIED"]
+          : []),
+      ];
+      const manifest = {
+        embedding,
+        format: "raster" as const,
+        height: raster.height,
+        inputBytes: sourceBytes.length,
+        mime: raster.mime,
+        outputPath: output.relativePath,
+        outputSha256: createHash("sha256").update(contents).digest("hex"),
+        removed: [] as string[],
+        schema: "inkscape-mcp-document-import/v1" as const,
+        sourcePath: source.relativePath,
+        sourceSha256: createHash("sha256").update(sourceBytes).digest("hex"),
+        warnings,
+        width: raster.width,
+      };
+      const committed = await fileStore.commitBatch({
+        expectedRevision,
+        files: [
+          { contents, targetPath: output.absolutePath },
+          {
+            contents: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`),
+            targetPath: manifestOutput.absolutePath,
+          },
+        ],
+        sourcePath: source.absolutePath,
+      });
+      const revisions = new Map(
+        committed.files.map((file) => [file.targetPath, file.revision]),
+      );
+      const revision = revisions.get(output.absolutePath);
+      const manifestRevision = revisions.get(manifestOutput.absolutePath);
+      if (!revision || !manifestRevision)
+        throw new Error(
+          "document_import_raster did not publish its complete manifest",
+        );
+      const result = {
+        manifest,
+        manifestPath: manifestOutput.relativePath,
+        manifestRevision,
+        outputPath: output.relativePath,
+        revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
+      };
+    },
+  );
+
+  server.registerTool(
     "document_import_capabilities",
     {
       description:
@@ -1834,6 +1984,7 @@ export function buildServer(config: ServerConfig): McpServer {
       outputSchema: z.object({
         inputTypes: z.array(z.string().min(1).max(128)),
         nativeProbeAvailable: z.boolean(),
+        rasterImport: z.literal("built-in-byte-sniffed"),
         svgzImport: z.literal("built-in-sanitized"),
       }),
       annotations: { readOnlyHint: true },
@@ -1844,6 +1995,7 @@ export function buildServer(config: ServerConfig): McpServer {
         inputTypes: [...(report.capabilities?.inputTypes ?? [])],
         nativeProbeAvailable:
           report.capabilities?.observations.inputTypes.available ?? false,
+        rasterImport: "built-in-byte-sniffed" as const,
         svgzImport: "built-in-sanitized" as const,
       };
       return {
@@ -7985,46 +8137,12 @@ async function prepareShapeSpecs(
   return prepared;
 }
 
-function sniffRasterMime(bytes: Uint8Array): string {
-  if (
-    bytes.length >= 8 &&
-    bytes[0] === 0x89 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x4e &&
-    bytes[3] === 0x47 &&
-    bytes[4] === 0x0d &&
-    bytes[5] === 0x0a &&
-    bytes[6] === 0x1a &&
-    bytes[7] === 0x0a
-  )
-    return "image/png";
-  if (
-    bytes.length >= 3 &&
-    bytes[0] === 0xff &&
-    bytes[1] === 0xd8 &&
-    bytes[2] === 0xff
-  )
-    return "image/jpeg";
-  if (
-    bytes.length >= 6 &&
-    String.fromCharCode(...bytes.subarray(0, 6)).match(/^GIF(?:87a|89a)$/u)
-  )
-    return "image/gif";
-  if (
-    bytes.length >= 12 &&
-    String.fromCharCode(...bytes.subarray(0, 4)) === "RIFF" &&
-    String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP"
-  )
-    return "image/webp";
-  throw new Error("Image asset is not a supported raster format");
-}
-
 async function readBoundedRasterAsset(
   path: string,
   maximumBytes: number,
 ): Promise<Buffer> {
   const metadata = await stat(path);
-  if (metadata.size < 1 || metadata.size > maximumBytes)
+  if (!metadata.isFile() || metadata.size < 1 || metadata.size > maximumBytes)
     throw new Error("Image asset exceeds the configured size limit");
   const bytes = await readFile(path);
   sniffRasterMime(bytes);

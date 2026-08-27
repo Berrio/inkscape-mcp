@@ -974,6 +974,8 @@ try {
   if (
     importCapabilities.isError ||
     importCapabilities.structuredContent?.svgzImport !== "built-in-sanitized" ||
+    importCapabilities.structuredContent?.rasterImport !==
+      "built-in-byte-sniffed" ||
     typeof importCapabilities.structuredContent?.nativeProbeAvailable !==
       "boolean"
   )
@@ -1024,6 +1026,63 @@ try {
   )
     throw new Error(
       "document_import did not publish sanitized SVGZ and manifest",
+    );
+  const importedRasterBytes = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await writeFile(
+    join(workspaceRoot, "raster-import-source.bin"),
+    importedRasterBytes,
+  );
+  const importedRasterRevision = createHash("sha256")
+    .update(importedRasterBytes)
+    .digest("hex");
+  const importedRaster = await workspaceClient.callTool({
+    arguments: {
+      embedding: "embed",
+      expectedRevision: importedRasterRevision,
+      manifestPath: "raster-import.svg.import.json",
+      outputPath: "raster-import.svg",
+      path: "raster-import-source.bin",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_raster",
+  });
+  const importedRasterText = await readFile(
+    join(workspaceRoot, "raster-import.svg"),
+    "utf8",
+  );
+  if (
+    importedRaster.isError ||
+    importedRaster.structuredContent?.manifest?.mime !== "image/png" ||
+    importedRaster.structuredContent?.manifest?.width !== 1 ||
+    importedRaster.structuredContent?.manifest?.height !== 1 ||
+    !importedRasterText.includes("data:image/png;base64,")
+  )
+    throw new Error(
+      "document_import_raster did not embed a byte-sniffed PNG document",
+    );
+  const linkedRaster = await workspaceClient.callTool({
+    arguments: {
+      embedding: "link",
+      expectedRevision: importedRasterRevision,
+      manifestPath: "raster-link.svg.import.json",
+      outputPath: "raster-link.svg",
+      path: "raster-import-source.bin",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_raster",
+  });
+  if (
+    linkedRaster.isError ||
+    linkedRaster.structuredContent?.manifest?.embedding !== "link" ||
+    !(await readFile(join(workspaceRoot, "raster-link.svg"), "utf8")).includes(
+      'href="raster-import-source.bin"',
+    )
+  )
+    throw new Error(
+      "document_import_raster did not retain a workspace-local relative link",
     );
   await writeFile(
     join(workspaceRoot, "normalize-ids.svg"),

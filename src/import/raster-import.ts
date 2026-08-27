@@ -1,0 +1,200 @@
+export type RasterImportMetadata = {
+  height: number;
+  mime: "image/gif" | "image/jpeg" | "image/png" | "image/webp";
+  width: number;
+};
+
+/** Builds the bounded SVG wrapper used by a raster document import. */
+export function createRasterImportSvg(
+  href: string,
+  metadata: Pick<RasterImportMetadata, "height" | "width">,
+): string {
+  if (
+    !href ||
+    !Number.isInteger(metadata.width) ||
+    !Number.isInteger(metadata.height)
+  )
+    throw new Error("Raster SVG wrapper has invalid dimensions or href");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${metadata.width}px" height="${metadata.height}px" viewBox="0 0 ${metadata.width} ${metadata.height}"><image id="raster_import" x="0" y="0" width="${metadata.width}" height="${metadata.height}" preserveAspectRatio="none" href="${escapeAttribute(href)}"/></svg>\n`;
+}
+
+/** Identifies the narrow raster allowlist by bytes, never by filename. */
+export function sniffRasterMime(
+  bytes: Uint8Array,
+): RasterImportMetadata["mime"] {
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  )
+    return "image/png";
+  if (
+    bytes.length >= 3 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff
+  )
+    return "image/jpeg";
+  if (
+    bytes.length >= 6 &&
+    String.fromCharCode(...bytes.subarray(0, 6)).match(/^GIF(?:87a|89a)$/u)
+  )
+    return "image/gif";
+  if (
+    bytes.length >= 12 &&
+    String.fromCharCode(...bytes.subarray(0, 4)) === "RIFF" &&
+    String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP"
+  )
+    return "image/webp";
+  throw new Error("Image asset is not a supported raster format");
+}
+
+/** Reads intrinsic canvas dimensions without decoding pixel data. */
+export function inspectRasterImport(
+  bytes: Uint8Array,
+  maximumMegapixels: number,
+): RasterImportMetadata {
+  if (!Number.isInteger(maximumMegapixels) || maximumMegapixels < 1)
+    throw new Error("Raster megapixel limit is invalid");
+  const mime = sniffRasterMime(bytes);
+  const dimensions =
+    mime === "image/png"
+      ? pngDimensions(bytes)
+      : mime === "image/jpeg"
+        ? jpegDimensions(bytes)
+        : mime === "image/gif"
+          ? gifDimensions(bytes)
+          : webpDimensions(bytes);
+  if (dimensions.width < 1 || dimensions.height < 1)
+    throw new Error("Raster image has invalid intrinsic dimensions");
+  if (dimensions.width * dimensions.height > maximumMegapixels * 1_000_000)
+    throw new Error("Raster image exceeds the configured megapixel limit");
+  return { ...dimensions, mime };
+}
+
+function pngDimensions(bytes: Uint8Array): { height: number; width: number } {
+  if (
+    bytes.length < 24 ||
+    String.fromCharCode(...bytes.subarray(12, 16)) !== "IHDR"
+  )
+    throw new Error("PNG image is missing its IHDR dimensions");
+  return { height: readUInt32(bytes, 20), width: readUInt32(bytes, 16) };
+}
+
+function gifDimensions(bytes: Uint8Array): { height: number; width: number } {
+  if (bytes.length < 10) throw new Error("GIF image is missing dimensions");
+  return { height: readUInt16LE(bytes, 8), width: readUInt16LE(bytes, 6) };
+}
+
+function jpegDimensions(bytes: Uint8Array): { height: number; width: number } {
+  let offset = 2;
+  while (offset + 4 <= bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    while (bytes[offset] === 0xff) offset += 1;
+    const marker = bytes[offset];
+    offset += 1;
+    if (marker === undefined || marker === 0xd9 || marker === 0xda) break;
+    if (marker >= 0xd0 && marker <= 0xd7) continue;
+    if (offset + 2 > bytes.length) break;
+    const length = (bytes[offset]! << 8) | bytes[offset + 1]!;
+    if (length < 2 || offset + length > bytes.length) break;
+    if (isJpegSof(marker)) {
+      if (length < 7) break;
+      return {
+        height: (bytes[offset + 3]! << 8) | bytes[offset + 4]!,
+        width: (bytes[offset + 5]! << 8) | bytes[offset + 6]!,
+      };
+    }
+    offset += length;
+  }
+  throw new Error("JPEG image is missing a supported frame dimensions marker");
+}
+
+function webpDimensions(bytes: Uint8Array): { height: number; width: number } {
+  if (bytes.length < 30) throw new Error("WebP image is missing dimensions");
+  const chunk = String.fromCharCode(...bytes.subarray(12, 16));
+  if (chunk === "VP8X")
+    return {
+      height: readUInt24LE(bytes, 27) + 1,
+      width: readUInt24LE(bytes, 24) + 1,
+    };
+  if (chunk === "VP8 ") {
+    if (bytes[23] !== 0x9d || bytes[24] !== 0x01 || bytes[25] !== 0x2a)
+      throw new Error("WebP VP8 image is missing its frame header");
+    return {
+      height: readUInt16LE(bytes, 28) & 0x3fff,
+      width: readUInt16LE(bytes, 26) & 0x3fff,
+    };
+  }
+  if (chunk === "VP8L") {
+    if (bytes[20] !== 0x2f)
+      throw new Error("WebP VP8L image has an invalid header");
+    const bits = readUInt32LE(bytes, 21);
+    return {
+      height: ((bits >> 14) & 0x3fff) + 1,
+      width: (bits & 0x3fff) + 1,
+    };
+  }
+  throw new Error("WebP image uses an unsupported dimension header");
+}
+
+function isJpegSof(marker: number): boolean {
+  return (
+    (marker >= 0xc0 && marker <= 0xc3) ||
+    (marker >= 0xc5 && marker <= 0xc7) ||
+    (marker >= 0xc9 && marker <= 0xcb) ||
+    (marker >= 0xcd && marker <= 0xcf)
+  );
+}
+
+function readUInt16LE(bytes: Uint8Array, offset: number): number {
+  if (offset + 2 > bytes.length)
+    throw new Error("Raster dimension header is truncated");
+  return bytes[offset]! | (bytes[offset + 1]! << 8);
+}
+
+function readUInt24LE(bytes: Uint8Array, offset: number): number {
+  if (offset + 3 > bytes.length)
+    throw new Error("Raster dimension header is truncated");
+  return (
+    bytes[offset]! | (bytes[offset + 1]! << 8) | (bytes[offset + 2]! << 16)
+  );
+}
+
+function readUInt32(bytes: Uint8Array, offset: number): number {
+  if (offset + 4 > bytes.length)
+    throw new Error("Raster dimension header is truncated");
+  return (
+    bytes[offset]! * 0x1_00_00_00 +
+    (bytes[offset + 1]! << 16) +
+    (bytes[offset + 2]! << 8) +
+    bytes[offset + 3]!
+  );
+}
+
+function readUInt32LE(bytes: Uint8Array, offset: number): number {
+  if (offset + 4 > bytes.length)
+    throw new Error("Raster dimension header is truncated");
+  return (
+    bytes[offset]! +
+    (bytes[offset + 1]! << 8) +
+    (bytes[offset + 2]! << 16) +
+    bytes[offset + 3]! * 0x1_00_00_00
+  );
+}
+
+function escapeAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;");
+}

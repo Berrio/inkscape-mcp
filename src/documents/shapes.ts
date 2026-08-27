@@ -539,6 +539,8 @@ export function editSvgPathNode(
   request:
     | { action: "delete"; index: number }
     | { action: "insert"; index: number; point: { x: number; y: number } }
+    | { action: "close_subpath"; index: number }
+    | { action: "open_subpath"; index: number }
     | { action: "set_command"; command: "L" | "T"; index: number },
 ): { id: string; svg: string } {
   const document = parseSafeDocument(source);

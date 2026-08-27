@@ -83,8 +83,8 @@ exportación: inspección → `document_export_preset_plan` →
 | `path_modify`          | Un path, operación simplify/inset/outset/offset y confirmación.             | Simplificar o crear un offset editable.                  |
 | `path_break_apart`     | Path compuesto y nuevos IDs explícitos.                                     | Separar subpaths preservando referencias seguras.        |
 | `path_reverse`         | Path lineal explícito.                                                      | Invertir dirección; curvas/arcos se rechazan.            |
-| `path_node_move`       | Path, índice de segmento y punto finito tipado.                             | Mover un nodo lineal sin enviar `d` libre.               |
-| `path_node_edit`       | Insert/delete/set_command sobre nodos lineales absolutos.                   | Ajustar la estructura de una polilínea.                  |
+| `path_node_move`       | Path, índice de segmento y punto finito tipado.                             | Mover un endpoint absoluto sin enviar `d` libre.         |
+| `path_node_edit`       | Insert/delete/set_command y open/close de subpath tipados.                  | Ajustar la estructura de una polilínea.                  |
 | `path_effects_inspect` | Efectos LPE locales y paths que los referencian.                            | Auditar efectos sin editar sus parámetros.               |
 
 ## Defs, estilos y reutilización

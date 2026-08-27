@@ -160,15 +160,15 @@ export function moveAbsoluteSvgPathNode(
   const segments = parseSvgPathData(value);
   const segment = segments[index];
   if (!segment) throw new Error("Path node index does not exist");
-  if (
-    segment.command !== "M" &&
-    segment.command !== "L" &&
-    segment.command !== "T"
-  )
+  const endpointOffset = absoluteEndpointOffset(segment.command);
+  if (endpointOffset === undefined)
     throw new Error(
-      "Node move currently supports absolute moveto, lineto, and smooth quadratic endpoints",
+      "Node move currently supports absolute moveto, lineto, quadratic, cubic, smooth, and arc endpoints",
     );
-  segments[index] = { command: segment.command, values: [point.x, point.y] };
+  const values = [...segment.values];
+  values[endpointOffset] = point.x;
+  values[endpointOffset + 1] = point.y;
+  segments[index] = { command: segment.command, values };
   return serializeSvgPathData(segments);
 }
 
@@ -177,6 +177,8 @@ export function editAbsoluteLinearSvgPathNode(
   request:
     | { action: "delete"; index: number }
     | { action: "insert"; index: number; point: { x: number; y: number } }
+    | { action: "close_subpath"; index: number }
+    | { action: "open_subpath"; index: number }
     | { action: "set_command"; command: "L" | "T"; index: number },
 ): string {
   const segments = parseSvgPathData(value);
@@ -196,6 +198,19 @@ export function editAbsoluteLinearSvgPathNode(
     });
     return serializeSvgPathData(segments);
   }
+  if (request.action === "close_subpath" || request.action === "open_subpath") {
+    const subpath = locateSubpath(segments, request.index);
+    if (request.action === "close_subpath") {
+      if (subpath.closed) throw new Error("Path subpath is already closed");
+      if (subpath.end - subpath.start < 2)
+        throw new Error("Path subpath needs a drawable segment before closing");
+      segments.splice(subpath.end, 0, { command: "Z", values: [] });
+    } else {
+      if (!subpath.closed) throw new Error("Path subpath is already open");
+      segments.splice(subpath.end - 1, 1);
+    }
+    return serializeSvgPathData(segments);
+  }
   if (request.index === 0)
     throw new Error("The initial moveto cannot be edited");
   const segment = segments[request.index];
@@ -212,6 +227,42 @@ export function editAbsoluteLinearSvgPathNode(
     };
   }
   return serializeSvgPathData(segments);
+}
+
+function absoluteEndpointOffset(
+  command: SvgPathSegment["command"],
+): number | undefined {
+  switch (command) {
+    case "M":
+    case "L":
+    case "T":
+      return 0;
+    case "C":
+      return 4;
+    case "Q":
+    case "S":
+      return 2;
+    case "A":
+      return 5;
+    default:
+      return undefined;
+  }
+}
+
+function locateSubpath(
+  segments: readonly SvgPathSegment[],
+  index: number,
+): { closed: boolean; end: number; start: number } {
+  if (index >= segments.length)
+    throw new Error("Path node index does not exist");
+  let start = index;
+  while (start >= 0 && segments[start]?.command !== "M") start -= 1;
+  if (start < 0)
+    throw new Error("Path data must start with an absolute moveto");
+  let end = start + 1;
+  while (end < segments.length && segments[end]?.command !== "M") end += 1;
+  const tail = segments[end - 1]?.command;
+  return { closed: tail === "Z" || tail === "z", end, start };
 }
 
 function serializeReversedLinearSubpath(

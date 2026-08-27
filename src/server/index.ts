@@ -5154,7 +5154,7 @@ export function buildServer(config: ServerConfig): McpServer {
     "path_node_edit",
     {
       description:
-        "Inserts, deletes, or retags one explicit absolute linear path node by segment index without accepting raw SVG path data.",
+        "Edits explicit absolute linear path nodes or opens/closes a subpath by segment index without accepting raw SVG path data.",
       inputSchema: z
         .object({
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -5180,6 +5180,18 @@ export function buildServer(config: ServerConfig): McpServer {
                 action: z.literal("set_command"),
                 command: z.enum(["L", "T"]),
                 index: z.number().int().min(1).max(9_999),
+              })
+              .strict(),
+            z
+              .object({
+                action: z.literal("close_subpath"),
+                index: z.number().int().min(0).max(9_999),
+              })
+              .strict(),
+            z
+              .object({
+                action: z.literal("open_subpath"),
+                index: z.number().int().min(0).max(9_999),
               })
               .strict(),
           ]),
@@ -5227,7 +5239,7 @@ export function buildServer(config: ServerConfig): McpServer {
     "path_node_move",
     {
       description:
-        "Moves one explicit absolute moveto, lineto, or smooth-quadratic path node by zero-based segment index without accepting raw SVG path data.",
+        "Moves one explicit absolute moveto, lineto, quadratic, cubic, smooth, or arc endpoint by zero-based segment index without accepting raw SVG path data.",
       inputSchema: z
         .object({
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),

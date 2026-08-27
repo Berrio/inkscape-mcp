@@ -60,6 +60,12 @@ describe("SVG path AST", () => {
     expect(() =>
       moveAbsoluteSvgPathNode("M 0 0 l 4 2", 1, { x: 5, y: 3 }),
     ).toThrow("currently supports");
+    expect(
+      moveAbsoluteSvgPathNode("M 0 0 C 1 2 3 4 5 6 A 2 3 0 0 1 8 9", 1, {
+        x: 7,
+        y: 8,
+      }),
+    ).toBe("M 0 0 C 1 2 3 4 7 8 A 2 3 0 0 1 8 9");
   });
 
   it("inserts, removes, and retags safe linear path nodes", () => {
@@ -83,5 +89,17 @@ describe("SVG path AST", () => {
         index: 1,
       }),
     ).toBe("M 0 0 T 4 2");
+    expect(
+      editAbsoluteLinearSvgPathNode("M 0 0 L 4 2 M 8 0 L 9 1", {
+        action: "close_subpath",
+        index: 1,
+      }),
+    ).toBe("M 0 0 L 4 2 Z M 8 0 L 9 1");
+    expect(
+      editAbsoluteLinearSvgPathNode("M 0 0 L 4 2 Z", {
+        action: "open_subpath",
+        index: 2,
+      }),
+    ).toBe("M 0 0 L 4 2");
   });
 });

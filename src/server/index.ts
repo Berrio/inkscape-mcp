@@ -4795,6 +4795,79 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "path_modify",
+    {
+      description:
+        "Irreversibly simplifies a path or creates an inset, outset, or dynamic offset through an allowlisted native Inkscape action in a staged copy.",
+      inputSchema: z
+        .object({
+          confirmIrreversible: z.literal(true),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          operation: z.enum(["simplify", "inset", "outset", "offset"]),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        diff: semanticDiffSchema,
+        id: shapeIdSchema,
+        operation: z.enum(["simplify", "inset", "outset", "offset"]),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        warning: z.literal("PATH_MODIFIED_IRREVERSIBLY"),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, id, operation, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const targets = querySvgElementTargets(source, {
+        ids: [id],
+        limit: 1,
+        offset: 0,
+      });
+      if (
+        targets.missingIds.length > 0 ||
+        targets.elements[0]?.summary.kind !== "path"
+      )
+        throw new Error("path_modify accepts exactly one SVG path ID");
+      const result = await runNativePathBoolean({
+        config,
+        document,
+        expectedRevision,
+        ids: [id],
+        operation,
+        runner,
+        scratch,
+      });
+      const diff = summarizeSvgDiff(source, result);
+      const committed = await fileStore.commit({
+        contents: Buffer.from(result),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        diff,
+        id,
+        operation,
+        revision: committed.revision,
+        warning: "PATH_MODIFIED_IRREVERSIBLY" as const,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
     "path_break_apart",
     {
       description:
@@ -8578,7 +8651,16 @@ async function runNativePathBoolean(request: {
   expectedRevision: string;
   ids: readonly [string, string] | readonly string[];
   operation:
-    "cut" | "difference" | "division" | "exclusion" | "intersection" | "union";
+    | "cut"
+    | "difference"
+    | "division"
+    | "exclusion"
+    | "inset"
+    | "intersection"
+    | "offset"
+    | "outset"
+    | "simplify"
+    | "union";
   runner: ProcessRunner;
   scratch: ScratchManager;
 }): Promise<string> {

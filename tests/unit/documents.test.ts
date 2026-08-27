@@ -77,16 +77,16 @@ describe("basic SVG documents", () => {
 
   it("routes semantic connectors through simple endpoint centers", () => {
     const result = routeSvgConnector(
-      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><rect id="from" x="0" y="0" width="10" height="8"/><ellipse id="to" cx="30" cy="20" rx="5" ry="3"/><path id="connector" d="M 0 0 L 1 1" inkscape:connector-type="polyline"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><rect id="from" x="0" y="0" width="10" height="8" transform="translate(10 5) scale(2)"/><ellipse id="to" cx="30" cy="20" rx="5" ry="3"/><path id="connector" d="M 0 0 L 1 1" inkscape:connector-type="polyline"/></svg>',
       { axis: "horizontal-first", fromId: "from", id: "connector", toId: "to" },
     );
     expect(result.points).toEqual([
-      [5, 4],
-      [17.5, 4],
-      [17.5, 20],
+      [20, 13],
+      [25, 13],
+      [25, 20],
       [30, 20],
     ]);
-    expect(result.svg).toContain('d="M 5 4 L 17.5 4 L 17.5 20 L 30 20"');
+    expect(result.svg).toContain('d="M 20 13 L 25 13 L 25 20 L 30 20"');
     expect(() =>
       routeSvgConnector(result.svg, {
         axis: "auto",

@@ -2756,7 +2756,7 @@ export function buildServer(
     "connector_route",
     {
       description:
-        "Routes a semantic Inkscape connector orthogonally between centers of explicit untransformed rect, circle, or ellipse endpoints. It does not claim obstacle avoidance.",
+        "Routes a semantic Inkscape connector orthogonally between centers of explicit rect, circle, or ellipse endpoints, including axis-aligned transforms. It does not claim obstacle avoidance.",
       inputSchema: z
         .object({
           axis: z

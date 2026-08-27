@@ -299,7 +299,7 @@ export function retargetSvgConnector(
   return new XMLSerializer().serializeToString(document);
 }
 
-/** Routes one semantic connector through centers of simple, untransformed shapes. */
+/** Routes one semantic connector through centers of simple axis-aligned shapes. */
 export function routeSvgConnector(
   source: string,
   request: {
@@ -371,8 +371,6 @@ export function routeSvgConnector(
 }
 
 function connectorShapeCenter(element: XmlElement): { x: number; y: number } {
-  if (element.hasAttribute("transform"))
-    throw new Error("Connector routing requires endpoints without transforms");
   const attr = (name: string, fallback = 0) => {
     const value = element.getAttribute(name);
     const parsed = value === null ? fallback : Number(value);
@@ -380,6 +378,7 @@ function connectorShapeCenter(element: XmlElement): { x: number; y: number } {
       throw new Error("Connector endpoint geometry must be finite");
     return parsed;
   };
+  let center: { x: number; y: number };
   if (element.localName === "rect") {
     const width = attr("width");
     const height = attr("height");
@@ -387,21 +386,34 @@ function connectorShapeCenter(element: XmlElement): { x: number; y: number } {
       throw new Error(
         "Connector endpoint rectangle must have positive dimensions",
       );
-    return { x: attr("x") + width / 2, y: attr("y") + height / 2 };
-  }
-  if (element.localName === "circle") {
+    center = { x: attr("x") + width / 2, y: attr("y") + height / 2 };
+  } else if (element.localName === "circle") {
     if (attr("r") <= 0)
       throw new Error("Connector endpoint circle must have a positive radius");
-    return { x: attr("cx"), y: attr("cy") };
-  }
-  if (element.localName === "ellipse") {
+    center = { x: attr("cx"), y: attr("cy") };
+  } else if (element.localName === "ellipse") {
     if (attr("rx") <= 0 || attr("ry") <= 0)
       throw new Error("Connector endpoint ellipse must have positive radii");
-    return { x: attr("cx"), y: attr("cy") };
+    center = { x: attr("cx"), y: attr("cy") };
+  } else {
+    throw new Error(
+      "Connector routing supports rect, circle, and ellipse endpoints",
+    );
   }
-  throw new Error(
-    "Connector routing supports rect, circle, and ellipse endpoints",
-  );
+  const transform = element.getAttribute("transform");
+  if (transform === null) return center;
+  let matrix: AxisAlignedMatrix;
+  try {
+    matrix = parseAxisAlignedTransform(transform);
+  } catch {
+    throw new Error(
+      "Connector routing supports only axis-aligned endpoint transforms",
+    );
+  }
+  return {
+    x: matrix.a * center.x + matrix.e,
+    y: matrix.d * center.y + matrix.f,
+  };
 }
 
 function compactConnectorPoints(

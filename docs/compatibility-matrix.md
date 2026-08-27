@@ -27,16 +27,16 @@ habilitan por esta tabla si el doctor discrepa.
 
 ## Plataforma y transporte
 
-| Área                              | Estado                      | Evidencia y límite                                                                                                    |
-| --------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Windows + Inkscape 1.4.4 MSIX     | Estable para el baseline    | Discovery MSIX, doctor, stdio real y exports reales pasan en esta build. Las rutas MSIX no se fijan en configuración. |
-| Node.js 24 / npm 11               | Requerido                   | Declarado en `engines` y usado por build, tests y paquete aislado.                                                    |
-| MCP stdio moderno `2026-07-28`    | Probado                     | `test:mcp` conecta y ejecuta flujos MCP representativos con cliente SDK.                                              |
-| MCP stdio legacy                  | Probado                     | El mismo smoke cubre negociación legacy explícita.                                                                    |
-| HTTP                              | No implementado             | La CLI rechaza iniciar HTTP; no debe exponerse ni usarse como alternativa remota.                                     |
-| Inkscape 1.5+                     | Experimental/no anunciado   | No hay adapter `pages_v15`, fixtures de migración ni matriz multipágina aprobada.                                     |
-| Linux y macOS                     | No anunciados como estables | El código puede compilar, pero no hay integración real de esta release para plataformas/versiones.                    |
-| GUI bridge y extensiones GUI-only | No implementado             | El backend no depende de una ventana activa ni automatización por coordenadas.                                        |
+| Área                              | Estado                      | Evidencia y límite                                                                                                                         |
+| --------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Windows + Inkscape 1.4.4 MSIX     | Estable para el baseline    | Discovery MSIX, doctor, stdio real y exports reales pasan en esta build. Las rutas MSIX no se fijan en configuración.                      |
+| Node.js 24 / npm 11               | Requerido                   | Declarado en `engines` y usado por build, tests y paquete aislado.                                                                         |
+| MCP stdio moderno `2026-07-28`    | Probado                     | `test:mcp` conecta y ejecuta flujos MCP representativos con cliente SDK.                                                                   |
+| MCP stdio legacy                  | Probado                     | El mismo smoke cubre negociación legacy explícita.                                                                                         |
+| HTTP                              | Experimental local (P2)     | `/mcp` en `127.0.0.1` con bearer, Host/Origin, límite de cuerpo/tiempo y rate limit. Aún no pasa conformance ni se anuncia estable/remoto. |
+| Inkscape 1.5+                     | Experimental/no anunciado   | No hay adapter `pages_v15`, fixtures de migración ni matriz multipágina aprobada.                                                          |
+| Linux y macOS                     | No anunciados como estables | El código puede compilar, pero no hay integración real de esta release para plataformas/versiones.                                         |
+| GUI bridge y extensiones GUI-only | No implementado             | El backend no depende de una ventana activa ni automatización por coordenadas.                                                             |
 
 ## Importación
 

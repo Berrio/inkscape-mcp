@@ -2014,10 +2014,10 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 #### Streamable HTTP opt-in
 
-- [ ] `F10-T01` Implementar handler stateless con factoría de servidor por request usando API v2 oficial.
-- [ ] `F10-T02` Escuchar `127.0.0.1`, endpoint `/mcp`, body/time/rate limits.
-- [ ] `F10-T03` Validar Host/Origin y probar DNS rebinding.
-- [ ] `F10-T04` Implementar bearer auth obligatorio siempre que HTTP esté activo, con redacción/rotación local; no ofrecer modo anónimo ni siquiera en loopback.
+- [x] `F10-T01` Implementar handler stateless con factoría de servidor por request usando API v2 oficial. — `createMcpHandler` v2 crea un servidor por request y rechaza el transporte legacy en HTTP.
+- [x] `F10-T02` Escuchar `127.0.0.1`, endpoint `/mcp`, body/time/rate limits. — El listener sólo acepta `/mcp`, limita el cuerpo por `maxInputBytes`, usa el timeout de proceso y aplica 120 requests/minuto en loopback.
+- [x] `F10-T03` Validar Host/Origin y probar DNS rebinding. — Las validaciones oficiales v2 preceden autenticación/dispatch y las pruebas cubren Host y Origin adversarios.
+- [~] `F10-T04` Implementar bearer auth obligatorio siempre que HTTP esté activo, con redacción/rotación local; no ofrecer modo anónimo ni siquiera en loopback. — Token base64url ≥32 caracteres sólo por entorno, comparación constante y rotación por reinicio están implementados; falta una rotación sin reinicio y la revisión formal de threat model HTTP.
 - [ ] `F10-T05` Asociar documents/jobs/resources a autorización explícita, no a sesión MCP.
 - [ ] `F10-T06` Añadir OpenTelemetry/logger HTTP estructurado.
 - [ ] `F10-T07` Ejecutar Inspector y conformance suite HTTP fijados en lockfile mediante scripts npm, con requirements/protocolo `2026-07-28` explícitos.

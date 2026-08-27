@@ -15,6 +15,7 @@ import {
 } from "./automation/recipe-command.js";
 import { loadConfigFromCli, redactDiagnostic } from "./config/index.js";
 import { formatDoctor, runDoctor } from "./doctor/index.js";
+import { readHttpBearerToken, startHttpMcpServer } from "./http.js";
 import { buildServer } from "./server/index.js";
 import { recoverStaleScratch } from "./storage/index.js";
 
@@ -79,9 +80,6 @@ if (argument === "--help" || argument === "-h") {
 } else {
   try {
     const config = await loadConfigFromCli(argumentsList);
-    if (config.transport !== "stdio") {
-      throw new Error("HTTP transport is not implemented yet");
-    }
     const staleScratchRemoved = await recoverStaleScratch(
       config.scratchRoot === "auto" ? undefined : config.scratchRoot,
     );
@@ -89,13 +87,26 @@ if (argument === "--help" || argument === "-h") {
       process.stderr.write(
         `Recovered ${staleScratchRemoved} stale Inkscape MCP scratch directories\n`,
       );
-    serveStdio(() => buildServer(config), {
-      legacy: "serve",
-      onerror: (error) =>
-        process.stderr.write(
-          `MCP stdio error: ${redactDiagnostic(error.message)}\n`,
-        ),
-    });
+    if (config.transport === "http") {
+      const server = await startHttpMcpServer(
+        config,
+        readHttpBearerToken(process.env),
+      );
+      process.stderr.write(`MCP HTTP listening at ${server.url}\n`);
+      const stop = () => {
+        void server.close();
+      };
+      process.once("SIGINT", stop);
+      process.once("SIGTERM", stop);
+    } else {
+      serveStdio(() => buildServer(config), {
+        legacy: "serve",
+        onerror: (error) =>
+          process.stderr.write(
+            `MCP stdio error: ${redactDiagnostic(error.message)}\n`,
+          ),
+      });
+    }
   } catch (error: unknown) {
     process.stderr.write(
       `${formatError(error, "Unable to start MCP server")}\n`,

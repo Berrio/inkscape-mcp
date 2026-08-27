@@ -90,6 +90,10 @@ un parser nativo en sandboxed.
   ejecutar sólo tras resolver colisiones o revisiones obsoletas.
 - No incluyas rutas absolutas, documentos o secretos en logs que compartas.
 
-No habilites HTTP como solución para ejecutar el MCP fuera del equipo: el
-transporte HTTP aún no está implementado en esta build. Una futura opción HTTP
-necesitará autenticación y una revisión de threat model independiente.
+El transporte HTTP experimental nunca es una vía para exponer el MCP fuera del
+equipo: sólo escucha `127.0.0.1`, valida Host/Origin y exige un bearer token
+local inyectado por `INKSCAPE_MCP_HTTP_TOKEN`. Mantén el token fuera de archivos
+versionados, rótalo reiniciando el proceso y no configures proxies, túneles ni
+binds alternativos. Aún faltan conformance HTTP, auditoría estructurada y un
+modelo de autorización por principal antes de anunciarlo como transporte
+estable.

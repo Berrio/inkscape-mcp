@@ -179,6 +179,26 @@ export function editAbsoluteLinearSvgPathNode(
     | { action: "insert"; index: number; point: { x: number; y: number } }
     | { action: "close_subpath"; index: number }
     | { action: "open_subpath"; index: number }
+    | {
+        action: "set_quadratic_handle";
+        control: { x: number; y: number };
+        index: number;
+      }
+    | {
+        action: "set_cubic_handles";
+        control1: { x: number; y: number };
+        control2: { x: number; y: number };
+        index: number;
+      }
+    | {
+        action: "set_arc_parameters";
+        index: number;
+        largeArc: boolean;
+        rotation: number;
+        rx: number;
+        ry: number;
+        sweep: boolean;
+      }
     | { action: "set_command"; command: "L" | "T"; index: number },
 ): string {
   const segments = parseSvgPathData(value);
@@ -209,6 +229,61 @@ export function editAbsoluteLinearSvgPathNode(
       if (!subpath.closed) throw new Error("Path subpath is already open");
       segments.splice(subpath.end - 1, 1);
     }
+    return serializeSvgPathData(segments);
+  }
+  if (request.action === "set_quadratic_handle") {
+    const segment = requireAbsoluteSegment(segments, request.index, "Q");
+    validatePoint(request.control, "Quadratic handle");
+    segments[request.index] = {
+      command: "Q",
+      values: [
+        request.control.x,
+        request.control.y,
+        segment.values[2]!,
+        segment.values[3]!,
+      ],
+    };
+    return serializeSvgPathData(segments);
+  }
+  if (request.action === "set_cubic_handles") {
+    const segment = requireAbsoluteSegment(segments, request.index, "C");
+    validatePoint(request.control1, "First cubic handle");
+    validatePoint(request.control2, "Second cubic handle");
+    segments[request.index] = {
+      command: "C",
+      values: [
+        request.control1.x,
+        request.control1.y,
+        request.control2.x,
+        request.control2.y,
+        segment.values[4]!,
+        segment.values[5]!,
+      ],
+    };
+    return serializeSvgPathData(segments);
+  }
+  if (request.action === "set_arc_parameters") {
+    if (
+      !Number.isFinite(request.rx) ||
+      !Number.isFinite(request.ry) ||
+      !Number.isFinite(request.rotation) ||
+      request.rx < 0 ||
+      request.ry < 0
+    )
+      throw new Error("Arc parameters are invalid");
+    const segment = requireAbsoluteSegment(segments, request.index, "A");
+    segments[request.index] = {
+      command: "A",
+      values: [
+        request.rx,
+        request.ry,
+        request.rotation,
+        request.largeArc ? 1 : 0,
+        request.sweep ? 1 : 0,
+        segment.values[5]!,
+        segment.values[6]!,
+      ],
+    };
     return serializeSvgPathData(segments);
   }
   if (request.index === 0)
@@ -263,6 +338,22 @@ function locateSubpath(
   while (end < segments.length && segments[end]?.command !== "M") end += 1;
   const tail = segments[end - 1]?.command;
   return { closed: tail === "Z" || tail === "z", end, start };
+}
+
+function requireAbsoluteSegment(
+  segments: readonly SvgPathSegment[],
+  index: number,
+  command: "A" | "C" | "Q",
+): SvgPathSegment {
+  const segment = segments[index];
+  if (!segment || segment.command !== command)
+    throw new Error(`Path segment must be an absolute ${command} command`);
+  return segment;
+}
+
+function validatePoint(point: { x: number; y: number }, name: string): void {
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y))
+    throw new Error(`${name} coordinates must be finite`);
 }
 
 function serializeReversedLinearSubpath(

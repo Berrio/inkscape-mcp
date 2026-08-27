@@ -5253,6 +5253,47 @@ export function buildServer(config: ServerConfig): McpServer {
                 index: z.number().int().min(0).max(9_999),
               })
               .strict(),
+            z
+              .object({
+                action: z.literal("set_quadratic_handle"),
+                control: z
+                  .object({
+                    x: z.number().finite(),
+                    y: z.number().finite(),
+                  })
+                  .strict(),
+                index: z.number().int().min(1).max(9_999),
+              })
+              .strict(),
+            z
+              .object({
+                action: z.literal("set_cubic_handles"),
+                control1: z
+                  .object({
+                    x: z.number().finite(),
+                    y: z.number().finite(),
+                  })
+                  .strict(),
+                control2: z
+                  .object({
+                    x: z.number().finite(),
+                    y: z.number().finite(),
+                  })
+                  .strict(),
+                index: z.number().int().min(1).max(9_999),
+              })
+              .strict(),
+            z
+              .object({
+                action: z.literal("set_arc_parameters"),
+                index: z.number().int().min(1).max(9_999),
+                largeArc: z.boolean(),
+                rotation: z.number().finite(),
+                rx: z.number().finite().nonnegative(),
+                ry: z.number().finite().nonnegative(),
+                sweep: z.boolean(),
+              })
+              .strict(),
           ]),
           path: z.string().min(1).max(1024),
           workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),

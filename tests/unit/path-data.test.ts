@@ -101,5 +101,31 @@ describe("SVG path AST", () => {
         index: 2,
       }),
     ).toBe("M 0 0 L 4 2");
+    expect(
+      editAbsoluteLinearSvgPathNode("M 0 0 Q 1 2 3 4 C 5 6 7 8 9 10", {
+        action: "set_quadratic_handle",
+        control: { x: 2, y: 3 },
+        index: 1,
+      }),
+    ).toBe("M 0 0 Q 2 3 3 4 C 5 6 7 8 9 10");
+    expect(
+      editAbsoluteLinearSvgPathNode("M 0 0 C 1 2 3 4 5 6", {
+        action: "set_cubic_handles",
+        control1: { x: 2, y: 3 },
+        control2: { x: 4, y: 5 },
+        index: 1,
+      }),
+    ).toBe("M 0 0 C 2 3 4 5 5 6");
+    expect(
+      editAbsoluteLinearSvgPathNode("M 0 0 A 2 3 0 0 1 8 9", {
+        action: "set_arc_parameters",
+        index: 1,
+        largeArc: true,
+        rotation: 45,
+        rx: 4,
+        ry: 5,
+        sweep: false,
+      }),
+    ).toBe("M 0 0 A 4 5 45 1 0 8 9");
   });
 });

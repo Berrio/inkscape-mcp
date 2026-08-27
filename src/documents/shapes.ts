@@ -541,6 +541,26 @@ export function editSvgPathNode(
     | { action: "insert"; index: number; point: { x: number; y: number } }
     | { action: "close_subpath"; index: number }
     | { action: "open_subpath"; index: number }
+    | {
+        action: "set_quadratic_handle";
+        control: { x: number; y: number };
+        index: number;
+      }
+    | {
+        action: "set_cubic_handles";
+        control1: { x: number; y: number };
+        control2: { x: number; y: number };
+        index: number;
+      }
+    | {
+        action: "set_arc_parameters";
+        index: number;
+        largeArc: boolean;
+        rotation: number;
+        rx: number;
+        ry: number;
+        sweep: boolean;
+      }
     | { action: "set_command"; command: "L" | "T"; index: number },
 ): { id: string; svg: string } {
   const document = parseSafeDocument(source);

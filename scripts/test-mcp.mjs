@@ -246,6 +246,43 @@ try {
   )
     throw new Error("metadata_manage did not update element accessibility");
   await writeFile(
+    join(workspaceRoot, "text-path.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><path id="baseline" d="M 0 0 L 10 0"/><text id="curved_text" x="0" y="0">Hello<tspan dx="1">!</tspan></text></svg>',
+  );
+  const textPathRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "text-path.svg")))
+    .digest("hex");
+  const attachedTextPath = await workspaceClient.callTool({
+    arguments: {
+      action: "attach",
+      expectedRevision: textPathRevision,
+      path: "text-path.svg",
+      pathId: "baseline",
+      startOffset: 1,
+      textId: "curved_text",
+      workspaceId: workspace.id,
+    },
+    name: "text_path_manage",
+  });
+  const attachedTextPathRevision = attachedTextPath.structuredContent?.revision;
+  if (attachedTextPath.isError || typeof attachedTextPathRevision !== "string")
+    throw new Error("text_path_manage did not attach text to a path");
+  const detachedTextPath = await workspaceClient.callTool({
+    arguments: {
+      action: "detach",
+      expectedRevision: attachedTextPathRevision,
+      path: "text-path.svg",
+      textId: "curved_text",
+      workspaceId: workspace.id,
+    },
+    name: "text_path_manage",
+  });
+  if (
+    detachedTextPath.isError ||
+    detachedTextPath.structuredContent?.textId !== "curved_text"
+  )
+    throw new Error("text_path_manage did not detach text from a path");
+  await writeFile(
     join(workspaceRoot, "percentage.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="50%" viewBox="0 0 20 10"/>',
   );

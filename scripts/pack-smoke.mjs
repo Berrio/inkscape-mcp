@@ -85,6 +85,8 @@ try {
   for (const scriptName of [
     "Invoke-InkscapeMcpRecipe.ps1",
     "Register-InkscapeMcpDailyTask.ps1",
+    "Invoke-InkscapeMcpQueue.ps1",
+    "Register-InkscapeMcpQueueDailyTask.ps1",
   ])
     if (!existsSync(join(installedPackage, "scripts", "windows", scriptName)))
       throw new Error(`Packed CLI is missing Windows automation ${scriptName}`);
@@ -258,11 +260,34 @@ try {
       { encoding: "utf8" },
     ),
   );
+  const durableList = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        npmCli,
+        "exec",
+        "--prefix",
+        installDirectory,
+        "--",
+        "inkscape-mcp",
+        "queue",
+        "list",
+        "--status",
+        "completed",
+        "--workspace-root",
+        workspaceDirectory,
+      ],
+      { encoding: "utf8" },
+    ),
+  );
   if (
     durableJob.status !== "queued" ||
     queueWorker.completed !== 1 ||
     durableReceipt.status !== "completed" ||
-    durableReceipt.receipt?.schema !== "inkscape-mcp-recipe-receipt/v1"
+    durableReceipt.receipt?.schema !== "inkscape-mcp-recipe-receipt/v1" ||
+    !Array.isArray(durableList) ||
+    durableList[0]?.id !== durableJob.id ||
+    durableList[0]?.receipt !== undefined
   ) {
     throw new Error("Packed CLI did not persist and run a durable recipe");
   }

@@ -297,6 +297,67 @@ try {
   if (markerApplied.isError || markerApplied.structuredContent?.id !== "arrow")
     throw new Error("markers_manage did not apply a marker");
   await writeFile(
+    join(workspaceRoot, "filters.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect id="filter_target" width="10" height="5"/></svg>',
+  );
+  const filtersRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "filters.svg")))
+    .digest("hex");
+  const filterCreated = await workspaceClient.callTool({
+    arguments: {
+      action: "create",
+      expectedRevision: filtersRevision,
+      path: "filters.svg",
+      spec: { id: "soft", kind: "blur", stdDeviation: 2 },
+      workspaceId: workspace.id,
+    },
+    name: "filters_manage",
+  });
+  const filterCreatedRevision = filterCreated.structuredContent?.revision;
+  if (filterCreated.isError || typeof filterCreatedRevision !== "string")
+    throw new Error("filters_manage did not create a filter");
+  const filterApplied = await workspaceClient.callTool({
+    arguments: {
+      action: "apply",
+      expectedRevision: filterCreatedRevision,
+      id: "soft",
+      path: "filters.svg",
+      targetIds: ["filter_target"],
+      workspaceId: workspace.id,
+    },
+    name: "filters_manage",
+  });
+  const filterAppliedRevision = filterApplied.structuredContent?.revision;
+  if (filterApplied.isError || typeof filterAppliedRevision !== "string")
+    throw new Error("filters_manage did not apply a filter");
+  const filterReleased = await workspaceClient.callTool({
+    arguments: {
+      action: "release",
+      expectedRevision: filterAppliedRevision,
+      path: "filters.svg",
+      targetIds: ["filter_target"],
+      workspaceId: workspace.id,
+    },
+    name: "filters_manage",
+  });
+  const filterReleasedRevision = filterReleased.structuredContent?.revision;
+  if (filterReleased.isError || typeof filterReleasedRevision !== "string")
+    throw new Error("filters_manage did not release a filter");
+  const filterDeleted = await workspaceClient.callTool({
+    arguments: {
+      action: "delete",
+      expectedRevision: filterReleasedRevision,
+      id: "soft",
+      path: "filters.svg",
+      workspaceId: workspace.id,
+    },
+    name: "filters_manage",
+  });
+  if (filterDeleted.isError || filterDeleted.structuredContent?.id !== "soft")
+    throw new Error(
+      "filters_manage did not safely delete an unreferenced filter",
+    );
+  await writeFile(
     join(workspaceRoot, "metadata.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><image id="accessible_image" href="data:image/png;base64,AA==" width="1" height="1"/></svg>',
   );

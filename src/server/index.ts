@@ -13,12 +13,15 @@ import {
   adjustPageMarginsSvg,
   changePageOrientationSvg,
   createSvgDocument,
+  applySvgFilter,
   cropSvgImage,
   applySvgClipPath,
   applySvgMask,
   createSvgRectClipPath,
   createSvgRectMask,
+  createSvgFilter,
   deleteSvgClipPath,
+  deleteSvgFilter,
   deleteSvgMask,
   createSvgShapes,
   attachSvgTextToPath,
@@ -61,10 +64,12 @@ import {
   createSvgMarker,
   deleteSvgMarker,
   updateSvgMarker,
+  updateSvgFilter,
   resizeContentSvg,
   resizePageOnlySvg,
   releaseSvgClipPath,
   releaseSvgMask,
+  releaseSvgFilter,
   rewriteStagedAssetReferences,
   updateSvgPage,
   updateDocumentDisplaySettings,
@@ -642,6 +647,43 @@ const markerSpecSchema = z.object({
   size: z.number().finite().positive().max(1_000),
   units: z.enum(["strokeWidth", "userSpaceOnUse"]).optional(),
 });
+const filterSpecSchema = z.discriminatedUnion("kind", [
+  z.object({
+    id: shapeIdSchema,
+    kind: z.literal("blur"),
+    stdDeviation: z.number().finite().nonnegative(),
+  }),
+  z.object({
+    dx: z.number().finite(),
+    dy: z.number().finite(),
+    id: shapeIdSchema,
+    kind: z.literal("drop_shadow"),
+    stdDeviation: z.number().finite().nonnegative(),
+  }),
+  z.object({
+    id: shapeIdSchema,
+    input: z.enum(["BackgroundImage", "SourceGraphic"]).optional(),
+    kind: z.literal("blend"),
+    mode: z.enum([
+      "multiply",
+      "screen",
+      "overlay",
+      "darken",
+      "lighten",
+      "color-dodge",
+      "color-burn",
+      "hard-light",
+      "soft-light",
+      "difference",
+      "exclusion",
+    ]),
+  }),
+  z.object({
+    id: shapeIdSchema,
+    kind: z.literal("color_matrix"),
+    values: z.array(z.number().finite()).length(20),
+  }),
+]);
 const layoutAnchorSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("selection") }),
   z.object({ kind: z.literal("page"), pageId: shapeIdSchema.optional() }),
@@ -2741,6 +2783,105 @@ export function buildServer(config: ServerConfig): McpServer {
         ...(input.action === "elements"
           ? { ids: input.elements.map((element) => element.id) }
           : {}),
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "filters_manage",
+    {
+      description:
+        "Creates, replaces, applies, releases or safely deletes typed SVG blur, drop-shadow, blend and color-matrix filters without accepting arbitrary XML.",
+      inputSchema: z.discriminatedUnion("action", [
+        z.object({
+          action: z.literal("create"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          spec: filterSpecSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("update"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          spec: filterSpecSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("delete"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("apply"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          targetIds: z.array(shapeIdSchema).min(1).max(100),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("release"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          targetIds: z.array(shapeIdSchema).min(1).max(100),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+      ]),
+      outputSchema: z.object({
+        action: z.enum(["create", "update", "delete", "apply", "release"]),
+        backupCreated: z.boolean(),
+        id: shapeIdSchema.optional(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        targetIds: z.array(shapeIdSchema).optional(),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(input.workspaceId, input.path);
+      const source = await readFile(document.absolutePath, "utf8");
+      let changed: string;
+      let id: string | undefined;
+      let targetIds: readonly string[] | undefined;
+      if (input.action === "create" || input.action === "update") {
+        changed =
+          input.action === "create"
+            ? createSvgFilter(source, input.spec)
+            : updateSvgFilter(source, input.spec);
+        id = input.spec.id;
+      } else if (input.action === "delete") {
+        changed = deleteSvgFilter(source, input.id);
+        id = input.id;
+      } else if (input.action === "apply") {
+        changed = applySvgFilter(source, input.id, input.targetIds);
+        id = input.id;
+        targetIds = input.targetIds;
+      } else {
+        changed = releaseSvgFilter(source, input.targetIds);
+        targetIds = input.targetIds;
+      }
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: input.expectedRevision,
+        expectedRevision: input.expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        action: input.action,
+        backupCreated: committed.backupPath !== undefined,
+        ...(id === undefined ? {} : { id }),
+        ...(targetIds === undefined ? {} : { targetIds }),
         revision: committed.revision,
       };
       return {

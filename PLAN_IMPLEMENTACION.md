@@ -1866,7 +1866,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F07-T33` Guías y grids documentales sin depender de preferencias globales. — `guides_grids_manage` inspecciona y hace CRUD tipado de guías y `xygrid` en `sodipodi:namedview`, sin tocar configuración global de Inkscape.
 - [~] `F07-T34` Metadata title/desc/RDF/license con sanitización. — `metadata_manage` edita title, desc y licencia como texto acotado y sanitizado; las pruebas unitarias y MCP cubren documento y elemento. RDF libre permanece fuera de alcance hasta definir un modelo seguro.
 - [x] `F07-T35` Accesibilidad básica y warnings de contraste/orden solo como heurística. — `metadata_manage` establece `aria-label`, `aria-hidden`, title y desc; `accessibility_inspect` añade contraste de texto directo contra blanco y orden documental como heurísticas, con sus limitaciones explícitas.
-- [ ] `F07-T36` Investigar LPE; publicar únicamente subconjunto headless con smoke tests.
+- [~] `F07-T36` Investigar LPE; publicar únicamente subconjunto headless con smoke tests. — `path_effects_inspect` expone sólo efectos locales preservados y sus referencias; edición y smoke nativo por tipo de LPE siguen pendientes.
 
 #### Cobertura avanzada adicional
 

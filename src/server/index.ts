@@ -3417,6 +3417,76 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "text_to_paths",
+    {
+      description:
+        "Irreversibly converts explicit SVG text element IDs to paths through Inkscape in a staged copy. The caller must confirm the destructive conversion.",
+      inputSchema: z
+        .object({
+          confirmIrreversible: z.literal(true),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z.array(shapeIdSchema).min(1).max(100),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        convertedIds: z.array(shapeIdSchema),
+        diff: semanticDiffSchema,
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        warning: z.literal("TEXT_CONVERTED_TO_PATHS_IRREVERSIBLE"),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, ids, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      if (new Set(ids).size !== ids.length)
+        throw new Error("Text IDs must be unique");
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const targets = querySvgElementTargets(source, {
+        ids,
+        limit: 100,
+        offset: 0,
+      });
+      if (targets.missingIds.length > 0)
+        throw new Error("Text ID does not exist");
+      if (targets.elements.some((target) => target.summary.kind !== "text"))
+        throw new Error("text_to_paths accepts only SVG text elements");
+      const result = await runNativeTextToPaths({
+        config,
+        document,
+        expectedRevision,
+        ids,
+        runner,
+        scratch,
+      });
+      const diff = summarizeSvgDiff(source, result);
+      const committed = await fileStore.commit({
+        contents: Buffer.from(result),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        convertedIds: ids,
+        diff,
+        revision: committed.revision,
+        warning: "TEXT_CONVERTED_TO_PATHS_IRREVERSIBLE" as const,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
     "paths_boolean",
     {
       description:
@@ -7077,6 +7147,71 @@ function assertNoNestedLayoutSelection(
       parentId = parentById.get(parentId);
     }
   }
+}
+
+async function runNativeTextToPaths(request: {
+  config: ServerConfig;
+  document: ResolvedWorkspacePath;
+  expectedRevision: string;
+  ids: readonly string[];
+  runner: ProcessRunner;
+  scratch: ScratchManager;
+}): Promise<string> {
+  const discovery = await locateInkscape({
+    config: request.config,
+    cwd: process.cwd(),
+    runner: request.runner,
+  });
+  const candidate = discovery.candidates[0];
+  if (!candidate) throw new Error("Inkscape executable is unavailable");
+  const probe = await probeInkscapeCandidate(
+    request.runner,
+    candidate,
+    process.cwd(),
+  );
+  if (!("version" in probe))
+    throw new Error("Inkscape executable could not be validated");
+  return request.scratch.withDirectory("staging", async (directory) => {
+    const nativeInput = await createNativeInputBundle(
+      request.document.absolutePath,
+      request.expectedRevision,
+      directory,
+      {
+        allowedRoot: request.document.workspaceRoot,
+        maxDependencyBytes: request.config.maxInputBytes,
+        maximumSanitizeMode: request.config.maximumSanitizeMode,
+      },
+    );
+    const outputPath = join(directory, "result.svg");
+    const actions = [
+      `select-by-id:${request.ids.join(",")}`,
+      "object-to-path",
+      `export-filename:${outputPath}`,
+      "export-plain-svg",
+      "export-do",
+    ].join(";");
+    const run = await request.runner.run(candidate.executablePath, {
+      args: [nativeInput.path, `--actions=${actions}`],
+      cwd: directory,
+      maxStderrBytes: request.config.maxStderrBytes,
+      maxStdoutBytes: request.config.maxStdoutBytes,
+      timeoutMs: request.config.processTimeoutMs,
+    });
+    if (run.exitCode !== 0 || run.terminationReason !== "completed")
+      throw new Error("Inkscape text-to-path conversion failed");
+    const exported = await readFile(outputPath, "utf8");
+    const sanitized = sanitizeSvg(exported, {
+      maxElements: 100_000,
+      maxInputBytes: request.config.maxInputBytes,
+      mode: request.config.maximumSanitizeMode,
+    });
+    if (sanitized.removed.length > 0)
+      throw new Error(
+        "Inkscape text-to-path result did not meet SVG safety policy",
+      );
+    await nativeInput.assertCurrent();
+    return sanitized.svg;
+  });
 }
 
 async function runNativePathBoolean(request: {

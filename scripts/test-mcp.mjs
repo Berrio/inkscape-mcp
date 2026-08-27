@@ -501,6 +501,27 @@ try {
     textReplaced.structuredContent?.mode !== "replace_structure"
   )
     throw new Error("text_manage did not replace text with multiline spans");
+  const textPathsRevision = textReplaced.structuredContent?.revision;
+  if (typeof textPathsRevision !== "string")
+    throw new Error(
+      "text_manage did not return a revision for path conversion",
+    );
+  const textPaths = await workspaceClient.callTool({
+    arguments: {
+      confirmIrreversible: true,
+      expectedRevision: textPathsRevision,
+      ids: ["editable"],
+      path: "text.svg",
+      workspaceId: workspace.id,
+    },
+    name: "text_to_paths",
+  });
+  if (
+    textPaths.isError ||
+    textPaths.structuredContent?.warning !==
+      "TEXT_CONVERTED_TO_PATHS_IRREVERSIBLE"
+  )
+    throw new Error("text_to_paths did not require and perform conversion");
   await writeFile(
     join(workspaceRoot, "text-path.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><path id="baseline" d="M 0 0 L 10 0"/><text id="curved_text" x="0" y="0">Hello<tspan dx="1">!</tspan></text></svg>',

@@ -1818,7 +1818,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F07-T21` Inspeccionar flowed text y ofrecer conversión gateada.
 - [x] `F07-T22` Descubrir fuentes del sistema de forma acotada y cacheada. — `fonts_list` usa la colección de fuentes instalada en Windows o fontconfig en Unix, no expone rutas y mantiene una caché de cinco minutos.
 - [x] `F07-T23` Preflight de fuente ausente/sustitución y limitaciones de incrustación. — `fonts_preflight` compara familias declaradas con la caché, distingue genéricas y advierte explícitamente que cobertura de glifos, sustitución de métricas y permisos de incrustación no se verifican.
-- [ ] `F07-T24` Convertir texto a paths como operación irreversible documentada.
+- [x] `F07-T24` Convertir texto a paths como operación irreversible documentada. — `text_to_paths` requiere IDs explícitos, revisión y `confirmIrreversible: true`; usa la acción nativa de Inkscape en una copia staged, sanea el resultado y publica un warning irreversible. Pruebas MCP verifican el flujo.
 
 #### Imágenes y recursos
 

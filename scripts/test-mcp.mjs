@@ -429,6 +429,39 @@ try {
     elementMetadata.structuredContent?.ids?.[0] !== "accessible_image"
   )
     throw new Error("metadata_manage did not update element accessibility");
+  const listedFonts = await workspaceClient.callTool({
+    arguments: {},
+    name: "fonts_list",
+  });
+  if (
+    listedFonts.isError ||
+    (listedFonts.structuredContent?.familyCount ?? 0) < 1 ||
+    listedFonts.structuredContent?.families?.length !==
+      listedFonts.structuredContent?.familyCount
+  )
+    throw new Error(
+      "fonts_list did not return a bounded system font inventory",
+    );
+  await writeFile(
+    join(workspaceRoot, "font-preflight.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><text font-family="MissingTestFontForPreflight, serif">Text</text></svg>',
+  );
+  const fontPreflight = await workspaceClient.callTool({
+    arguments: {
+      path: "font-preflight.svg",
+      workspaceId: workspace.id,
+    },
+    name: "fonts_preflight",
+  });
+  if (
+    fontPreflight.isError ||
+    fontPreflight.structuredContent?.missingFamilies?.[0] !==
+      "MissingTestFontForPreflight" ||
+    !fontPreflight.structuredContent?.warnings?.includes(
+      "FONT_EMBEDDING_AND_GLYPH_COVERAGE_UNVERIFIED",
+    )
+  )
+    throw new Error("fonts_preflight did not report its limitations");
   await writeFile(
     join(workspaceRoot, "text.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><text id="editable" x="4">Hello<tspan dx="1"> world</tspan></text></svg>',

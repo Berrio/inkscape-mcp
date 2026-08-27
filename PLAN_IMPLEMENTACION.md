@@ -1816,8 +1816,8 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F07-T19` Soportar multiline, baseline, letter/word spacing, direction y writing mode cuando SVG/Inkscape lo permitan. — El modo de reemplazo crea líneas SVG mediante tspans y el patch admite baseline, text-anchor, spacing, direction y writing-mode; pruebas unitarias y MCP verifican ambos modos.
 - [~] `F07-T20` Crear/quitar text-on-path y mantener refs. — `text_path_manage` adjunta o libera un `<textPath href="#id">`, preservando contenido y tspans; IDs de texto/path son estrictos. Falta smoke MCP y cobertura de referencias complejas.
 - [ ] `F07-T21` Inspeccionar flowed text y ofrecer conversión gateada.
-- [ ] `F07-T22` Descubrir fuentes del sistema de forma acotada y cacheada.
-- [ ] `F07-T23` Preflight de fuente ausente/sustitución y limitaciones de incrustación.
+- [x] `F07-T22` Descubrir fuentes del sistema de forma acotada y cacheada. — `fonts_list` usa la colección de fuentes instalada en Windows o fontconfig en Unix, no expone rutas y mantiene una caché de cinco minutos.
+- [x] `F07-T23` Preflight de fuente ausente/sustitución y limitaciones de incrustación. — `fonts_preflight` compara familias declaradas con la caché, distingue genéricas y advierte explícitamente que cobertura de glifos, sustitución de métricas y permisos de incrustación no se verifican.
 - [ ] `F07-T24` Convertir texto a paths como operación irreversible documentada.
 
 #### Imágenes y recursos

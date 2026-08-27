@@ -24,6 +24,11 @@ export {
 } from "./preflight.js";
 export { inspectSvgInventory, type DocumentInventory } from "./inventory.js";
 export {
+  normalizeFontFamilies,
+  preflightSvgFonts,
+  type SvgFontPreflight,
+} from "./fonts.js";
+export {
   planUnusedSvgDefs,
   vacuumUnusedSvgDefs,
   type UnusedDefsPlan,

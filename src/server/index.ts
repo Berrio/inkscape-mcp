@@ -47,11 +47,13 @@ import {
   fitPageToBoundsSvg,
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
+  normalizeFontFamilies,
   inspectSvgSettings,
   listSvgPages,
   pageSizeFromPreset,
   parseViewportLength,
   preflightSvg,
+  preflightSvgFonts,
   querySvgElementTargets,
   reorderSvgPages,
   reparentSvgShapes,
@@ -1005,6 +1007,21 @@ export function buildServer(config: ServerConfig): McpServer {
     ),
   );
   const workspaces = () => WorkspaceService.create(config.workspaceRoots);
+  let fontCache:
+    | { expiresAt: number; families: readonly string[]; source: string }
+    | undefined;
+
+  const systemFonts = async (refresh: boolean) => {
+    if (!refresh && fontCache !== undefined && fontCache.expiresAt > Date.now())
+      return { ...fontCache, cached: true };
+    const discovered = await discoverSystemFontFamilies(runner);
+    fontCache = {
+      expiresAt: Date.now() + 5 * 60_000,
+      families: discovered.families,
+      source: discovered.source,
+    };
+    return { ...fontCache, cached: false };
+  };
 
   server.registerResource(
     "artifact",
@@ -1076,6 +1093,80 @@ export function buildServer(config: ServerConfig): McpServer {
           workspaceReady: report.workspaceReady,
         },
         workspaceReady: report.workspaceReady,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "fonts_list",
+    {
+      description:
+        "Lists a bounded cache of local system font family names without exposing font file paths.",
+      inputSchema: z.object({ refresh: z.boolean().default(false) }),
+      outputSchema: z.object({
+        cached: z.boolean(),
+        familyCount: z.number().int().nonnegative(),
+        families: z.array(z.string().min(1).max(256)),
+        source: z.enum(["fontconfig", "windows-installed-font-collection"]),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ refresh }) => {
+      const fonts = await systemFonts(refresh);
+      const output = {
+        cached: fonts.cached,
+        familyCount: fonts.families.length,
+        families: fonts.families,
+        source: fonts.source as
+          "fontconfig" | "windows-installed-font-collection",
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "fonts_preflight",
+    {
+      description:
+        "Checks SVG-declared font families against the local cached font inventory; glyph coverage and embedding permissions remain explicitly unverified.",
+      inputSchema: z.object({
+        path: z.string().min(1).max(1024),
+        refreshFonts: z.boolean().default(false),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        cached: z.boolean(),
+        declaredFamilies: z.array(z.string()),
+        genericFamilies: z.array(z.string()),
+        missingFamilies: z.array(z.string()),
+        presentFamilies: z.array(z.string()),
+        source: z.enum(["fontconfig", "windows-installed-font-collection"]),
+        warnings: z.array(z.string()),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ path, refreshFonts, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const fonts = await systemFonts(refreshFonts);
+      const preflight = preflightSvgFonts(
+        await readFile(document.absolutePath, "utf8"),
+        fonts.families,
+      );
+      const output = {
+        ...preflight,
+        cached: fonts.cached,
+        source: fonts.source as
+          "fontconfig" | "windows-installed-font-collection",
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
@@ -6550,6 +6641,40 @@ async function renderGenericExport(request: {
       inkscapeVersion: probe.version,
     };
   });
+}
+
+async function discoverSystemFontFamilies(
+  runner: ProcessRunner,
+): Promise<{ families: readonly string[]; source: string }> {
+  const isWindows = process.platform === "win32";
+  const result = await runner.run(isWindows ? "powershell.exe" : "fc-list", {
+    args: isWindows
+      ? [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "Add-Type -AssemblyName System.Drawing; (New-Object System.Drawing.Text.InstalledFontCollection).Families | ForEach-Object { $_.Name }",
+        ]
+      : ["--format=%{family}\n"],
+    cwd: process.cwd(),
+    maxStderrBytes: 64 * 1024,
+    maxStdoutBytes: 512 * 1024,
+    timeoutMs: 10_000,
+  });
+  if (result.exitCode !== 0 || result.terminationReason !== "completed")
+    throw new Error("Local font discovery failed");
+  const families = normalizeFontFamilies(
+    result.stdout
+      .toString("utf8")
+      .split(/\r?\n/u)
+      .flatMap((line) => line.split(",")),
+  );
+  if (families.length > 5_000)
+    throw new Error("Local font inventory exceeded the safety limit");
+  return {
+    families,
+    source: isWindows ? "windows-installed-font-collection" : "fontconfig",
+  };
 }
 
 function hasControlCharacters(value: string): boolean {

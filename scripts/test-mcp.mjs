@@ -79,6 +79,34 @@ try {
     throw new Error("workspace_list did not return an opaque workspace ID");
   }
   await writeFile(
+    join(workspaceRoot, "object-conversion.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect id="outline" x="1" y="2" width="8" height="4" fill="none" stroke="#000000" stroke-width="1"/></svg>',
+  );
+  const objectRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "object-conversion.svg")))
+    .digest("hex");
+  const objectConversion = await workspaceClient.callTool({
+    arguments: {
+      confirmIrreversible: true,
+      expectedRevision: objectRevision,
+      ids: ["outline"],
+      mode: "stroke",
+      path: "object-conversion.svg",
+      workspaceId: workspace.id,
+    },
+    name: "objects_to_paths",
+  });
+  if (
+    objectConversion.isError ||
+    objectConversion.structuredContent?.warning !==
+      "OBJECTS_CONVERTED_TO_PATHS_IRREVERSIBLE" ||
+    !String(
+      await readFile(join(workspaceRoot, "object-conversion.svg"), "utf8"),
+    ).includes("<path")
+  ) {
+    throw new Error("objects_to_paths did not convert a vector stroke");
+  }
+  await writeFile(
     join(workspaceRoot, "paths.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><path id="path_left" fill="#ff0000" d="M 0 0 L 2 0"/><path id="path_right" fill="#ff0000" d="M 4 0 L 6 0"/></svg>',
   );

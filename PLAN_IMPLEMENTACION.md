@@ -1825,7 +1825,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [~] `F07-T04` Implementar union/difference/intersection/exclusion. — `paths_boolean` ejecuta las acciones nativas headless `path-union`, `path-difference`, `path-intersection` y `path-exclusion` sobre exactamente dos IDs validados en un staging aislado; exporta, sanitiza y comitea atómicamente. Faltan fixtures geométricos/visuales para cada operación y el contrato explícito de dirección de difference.
 - [ ] `F07-T05` Implementar division/cut/split/fracture donde capabilities lo confirmen.
 - [ ] `F07-T06` Implementar simplify, flatten, inset/outset/dynamic offset como operaciones diferenciadas y gateadas.
-- [ ] `F07-T07` Implementar object-to-path y stroke-to-path con snapshot y warning irreversible.
+- [x] `F07-T07` Implementar object-to-path y stroke-to-path con snapshot y warning irreversible. — `objects_to_paths` limita targets a shapes/path vectoriales, usa staging nativo, revisión/backup/diff y `confirmIrreversible`; el smoke MCP cubre stroke-to-path real.
 - [ ] `F07-T08` Controlar orden/selección, remapear IDs inseguros antes de actions y devolver el mapping/IDs resultantes sin interpolar valores libres.
 - [ ] `F07-T09` Probar self-intersections, holes, evenodd/nonzero, arcs, transforms y tolerancias.
 

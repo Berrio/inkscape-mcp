@@ -76,6 +76,7 @@ exportación: inspección → `document_export_preset_plan` →
 | `text_manage`      | Acción de texto/tspans/multilínea con texto plano limitado.    | Corregir nombre de una etiqueta.                     |
 | `text_path_manage` | Adjuntar/desadjuntar texto a un path local.                    | Curvar texto de un logotipo.                         |
 | `text_to_paths`    | IDs, confirmación destructiva y revisión.                      | Preparar un PDF cuando no habrá fuentes disponibles. |
+| `objects_to_paths` | Shapes/paths vectoriales, modo object/stroke y confirmación.   | Convertir un trazo en contorno editable.             |
 | `paths_combine`    | Paths hermanos compatibles.                                    | Unir dos formas sin invocar actions libres.          |
 | `paths_boolean`    | Dos paths y operación union/difference/intersection/exclusion. | Recortar una silueta mediante Inkscape nativo.       |
 | `path_break_apart` | Path compuesto y nuevos IDs explícitos.                        | Separar subpaths preservando referencias seguras.    |

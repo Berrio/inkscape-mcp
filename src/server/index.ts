@@ -4633,6 +4633,96 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "objects_to_paths",
+    {
+      description:
+        "Irreversibly converts selected basic vector objects or their strokes to SVG paths through Inkscape in a staged copy. The caller must confirm the destructive conversion.",
+      inputSchema: z
+        .object({
+          confirmIrreversible: z.literal(true),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z.array(shapeIdSchema).min(1).max(100),
+          mode: z.enum(["object", "stroke"]),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        convertedIds: z.array(shapeIdSchema),
+        diff: semanticDiffSchema,
+        mode: z.enum(["object", "stroke"]),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        warning: z.literal("OBJECTS_CONVERTED_TO_PATHS_IRREVERSIBLE"),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, ids, mode, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      if (new Set(ids).size !== ids.length)
+        throw new Error("Object IDs must be unique");
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const targets = querySvgElementTargets(source, {
+        ids,
+        limit: 100,
+        offset: 0,
+      });
+      if (targets.missingIds.length > 0)
+        throw new Error("Object ID does not exist");
+      const allowedKinds = new Set([
+        "circle",
+        "ellipse",
+        "line",
+        "path",
+        "polygon",
+        "polyline",
+        "rect",
+      ]);
+      if (
+        targets.elements.some(
+          (target) => !allowedKinds.has(target.summary.kind),
+        )
+      )
+        throw new Error(
+          "objects_to_paths accepts only basic vector shapes and SVG paths",
+        );
+      const result = await runNativeTextToPaths({
+        action: mode === "object" ? "object-to-path" : "object-stroke-to-path",
+        config,
+        document,
+        expectedRevision,
+        failureMessage: "Inkscape object-to-path conversion failed",
+        ids,
+        runner,
+        scratch,
+      });
+      const diff = summarizeSvgDiff(source, result);
+      const committed = await fileStore.commit({
+        contents: Buffer.from(result),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        convertedIds: ids,
+        diff,
+        mode,
+        revision: committed.revision,
+        warning: "OBJECTS_CONVERTED_TO_PATHS_IRREVERSIBLE" as const,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
     "paths_boolean",
     {
       description:
@@ -8405,9 +8495,11 @@ function assertNoNestedLayoutSelection(
 }
 
 async function runNativeTextToPaths(request: {
+  action?: "object-stroke-to-path" | "object-to-path";
   config: ServerConfig;
   document: ResolvedWorkspacePath;
   expectedRevision: string;
+  failureMessage?: string;
   ids: readonly string[];
   runner: ProcessRunner;
   scratch: ScratchManager;
@@ -8440,7 +8532,7 @@ async function runNativeTextToPaths(request: {
     const outputPath = join(directory, "result.svg");
     const actions = [
       `select-by-id:${request.ids.join(",")}`,
-      "object-to-path",
+      request.action ?? "object-to-path",
       `export-filename:${outputPath}`,
       "export-plain-svg",
       "export-do",
@@ -8453,7 +8545,9 @@ async function runNativeTextToPaths(request: {
       timeoutMs: request.config.processTimeoutMs,
     });
     if (run.exitCode !== 0 || run.terminationReason !== "completed")
-      throw new Error("Inkscape text-to-path conversion failed");
+      throw new Error(
+        request.failureMessage ?? "Inkscape text-to-path conversion failed",
+      );
     const exported = await readFile(outputPath, "utf8");
     const sanitized = sanitizeSvg(exported, {
       maxElements: 100_000,

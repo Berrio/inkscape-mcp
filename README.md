@@ -61,7 +61,7 @@ anunciadas.
 Para añadir el servidor a Codex CLI o VS Code sin confundirlo con una receta de
 exportación, sigue la [guía de configuración de clientes](./docs/client-configuration.md).
 
-La [referencia de tools](./docs/tool-reference.md) cubre las 68 tools
+La [referencia de tools](./docs/tool-reference.md) cubre las 69 tools
 registradas, sus flujos, errores y la forma de obtener el schema MCP exacto
 mediante `tools/list`.
 

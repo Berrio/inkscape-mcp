@@ -85,6 +85,7 @@ export {
 } from "./metadata.js";
 export { attachSvgTextToPath, detachSvgTextFromPath } from "./text-path.js";
 export { inspectSvgPalette } from "./palette.js";
+export { inspectSvgPathEffects } from "./path-effects.js";
 export {
   updateSvgText,
   type SvgTextLayout,

@@ -59,6 +59,7 @@ import {
   inspectSvgImageDpi,
   inspectSvgMeshGradients,
   inspectSvgPalette,
+  inspectSvgPathEffects,
   inspectSvgAccessibility,
   inspectSvgRemoteResources,
   normalizeFontFamilies,
@@ -4527,6 +4528,43 @@ export function buildServer(config: ServerConfig): McpServer {
         id,
         revision: committed.revision,
       };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "path_effects_inspect",
+    {
+      description:
+        "Lists preserved local Inkscape path effects and their local path references without editing effect parameters.",
+      inputSchema: z
+        .object({
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        effects: z.array(
+          z.object({
+            id: shapeIdSchema,
+            type: z.string(),
+            usedBy: z.array(shapeIdSchema),
+          }),
+        ),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const output = inspectSvgPathEffects(
+        await readFile(document.absolutePath, "utf8"),
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

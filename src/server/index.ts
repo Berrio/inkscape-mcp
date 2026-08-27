@@ -66,6 +66,7 @@ import {
   deleteSvgMarker,
   updateSvgMarker,
   updateSvgFilter,
+  updateSvgText,
   resizeContentSvg,
   resizePageOnlySvg,
   releaseSvgClipPath,
@@ -686,6 +687,23 @@ const filterSpecSchema = z.discriminatedUnion("kind", [
     values: z.array(z.number().finite()).length(20),
   }),
 ]);
+const textLayoutSchema = z.object({
+  baseline: z
+    .enum(["auto", "alphabetic", "central", "hanging", "middle"])
+    .optional(),
+  direction: z.enum(["ltr", "rtl"]).optional(),
+  letterSpacing: z.number().finite().optional(),
+  textAnchor: z.enum(["start", "middle", "end"]).optional(),
+  wordSpacing: z.number().finite().optional(),
+  writingMode: z
+    .enum(["horizontal-tb", "vertical-rl", "vertical-lr"])
+    .optional(),
+});
+const textSpanSchema = z.object({
+  dx: z.number().finite().optional(),
+  dy: z.number().finite().optional(),
+  text: z.string().min(0).max(10_000),
+});
 const layoutAnchorSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("selection") }),
   z.object({ kind: z.literal("page"), pageId: shapeIdSchema.optional() }),
@@ -2628,6 +2646,72 @@ export function buildServer(config: ServerConfig): McpServer {
         backupCreated: committed.backupPath !== undefined,
         clipId,
         imageId,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "text_manage",
+    {
+      description:
+        "Edits local SVG text through bounded plain-text segments or explicit multiline tspans, preserving existing structure only when requested.",
+      inputSchema: z.discriminatedUnion("mode", [
+        z.object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          layout: textLayoutSchema.optional(),
+          mode: z.literal("preserve_structure"),
+          path: z.string().min(1).max(1024),
+          segments: z.array(z.string().min(0).max(10_000)).min(1).max(500),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          layout: textLayoutSchema.optional(),
+          lineHeight: z.number().finite().positive().optional(),
+          lines: z
+            .array(z.array(textSpanSchema).min(1).max(100))
+            .min(1)
+            .max(200),
+          mode: z.literal("replace_structure"),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+      ]),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        id: shapeIdSchema,
+        mode: z.enum(["preserve_structure", "replace_structure"]),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(input.workspaceId, input.path);
+      const changed = updateSvgText(
+        await readFile(document.absolutePath, "utf8"),
+        input,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: input.expectedRevision,
+        expectedRevision: input.expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        id: input.id,
+        mode: input.mode,
         revision: committed.revision,
       };
       return {

@@ -74,6 +74,12 @@ export {
   type ElementAccessibilityPatch,
 } from "./metadata.js";
 export { attachSvgTextToPath, detachSvgTextFromPath } from "./text-path.js";
+export {
+  updateSvgText,
+  type SvgTextLayout,
+  type SvgTextPatch,
+  type SvgTextSpan,
+} from "./text.js";
 export { cropSvgImage, type SvgImageCrop } from "./image-crop.js";
 export {
   applySvgFilter,

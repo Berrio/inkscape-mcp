@@ -1812,8 +1812,8 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Texto
 
-- [ ] `F07-T18` Editar contenido/tspans conservando estructura o reemplazándola según modo explícito.
-- [ ] `F07-T19` Soportar multiline, baseline, letter/word spacing, direction y writing mode cuando SVG/Inkscape lo permitan.
+- [x] `F07-T18` Editar contenido/tspans conservando estructura o reemplazándola según modo explícito. — `text_manage` exige `preserve_structure` con número exacto de segmentos o `replace_structure` con líneas/tspans tipados; no recibe markup.
+- [x] `F07-T19` Soportar multiline, baseline, letter/word spacing, direction y writing mode cuando SVG/Inkscape lo permitan. — El modo de reemplazo crea líneas SVG mediante tspans y el patch admite baseline, text-anchor, spacing, direction y writing-mode; pruebas unitarias y MCP verifican ambos modos.
 - [~] `F07-T20` Crear/quitar text-on-path y mantener refs. — `text_path_manage` adjunta o libera un `<textPath href="#id">`, preservando contenido y tspans; IDs de texto/path son estrictos. Falta smoke MCP y cobertura de referencias complejas.
 - [ ] `F07-T21` Inspeccionar flowed text y ofrecer conversión gateada.
 - [ ] `F07-T22` Descubrir fuentes del sistema de forma acotada y cacheada.

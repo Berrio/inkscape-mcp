@@ -430,6 +430,45 @@ try {
   )
     throw new Error("metadata_manage did not update element accessibility");
   await writeFile(
+    join(workspaceRoot, "text.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><text id="editable" x="4">Hello<tspan dx="1"> world</tspan></text></svg>',
+  );
+  const textRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "text.svg")))
+    .digest("hex");
+  const textPreserved = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: textRevision,
+      id: "editable",
+      layout: { letterSpacing: 0.2, writingMode: "horizontal-tb" },
+      mode: "preserve_structure",
+      path: "text.svg",
+      segments: ["Hola", " mundo"],
+      workspaceId: workspace.id,
+    },
+    name: "text_manage",
+  });
+  const textPreservedRevision = textPreserved.structuredContent?.revision;
+  if (textPreserved.isError || typeof textPreservedRevision !== "string")
+    throw new Error("text_manage did not preserve text spans");
+  const textReplaced = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: textPreservedRevision,
+      id: "editable",
+      lineHeight: 12,
+      lines: [[{ text: "Line one" }], [{ dx: 1, text: "Line two" }]],
+      mode: "replace_structure",
+      path: "text.svg",
+      workspaceId: workspace.id,
+    },
+    name: "text_manage",
+  });
+  if (
+    textReplaced.isError ||
+    textReplaced.structuredContent?.mode !== "replace_structure"
+  )
+    throw new Error("text_manage did not replace text with multiline spans");
+  await writeFile(
     join(workspaceRoot, "text-path.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><path id="baseline" d="M 0 0 L 10 0"/><text id="curved_text" x="0" y="0">Hello<tspan dx="1">!</tspan></text></svg>',
   );

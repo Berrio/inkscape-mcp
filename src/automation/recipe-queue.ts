@@ -57,6 +57,20 @@ export type DurableRecipeJob = {
   updatedAt: string;
 };
 
+/** Compact metadata for inspecting a durable queue without exposing recipe bodies. */
+export type DurableRecipeJobSummary = {
+  attempt: number;
+  cancellationRequestedAt?: string;
+  createdAt: string;
+  error?: string;
+  id: string;
+  operationCount: number;
+  source: string;
+  startedAt?: string;
+  status: DurableRecipeStatus;
+  updatedAt: string;
+};
+
 export class DurableRecipeQueueError extends Error {
   public constructor(
     public readonly code:
@@ -106,6 +120,35 @@ export class DurableRecipeQueue {
 
   public async get(id: string): Promise<DurableRecipeJob> {
     return publicJob(await this.read(id));
+  }
+
+  /** Lists durable job metadata, newest activity first, without recipes or receipts. */
+  public async list(options: {
+    limit: number;
+    status?: DurableRecipeStatus;
+  }): Promise<DurableRecipeJobSummary[]> {
+    if (
+      !Number.isInteger(options.limit) ||
+      options.limit < 1 ||
+      options.limit > 100
+    )
+      throw new DurableRecipeQueueError(
+        "QUEUE_INVALID",
+        "--limit must be an integer from 1 to 100",
+      );
+    const entries = await readdir(this.root, { withFileTypes: true });
+    const jobs = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+        .map(async (entry) => await this.read(entry.name.slice(0, -5))),
+    );
+    return jobs
+      .filter(
+        (job) => options.status === undefined || job.status === options.status,
+      )
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .slice(0, options.limit)
+      .map((job) => publicJobSummary(job));
   }
 
   /** Requests cancellation; an active atomic batch completes before it takes effect. */
@@ -361,6 +404,23 @@ export class DurableRecipeQueue {
 
 function publicJob(job: DurableRecipeJob): DurableRecipeJob {
   return structuredClone(job);
+}
+
+function publicJobSummary(job: DurableRecipeJob): DurableRecipeJobSummary {
+  return {
+    attempt: job.attempt,
+    ...(job.cancellationRequestedAt === undefined
+      ? {}
+      : { cancellationRequestedAt: job.cancellationRequestedAt }),
+    createdAt: job.createdAt,
+    ...(job.error === undefined ? {} : { error: job.error }),
+    id: job.id,
+    operationCount: job.recipe.operations.length,
+    source: job.recipe.source,
+    ...(job.startedAt === undefined ? {} : { startedAt: job.startedAt }),
+    status: job.status,
+    updatedAt: job.updatedAt,
+  };
 }
 
 async function isAbandonedLock(lock: string): Promise<boolean> {

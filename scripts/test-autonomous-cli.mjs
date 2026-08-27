@@ -137,6 +137,16 @@ try {
   const worked = await runQueue(["work"]);
   if (worked.completed !== 1 || worked.failed !== 0)
     throw new Error("Durable queue worker did not complete a recipe");
+  const durableList = await runQueue(["list", "--status", "completed"]);
+  if (
+    !Array.isArray(durableList) ||
+    durableList.length !== 1 ||
+    durableList[0]?.id !== durable.id ||
+    durableList[0]?.source !== "label.svg" ||
+    durableList[0]?.receipt !== undefined
+  ) {
+    throw new Error("Durable queue did not list compact job metadata");
+  }
   const durableReceipt = await runQueue(["get", durable.id]);
   if (
     durableReceipt.status !== "completed" ||

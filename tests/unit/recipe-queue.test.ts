@@ -38,6 +38,38 @@ it("persists queued recipes, supports cancellation/retry, and records a receipt"
   }
 });
 
+it("lists compact queue metadata in reverse activity order and supports status filters", async () => {
+  const root = await mkdtemp(join(tmpdir(), "inkscape-mcp-recipe-queue-"));
+  try {
+    const queue = await DurableRecipeQueue.open(
+      { ...DEFAULT_CONFIG, workspaceRoots: [root] },
+      0,
+    );
+    const first = await queue.enqueue(recipe);
+    const second = await queue.enqueue({ ...recipe, source: "second.svg" });
+    await queue.cancel(first.id);
+    expect(await queue.list({ limit: 10 })).toEqual([
+      expect.objectContaining({
+        id: first.id,
+        operationCount: 1,
+        source: "label.svg",
+        status: "cancelled",
+      }),
+      expect.objectContaining({
+        id: second.id,
+        operationCount: 1,
+        source: "second.svg",
+        status: "queued",
+      }),
+    ]);
+    expect(await queue.list({ limit: 1, status: "queued" })).toEqual([
+      expect.objectContaining({ id: second.id, status: "queued" }),
+    ]);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 it("records a running cancellation and stops after the current atomic operation", async () => {
   const root = await mkdtemp(join(tmpdir(), "inkscape-mcp-recipe-queue-"));
   try {

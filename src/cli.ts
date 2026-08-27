@@ -32,7 +32,7 @@ Usage:
   inkscape-mcp --doctor [--json] [configuración]
   inkscape-mcp export --source <svg> --preset <name> --output-directory <dir> [--dry-run] [configuración]
   inkscape-mcp run <recipe.json> [configuración]
-  inkscape-mcp queue <enqueue|work|get|cancel|retry> [argumentos] [configuración]
+  inkscape-mcp queue <enqueue|work|list|get|cancel|retry> [argumentos] [configuración]
 
 With no command, it serves MCP through stdio.`;
 

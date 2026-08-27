@@ -171,6 +171,7 @@ queda como fallida hasta que decidas reintentarla:
 ```powershell
 $job = inkscape-mcp queue enqueue .\exportaciones.json --workspace-root C:\ruta\a\tus\disenos | ConvertFrom-Json
 inkscape-mcp queue work --workspace-root C:\ruta\a\tus\disenos
+inkscape-mcp queue list --status failed --workspace-root C:\ruta\a\tus\disenos
 inkscape-mcp queue get $job.id --workspace-root C:\ruta\a\tus\disenos
 inkscape-mcp queue retry $job.id --workspace-root C:\ruta\a\tus\disenos
 ```
@@ -179,6 +180,11 @@ inkscape-mcp queue retry $job.id --workspace-root C:\ruta\a\tus\disenos
 reclamada, registra una cancelación cooperativa: deja terminar el batch atómico
 en curso y detiene los pasos restantes de la receta; no mata Inkscape a ciegas
 ni presenta un resultado parcial como entrega completa.
+
+`queue list` recupera los IDs después de reiniciar o cerrar la conversación;
+devuelve sólo metadatos compactos (estado, fuente, pasos y error), nunca el
+cuerpo de la receta ni recibos. Admite `--status queued|running|completed|failed|cancelled`
+y `--limit 1` a `100`.
 
 ### Automatización de Windows
 

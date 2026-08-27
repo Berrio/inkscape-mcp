@@ -27,6 +27,7 @@
     "test": "npm run build --silent && vitest run",
     "test:unit": "npm test",
     "test:integration": "vitest run tests/integration",
+    "test:cli": "npm run build --silent && node scripts/test-autonomous-cli.mjs",
     "test:mcp": "node scripts/test-mcp.mjs",
     "inspect": "npx --no-install @modelcontextprotocol/inspector node dist/cli.js",
     "test:conformance": "npx --no-install @modelcontextprotocol/conformance",
@@ -35,6 +36,7 @@
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
     "@xmldom/xmldom": "^0.9.12",
     "pdf-lib": "1.17.1",
@@ -42,7 +44,6 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/conformance": "0.1.16",
     "@modelcontextprotocol/inspector": "2.3.0",
     "@types/node": "26.3.0",

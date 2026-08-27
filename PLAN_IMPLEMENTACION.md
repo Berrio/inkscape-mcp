@@ -2087,6 +2087,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [ ] `F11-T23` Publicar npm solo con autorización explícita del usuario.
 - [ ] `F11-T24` Preparar/publicar MCP Registry solo después de npm y con autorización explícita.
 - [ ] `F11-T25` Tag/release/announcement solo con autorización explícita.
+- [x] `F11-T26` CLI autónoma `export` sin IA: schema cerrado para SVG/preset/output, revisión automática, `--dry-run`, selección de workspace y salida JSON; reutiliza el MCP privado por stdio, sin bypass de políticas.
 
 #### Puerta 1.0 F11
 

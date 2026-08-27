@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
@@ -89,6 +90,40 @@ try {
 
   if (output.trim() !== packageMetadata.version) {
     throw new Error("Packed CLI version does not match package metadata");
+  }
+
+  writeFileSync(
+    join(workspaceDirectory, "package-cli.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" height="10mm"><rect width="10" height="10" fill="#dbeafe"/></svg>',
+  );
+  const autonomousExport = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        npmCli,
+        "exec",
+        "--prefix",
+        installDirectory,
+        "--",
+        "inkscape-mcp",
+        "export",
+        "--source",
+        "package-cli.svg",
+        "--preset",
+        "web-png",
+        "--output-directory",
+        "package-cli-output",
+        "--workspace-root",
+        workspaceDirectory,
+      ],
+      { encoding: "utf8" },
+    ),
+  );
+  if (
+    autonomousExport.status !== "completed" ||
+    !existsSync(join(workspaceDirectory, "package-cli-output", "web-1200.png"))
+  ) {
+    throw new Error("Packed CLI did not complete an autonomous export");
   }
 
   const doctorOutput = execFileSync(

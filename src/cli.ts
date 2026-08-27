@@ -2,7 +2,12 @@
 
 import packageMetadata from "../package.json" with { type: "json" };
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { fileURLToPath } from "node:url";
 
+import {
+  parseAutonomousExportArguments,
+  runAutonomousExport,
+} from "./automation/export-command.js";
 import { loadConfigFromCli } from "./config/index.js";
 import { formatDoctor, runDoctor } from "./doctor/index.js";
 import { buildServer } from "./server/index.js";
@@ -13,6 +18,7 @@ Usage:
   inkscape-mcp --help
   inkscape-mcp --version
   inkscape-mcp --doctor [--json] [configuración]
+  inkscape-mcp export --source <svg> --preset <name> --output-directory <dir> [--dry-run] [configuración]
 
 With no command, it serves MCP through stdio.`;
 
@@ -37,6 +43,20 @@ if (argument === "--help" || argument === "-h") {
   } catch (error: unknown) {
     process.stderr.write(
       `${error instanceof Error ? error.message : "Unable to run doctor"}\n`,
+    );
+    process.exitCode = 1;
+  }
+} else if (argument === "export") {
+  try {
+    const request = parseAutonomousExportArguments(argumentsList.slice(1));
+    const result = await runAutonomousExport(
+      request,
+      fileURLToPath(import.meta.url),
+    );
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+  } catch (error: unknown) {
+    process.stderr.write(
+      `${error instanceof Error ? error.message : "Unable to export preset"}\n`,
     );
     process.exitCode = 1;
   }

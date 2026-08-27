@@ -74,6 +74,28 @@ Primero llama `workspace_list`, después `document_inspect` para obtener la
 revisión, y envíala como `expectedRevision` en cada mutación. Nunca reutilices
 una revisión después de que otra operación haya cambiado el documento.
 
+## Exportar sin un cliente de IA
+
+La CLI `export` abre un servidor MCP local temporal y usa exclusivamente sus
+tools públicas: obtiene la revisión vigente del SVG, hace preflight del preset
+y publica el lote de forma atómica. No acepta shell, XML ni rutas de documento
+fuera del workspace. Por tanto se puede usar directamente desde PowerShell,
+incluso cuando no haya una sesión de Codex o de otro modelo activa:
+
+```powershell
+inkscape-mcp export `
+  --source etiquetas.svg `
+  --preset print-pdf-300dpi `
+  --output-directory entregables `
+  --workspace-root C:\ruta\a\tus\disenos
+```
+
+Los presets admitidos son `print-a4-pdf`, `print-pdf-300dpi`, `web-png`,
+`web-asset-pack`, `plain-svg` e `icon-pack`. Añade `--dry-run` para obtener
+JSON con las rutas, digest y vencimiento del plan sin crear directorios ni
+publicar archivos. Si se configuran varios workspaces, selecciona uno por su
+índice estable de la sesión con `--workspace-index 0` a `31`.
+
 ## Tools MCP actuales
 
 | Grupo              | Tools principales                                                                                                                                                                                                                                       |

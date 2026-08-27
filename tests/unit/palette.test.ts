@@ -18,8 +18,22 @@ describe("document palette", () => {
         { color: "#00ff00", uses: 1 },
       ],
       cssVariables: [],
+      swatches: [],
       truncated: false,
     });
+  });
+
+  it("inspects and recolors named solid Inkscape swatches", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><defs><linearGradient id="brand" inkscape:swatch="solid" inkscape:label="Marca"><stop style="stop-color:#FF0000;stop-opacity:1"/></linearGradient></defs><rect fill="url(#brand)"/></svg>';
+    expect(inspectSvgPalette(source).swatches).toEqual([
+      { color: "#ff0000", id: "brand", name: "Marca" },
+    ]);
+    const result = applySvgPalette(source, [
+      { from: "#ff0000", to: "#112233" },
+    ]);
+    expect(result.replacements).toBe(1);
+    expect(result.svg).toContain("stop-color:#112233");
   });
 
   it("invents and rewrites local CSS variable values without touching global preferences", () => {

@@ -1,4 +1,4 @@
-import { DOMParser } from "@xmldom/xmldom";
+import { DOMParser, type Element as XmlElement } from "@xmldom/xmldom";
 
 import { sanitizeSvg } from "../svg/index.js";
 
@@ -6,6 +6,7 @@ const COLOR = /^#[0-9a-f]{6}$/iu;
 const PAINT_ATTRIBUTES = ["fill", "stroke", "stop-color"] as const;
 const CSS_VARIABLE_DECLARATION =
   /(--[A-Za-z_][A-Za-z0-9_-]{0,63})\s*:\s*(#[0-9a-f]{6})\b/giu;
+const STYLE_STOP_COLOR = /(stop-color\s*:\s*)(#[0-9a-f]{6})\b/giu;
 
 export function inspectSvgPalette(
   source: string,
@@ -13,6 +14,7 @@ export function inspectSvgPalette(
 ): {
   colors: readonly { color: string; uses: number }[];
   cssVariables: readonly { color: string; name: string; uses: number }[];
+  swatches: readonly { color: string; id: string; name: string }[];
   truncated: boolean;
 } {
   if (!Number.isInteger(limit) || limit < 1 || limit > 1_000)
@@ -40,10 +42,15 @@ export function inspectSvgPalette(
     )
     .map(([color, uses]) => ({ color, uses }));
   const cssVariables = inspectCssVariables(document.toString());
+  const swatches = inspectSwatches(document);
   return {
     colors: colors.slice(0, limit),
     cssVariables: cssVariables.slice(0, limit),
-    truncated: colors.length > limit || cssVariables.length > limit,
+    swatches: swatches.slice(0, limit),
+    truncated:
+      colors.length > limit ||
+      cssVariables.length > limit ||
+      swatches.length > limit,
   };
 }
 
@@ -94,7 +101,53 @@ export function applySvgPalette(
     );
     if (rewritten !== css) style.textContent = rewritten;
   }
+  for (const stop of Array.from(document.getElementsByTagName("stop"))) {
+    const style = stop.getAttribute("style");
+    if (style === null) continue;
+    const rewritten = style.replace(
+      STYLE_STOP_COLOR,
+      (whole, prefix: string, color: string) => {
+        const replacement = normalized.get(color.toLowerCase());
+        if (replacement === undefined) return whole;
+        count += 1;
+        return `${prefix}${replacement}`;
+      },
+    );
+    if (rewritten !== style) stop.setAttribute("style", rewritten);
+  }
   return { replacements: count, svg: document.toString() };
+}
+
+function inspectSwatches(document: ReturnType<DOMParser["parseFromString"]>): {
+  color: string;
+  id: string;
+  name: string;
+}[] {
+  const swatches: { color: string; id: string; name: string }[] = [];
+  for (const tag of ["linearGradient", "radialGradient"])
+    for (const gradient of Array.from(document.getElementsByTagName(tag))) {
+      if (gradient.getAttribute("inkscape:swatch") !== "solid") continue;
+      const id = gradient.getAttribute("id")?.trim();
+      if (!id) continue;
+      const stop = Array.from(gradient.getElementsByTagName("stop"))[0];
+      const color = stop === undefined ? undefined : readStopColor(stop);
+      if (color === undefined) continue;
+      swatches.push({
+        color,
+        id,
+        name: gradient.getAttribute("inkscape:label")?.trim() || id,
+      });
+    }
+  return swatches.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function readStopColor(stop: XmlElement): string | undefined {
+  const direct = stop.getAttribute("stop-color")?.trim().toLowerCase();
+  if (direct !== undefined && COLOR.test(direct)) return direct;
+  const style = stop.getAttribute("style") ?? "";
+  const match = STYLE_STOP_COLOR.exec(style);
+  STYLE_STOP_COLOR.lastIndex = 0;
+  return match?.[2]?.toLowerCase();
 }
 
 function inspectCssVariables(

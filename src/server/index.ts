@@ -4868,6 +4868,13 @@ export function buildServer(
             uses: z.number().int().nonnegative(),
           }),
         ),
+        swatches: z.array(
+          z.object({
+            color: z.string().regex(/^#[0-9a-f]{6}$/u),
+            id: shapeIdSchema,
+            name: z.string().min(1).max(256),
+          }),
+        ),
         truncated: z.boolean(),
       }),
       annotations: { readOnlyHint: true },

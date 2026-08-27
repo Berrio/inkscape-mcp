@@ -1917,7 +1917,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [ ] `F08-T18` Schemas versionados para page/export/workflow presets.
 - [ ] `F08-T19` Resolver herencia sin ciclos y overrides estrictos.
-- [ ] `F08-T20` Preset icon pack multi-size.
+- [x] `F08-T20` Preset icon pack multi-size. — `icon-pack` expande PNG de 16, 24, 32, 48, 64, 128, 256 y 512 px con nombres deterministas; pruebas unitarias y smoke MCP real verifican las ocho variantes en un lote `all_or_nothing`.
 - [x] `F08-T21` Preset web asset (SVG plano + PNG 1x/2x/3x). — `web-asset-pack` expande a SVG plano y PNG transparentes de 1200, 2400 y 3600 px mediante el mismo lote verificado que las exportaciones explícitas.
 - [~] `F08-T22` Preset print PDF con filtro 300 dpi, texto configurable y preflight. — `print-pdf-300dpi` fija PDF con `filterRasterDpi: 300` y texto preservado; quedan texto configurable y preflight integrado como plan bloqueado previo a ejecución.
 - [ ] `F08-T23` Presets sociales con metadata de fecha/fuente y custom override.

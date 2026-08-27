@@ -3022,6 +3022,29 @@ try {
       "document_export_batch did not expand the web asset deliverable",
     );
   }
+  const iconPresetBatch = await workspaceClient.callTool({
+    arguments: {
+      mode: "all_or_nothing",
+      preset: {
+        name: "icon-pack",
+        outputDirectory: "preset-icons",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export_batch",
+  });
+  if (
+    iconPresetBatch.isError ||
+    iconPresetBatch.structuredContent?.successes?.length !== 8 ||
+    iconPresetBatch.structuredContent.successes?.[0]?.outputPath !==
+      "preset-icons/icon-16.png" ||
+    iconPresetBatch.structuredContent.successes?.[7]?.outputPath !==
+      "preset-icons/icon-512.png"
+  )
+    throw new Error(
+      "document_export_batch did not render the complete icon pack",
+    );
   const consumedPlan = await workspaceClient.callTool({
     arguments: {
       mode: "all_or_nothing",

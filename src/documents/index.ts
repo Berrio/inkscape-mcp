@@ -88,6 +88,11 @@ export {
   inspectSvgColorManagement,
   type SvgColorManagementInspection,
 } from "./color-management.js";
+export {
+  convertSimpleSvgFlowedText,
+  inspectSvgFlowedText,
+  type FlowedTextInspection,
+} from "./flowed-text.js";
 export { applySvgPalette, inspectSvgPalette } from "./palette.js";
 export { inspectSvgPathEffects } from "./path-effects.js";
 export {

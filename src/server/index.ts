@@ -63,6 +63,7 @@ import {
   inspectSvgPathEffects,
   inspectSvgAccessibility,
   inspectSvgColorManagement,
+  inspectSvgFlowedText,
   inspectSvgRemoteResources,
   normalizeFontFamilies,
   inspectSvgSettings,
@@ -98,6 +99,7 @@ import {
   updateSvgMarker,
   updateSvgFilter,
   updateSvgText,
+  convertSimpleSvgFlowedText,
   resizeContentSvg,
   resizePageOnlySvg,
   releaseSvgClipPath,
@@ -3841,6 +3843,93 @@ export function buildServer(
         backupCreated: committed.backupPath !== undefined,
         revision: committed.revision,
         textId: input.textId,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "flowed_text_inspect",
+    {
+      description:
+        "Lists Inkscape flowed-text roots and paragraph counts without interpreting their layout.",
+      inputSchema: z
+        .object({
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        flowedTexts: z.array(
+          z.object({
+            id: shapeIdSchema.optional(),
+            paragraphs: z.number().int().nonnegative(),
+          }),
+        ),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const output = inspectSvgFlowedText(
+        await readFile(document.absolutePath, "utf8"),
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "flowed_text_convert",
+    {
+      description:
+        "Converts one simple one-region Inkscape flowRoot to editable SVG text only after explicit lossy confirmation. Complex flows are rejected.",
+      inputSchema: z
+        .object({
+          confirmLossy: z.literal(true),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        id: shapeIdSchema,
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        warning: z.literal("FLOWED_TEXT_LAYOUT_LOST"),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, id, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const changed = convertSimpleSvgFlowedText(
+        await readFile(document.absolutePath, "utf8"),
+        id,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        id: changed.id,
+        revision: committed.revision,
+        warning: changed.warning,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],

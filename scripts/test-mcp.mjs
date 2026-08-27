@@ -201,6 +201,26 @@ try {
     gradientUpdated.structuredContent?.id !== "sunset"
   )
     throw new Error("gradients_manage did not update a gradient");
+  const gradientReused = await workspaceClient.callTool({
+    arguments: {
+      action: "create",
+      expectedRevision: gradientUpdated.structuredContent?.revision,
+      path: "gradients.svg",
+      spec: {
+        href: "sunset",
+        id: "sunset_copy",
+        kind: "radial",
+        transform: [1, 0, 0, 1, 2, 0],
+      },
+      workspaceId: workspace.id,
+    },
+    name: "gradients_manage",
+  });
+  if (
+    gradientReused.isError ||
+    gradientReused.structuredContent?.id !== "sunset_copy"
+  )
+    throw new Error("gradients_manage did not reuse a local gradient");
   await writeFile(
     join(workspaceRoot, "patterns.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><rect id="pattern_target" width="10" height="5"/></svg>',

@@ -62,4 +62,24 @@ describe("SVG gradient definitions", () => {
       }),
     ).toThrow("sorted");
   });
+
+  it("reuses a local gradient of the same type without duplicating stops", () => {
+    const created = createSvgGradient(base, linear);
+    const reused = createSvgGradient(created, {
+      href: "sunset",
+      id: "sunset_repeat",
+      kind: "linear",
+      transform: [1, 0, 0, 1, 4, 0],
+    });
+    expect(reused).toContain(
+      '<linearGradient id="sunset_repeat" href="#sunset" gradientTransform="matrix(1 0 0 1 4 0)"/>',
+    );
+    expect(() =>
+      createSvgGradient(created, {
+        href: "sunset",
+        id: "bad_kind",
+        kind: "radial",
+      }),
+    ).toThrow("same kind");
+  });
 });

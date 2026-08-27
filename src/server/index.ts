@@ -598,11 +598,12 @@ const gradientSpecSchema = z
     cy: z.number().finite().optional(),
     fx: z.number().finite().optional(),
     fy: z.number().finite().optional(),
+    href: shapeIdSchema.optional(),
     id: shapeIdSchema,
     kind: z.enum(["linear", "radial"]),
     r: z.number().finite().positive().optional(),
     spread: z.enum(["pad", "reflect", "repeat"]).optional(),
-    stops: z.array(gradientStopSchema).min(2).max(64),
+    stops: z.array(gradientStopSchema).min(2).max(64).optional(),
     transform: z
       .tuple([
         z.number().finite(),
@@ -621,11 +622,15 @@ const gradientSpecSchema = z
   })
   .refine(
     (value) =>
-      value.stops.every(
+      (value.stops ?? []).every(
         (stop, index) =>
-          index === 0 || stop.offset >= value.stops[index - 1]!.offset,
+          index === 0 || stop.offset >= value.stops![index - 1]!.offset,
       ),
     "Gradient stops must be ordered by offset",
+  )
+  .refine(
+    (value) => value.href !== undefined || value.stops !== undefined,
+    "Gradient requires stops unless it reuses a local gradient",
   );
 const patternSpecSchema = z.object({
   background: z

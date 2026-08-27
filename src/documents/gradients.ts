@@ -17,10 +17,11 @@ export type GradientStop = {
   opacity?: number | undefined;
 };
 export type GradientSpec = {
+  href?: string | undefined;
   id: string;
   kind: "linear" | "radial";
   spread?: "pad" | "reflect" | "repeat" | undefined;
-  stops: readonly GradientStop[];
+  stops?: readonly GradientStop[] | undefined;
   transform?:
     readonly [number, number, number, number, number, number] | undefined;
   units?: "objectBoundingBox" | "userSpaceOnUse" | undefined;
@@ -124,6 +125,10 @@ function createGradientElement(
     spec.kind === "linear" ? "linearGradient" : "radialGradient",
   );
   element.setAttribute("id", spec.id);
+  if (spec.href !== undefined) {
+    assertReusableGradient(document, spec);
+    element.setAttribute("href", `#${spec.href}`);
+  }
   if (spec.units !== undefined)
     element.setAttribute("gradientUnits", spec.units);
   if (spec.spread !== undefined)
@@ -145,7 +150,7 @@ function createGradientElement(
     setOptionalNumber(element, "fx", spec.fx);
     setOptionalNumber(element, "fy", spec.fy);
   }
-  for (const stop of spec.stops) {
+  for (const stop of spec.stops ?? []) {
     const child = document.createElementNS(SVG_NAMESPACE, "stop");
     child.setAttribute("offset", String(stop.offset));
     child.setAttribute("stop-color", stop.color.toLowerCase());
@@ -158,10 +163,16 @@ function createGradientElement(
 
 function validateGradientSpec(spec: GradientSpec): void {
   if (!SAFE_ID.test(spec.id)) throw new Error("Gradient ID is invalid");
-  if (spec.stops.length < 2 || spec.stops.length > 64)
+  if (
+    (spec.stops === undefined && spec.href === undefined) ||
+    (spec.stops !== undefined &&
+      (spec.stops.length < 2 || spec.stops.length > 64))
+  )
     throw new Error("Gradient requires between two and 64 stops");
+  if (spec.href !== undefined && !SAFE_ID.test(spec.href))
+    throw new Error("Gradient href ID is invalid");
   let previous = -1;
-  for (const stop of spec.stops) {
+  for (const stop of spec.stops ?? []) {
     if (!COLOR.test(stop.color))
       throw new Error("Gradient stop color must be #rrggbb");
     if (
@@ -203,6 +214,32 @@ function validateGradientSpec(spec: GradientSpec): void {
       0
   )
     throw new Error("Gradient transform must be invertible");
+}
+
+function assertReusableGradient(
+  document: XmlDocument,
+  spec: GradientSpec,
+): void {
+  if (spec.href === undefined) return;
+  if (spec.href === spec.id) throw new Error("Gradient cannot reuse itself");
+  const expectedName =
+    spec.kind === "linear" ? "linearGradient" : "radialGradient";
+  let current = findById(document, spec.href);
+  const seen = new Set([spec.id]);
+  while (current !== undefined) {
+    const id = current.getAttribute("id");
+    if (!id || current.localName !== expectedName)
+      throw new Error(
+        "Gradient href must name a local gradient of the same kind",
+      );
+    if (seen.has(id)) throw new Error("Gradient reuse would create a cycle");
+    seen.add(id);
+    const href = current.getAttribute("href");
+    if (href === null) return;
+    if (!href.startsWith("#")) throw new Error("Gradient href is not local");
+    current = findById(document, href.slice(1));
+  }
+  throw new Error("Gradient href does not exist");
 }
 
 function parseDocument(source: string): XmlDocument {

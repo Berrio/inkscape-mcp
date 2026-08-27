@@ -1821,6 +1821,34 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "document_import_capabilities",
+    {
+      description:
+        "Reports the exact input types observed from this local Inkscape --list-input-types probe. Future native import adapters must be gated by this result rather than filename assumptions.",
+      inputSchema: z.object({}),
+      outputSchema: z.object({
+        inputTypes: z.array(z.string().min(1).max(128)),
+        nativeProbeAvailable: z.boolean(),
+        svgzImport: z.literal("built-in-sanitized"),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const report = await runDoctor(config, process.cwd());
+      const output = {
+        inputTypes: [...(report.capabilities?.inputTypes ?? [])],
+        nativeProbeAvailable:
+          report.capabilities?.observations.inputTypes.available ?? false,
+        svgzImport: "built-in-sanitized" as const,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
     "document_import_svg",
     {
       description:

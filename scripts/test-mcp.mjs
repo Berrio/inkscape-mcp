@@ -967,6 +967,17 @@ try {
   });
   if (importedSvg.isError)
     throw new Error("document_import_svg did not sanitize an imported SVG");
+  const importCapabilities = await workspaceClient.callTool({
+    arguments: {},
+    name: "document_import_capabilities",
+  });
+  if (
+    importCapabilities.isError ||
+    importCapabilities.structuredContent?.svgzImport !== "built-in-sanitized" ||
+    typeof importCapabilities.structuredContent?.nativeProbeAvailable !==
+      "boolean"
+  )
+    throw new Error("document_import_capabilities did not report its probe");
   const importedText = await readFile(
     join(workspaceRoot, "safe-import.svg"),
     "utf8",

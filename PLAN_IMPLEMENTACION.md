@@ -1880,7 +1880,7 @@ Evidencia específica adicional para WP de alto riesgo:
 #### Importación normalizada
 
 - [~] `F08-T01` Diseñar pipeline `externo -> SVG temporal -> inspección -> incorporación/publicación`. — El tramo SVG/SVGZ usa decode limitado -> sanitización -> SVG nuevo + manifest atómico; falta conectar los convertidores externos raster/PDF a la misma tubería.
-- [ ] `F08-T02` Usar `--list-input-types` runtime como fuente de verdad.
+- [~] `F08-T02` Usar `--list-input-types` runtime como fuente de verdad. — `document_import_capabilities` expone el resultado observado del probe local; los adaptadores nativos PDF/raster todavía deben condicionar su ejecución al tipo concreto anunciado.
 - [x] `F08-T03` Implementar SVG/SVGZ con sanitización/preserve modes. — `document_import` cubre SVG y SVGZ: valida cabecera gzip, limita el tamaño comprimido y descomprimido, aplica el máximo de política configurado y publica únicamente SVG saneado; conserva el importador SVG previo por compatibilidad.
 - [ ] `F08-T04` Implementar raster place/embed con sniffing y límites.
 - [ ] `F08-T05` Implementar PDF interno con `--pages` y estrategias de fuente allowlisted.

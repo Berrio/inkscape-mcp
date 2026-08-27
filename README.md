@@ -58,6 +58,9 @@ La [matriz de compatibilidad](./docs/compatibility-matrix.md) separa el baseline
 Windows/Inkscape 1.4.4 probado de formatos, plataformas y capacidades aún no
 anunciadas.
 
+Para añadir el servidor a Codex CLI o VS Code sin confundirlo con una receta de
+exportación, sigue la [guía de configuración de clientes](./docs/client-configuration.md).
+
 ## Ejecutar localmente
 
 ```powershell

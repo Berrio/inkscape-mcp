@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "inkscape-mcp": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "C:\\ruta\\a\\InKscape-MCP\\dist\\cli.js",
+        "--workspace-root",
+        "${workspaceFolder}"
+      ]
+    }
+  }
+}

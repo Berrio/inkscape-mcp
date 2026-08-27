@@ -1,6 +1,12 @@
 export type RasterImportMetadata = {
   height: number;
-  mime: "image/bmp" | "image/gif" | "image/jpeg" | "image/png" | "image/webp";
+  mime:
+    | "image/bmp"
+    | "image/gif"
+    | "image/jpeg"
+    | "image/png"
+    | "image/tiff"
+    | "image/webp";
   width: number;
 };
 
@@ -54,6 +60,18 @@ export function sniffRasterMime(
     String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP"
   )
     return "image/webp";
+  if (
+    bytes.length >= 4 &&
+    ((bytes[0] === 0x49 &&
+      bytes[1] === 0x49 &&
+      bytes[2] === 0x2a &&
+      bytes[3] === 0x00) ||
+      (bytes[0] === 0x4d &&
+        bytes[1] === 0x4d &&
+        bytes[2] === 0x00 &&
+        bytes[3] === 0x2a))
+  )
+    return "image/tiff";
   throw new Error("Image asset is not a supported raster format");
 }
 
@@ -74,7 +92,9 @@ export function inspectRasterImport(
           ? jpegDimensions(bytes)
           : mime === "image/gif"
             ? gifDimensions(bytes)
-            : webpDimensions(bytes);
+            : mime === "image/tiff"
+              ? tiffDimensions(bytes)
+              : webpDimensions(bytes);
   if (dimensions.width < 1 || dimensions.height < 1)
     throw new Error("Raster image has invalid intrinsic dimensions");
   if (dimensions.width * dimensions.height > maximumMegapixels * 1_000_000)
@@ -118,6 +138,56 @@ function bmpDimensions(bytes: Uint8Array): { height: number; width: number } {
   const rowBytes = Math.ceil((width * bitsPerPixel) / 32) * 4;
   if (pixelOffset < 14 + dibSize || pixelOffset > bytes.length - rowBytes)
     throw new Error("BMP image is missing pixel data");
+  return { height, width };
+}
+
+function tiffDimensions(bytes: Uint8Array): { height: number; width: number } {
+  if (bytes.length < 10)
+    throw new Error("TIFF image is missing its IFD header");
+  const littleEndian = bytes[0] === 0x49;
+  const read16 = (offset: number) =>
+    readTiffUInt16(bytes, offset, littleEndian);
+  const read32 = (offset: number) =>
+    readTiffUInt32(bytes, offset, littleEndian);
+  const ifdOffset = read32(4);
+  if (ifdOffset > bytes.length - 2)
+    throw new Error("TIFF image IFD offset is invalid");
+  const entryCount = read16(ifdOffset);
+  if (entryCount > 128 || ifdOffset + 2 + entryCount * 12 + 4 > bytes.length)
+    throw new Error("TIFF image IFD entries are invalid");
+  const tags = new Map<number, number>();
+  for (let index = 0; index < entryCount; index += 1) {
+    const offset = ifdOffset + 2 + index * 12;
+    const tag = read16(offset);
+    const type = read16(offset + 2);
+    const count = read32(offset + 4);
+    if (
+      (tag === 256 ||
+        tag === 257 ||
+        tag === 259 ||
+        tag === 273 ||
+        tag === 279) &&
+      count === 1 &&
+      (type === 3 || type === 4)
+    )
+      tags.set(tag, type === 3 ? read16(offset + 8) : read32(offset + 8));
+  }
+  const width = tags.get(256);
+  const height = tags.get(257);
+  const compression = tags.get(259) ?? 1;
+  const stripOffset = tags.get(273);
+  const stripByteCount = tags.get(279);
+  if (width === undefined || height === undefined || width < 1 || height < 1)
+    throw new Error("TIFF image is missing valid dimensions");
+  if (compression !== 1)
+    throw new Error("TIFF image compression is not supported");
+  if (
+    stripOffset === undefined ||
+    stripByteCount === undefined ||
+    stripByteCount < 1 ||
+    stripOffset > bytes.length - stripByteCount
+  )
+    throw new Error("TIFF image is missing strip data");
   return { height, width };
 }
 
@@ -257,6 +327,30 @@ function readInt32LE(bytes: Uint8Array, offset: number): number {
     (bytes[offset + 2]! << 16) |
     (bytes[offset + 3]! << 24)
   );
+}
+
+function readTiffUInt16(
+  bytes: Uint8Array,
+  offset: number,
+  littleEndian: boolean,
+): number {
+  if (offset + 2 > bytes.length)
+    throw new Error("TIFF image header is truncated");
+  return littleEndian
+    ? bytes[offset]! | (bytes[offset + 1]! << 8)
+    : (bytes[offset]! << 8) | bytes[offset + 1]!;
+}
+
+function readTiffUInt32(
+  bytes: Uint8Array,
+  offset: number,
+  littleEndian: boolean,
+): number {
+  if (offset + 4 > bytes.length)
+    throw new Error("TIFF image header is truncated");
+  return littleEndian
+    ? readUInt32LE(bytes, offset)
+    : readUInt32BE(bytes, offset);
 }
 
 function crc32(bytes: Uint8Array): number {

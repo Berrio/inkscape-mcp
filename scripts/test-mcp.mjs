@@ -1176,6 +1176,72 @@ try {
     throw new Error(
       "document_import_raster did not render a byte-sniffed BMP document",
     );
+  const importedTiffBytes = Buffer.alloc(131);
+  importedTiffBytes.write("II", 0, "ascii");
+  importedTiffBytes.writeUInt16LE(42, 2);
+  importedTiffBytes.writeUInt32LE(8, 4);
+  importedTiffBytes.writeUInt16LE(9, 8);
+  for (const [index, [tag, type, count, value]] of [
+    [256, 4, 1, 1],
+    [257, 4, 1, 1],
+    [258, 3, 3, 122],
+    [259, 3, 1, 1],
+    [262, 3, 1, 2],
+    [273, 4, 1, 128],
+    [277, 3, 1, 3],
+    [278, 4, 1, 1],
+    [279, 4, 1, 3],
+  ].entries()) {
+    const offset = 10 + index * 12;
+    importedTiffBytes.writeUInt16LE(tag, offset);
+    importedTiffBytes.writeUInt16LE(type, offset + 2);
+    importedTiffBytes.writeUInt32LE(count, offset + 4);
+    if (type === 3) importedTiffBytes.writeUInt16LE(value, offset + 8);
+    else importedTiffBytes.writeUInt32LE(value, offset + 8);
+  }
+  importedTiffBytes.writeUInt16LE(8, 122);
+  importedTiffBytes.writeUInt16LE(8, 124);
+  importedTiffBytes.writeUInt16LE(8, 126);
+  await writeFile(
+    join(workspaceRoot, "raster-import-tiff.bin"),
+    importedTiffBytes,
+  );
+  const importedTiff = await workspaceClient.callTool({
+    arguments: {
+      embedding: "embed",
+      expectedRevision: createHash("sha256")
+        .update(importedTiffBytes)
+        .digest("hex"),
+      manifestPath: "raster-import-tiff.svg.import.json",
+      outputPath: "raster-import-tiff.svg",
+      path: "raster-import-tiff.bin",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_raster",
+  });
+  const tiffRevision = importedTiff.structuredContent?.revision;
+  if (
+    importedTiff.isError ||
+    importedTiff.structuredContent?.manifest?.mime !== "image/tiff" ||
+    typeof tiffRevision !== "string"
+  )
+    throw new Error(
+      "document_import_raster did not import a byte-sniffed TIFF document",
+    );
+  const tiffPreview = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: tiffRevision,
+      outputPath: "raster-import-tiff-preview.png",
+      path: "raster-import-tiff.svg",
+      width: 16,
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  if (tiffPreview.isError)
+    throw new Error(
+      "document_import_raster did not render a byte-sniffed TIFF document",
+    );
   await writeFile(
     join(workspaceRoot, "normalize-ids.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="legacy:gradient"/></defs><style>#legacy\\:gradient { fill: url(#legacy:gradient); }</style><rect id="duplicate" fill="url(#legacy:gradient)"/><use href="#legacy:gradient"/><circle id="duplicate"/><path/></svg>',

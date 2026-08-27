@@ -63,6 +63,12 @@ export {
   type GradientStop,
 } from "./gradients.js";
 export {
+  updateSvgDocumentMetadata,
+  updateSvgElementAccessibility,
+  type DocumentMetadataPatch,
+  type ElementAccessibilityPatch,
+} from "./metadata.js";
+export {
   parseSvgPathData,
   reverseLinearSvgPathData,
   serializeSvgPathData,

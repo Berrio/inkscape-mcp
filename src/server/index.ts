@@ -14,6 +14,8 @@ import {
   changePageOrientationSvg,
   createSvgDocument,
   createSvgShapes,
+  updateSvgDocumentMetadata,
+  updateSvgElementAccessibility,
   applySvgGradient,
   createSvgGradient,
   deleteSvgGradient,
@@ -2295,6 +2297,97 @@ export function buildServer(config: ServerConfig): McpServer {
         backupCreated: committed.backupPath !== undefined,
         id: result.id,
         removedIds: result.removedIds,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "metadata_manage",
+    {
+      description:
+        "Updates SVG document metadata or element accessibility with bounded plain text and no arbitrary RDF/XML.",
+      inputSchema: z.discriminatedUnion("action", [
+        z
+          .object({
+            action: z.literal("document"),
+            description: z.string().min(1).max(2_000).optional(),
+            expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+            license: z.string().min(1).max(2_000).optional(),
+            path: z.string().min(1).max(1024),
+            title: z.string().min(1).max(2_000).optional(),
+            workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+          })
+          .refine(
+            (value) =>
+              value.title !== undefined ||
+              value.description !== undefined ||
+              value.license !== undefined,
+            "Metadata requires at least one patch",
+          ),
+        z.object({
+          action: z.literal("elements"),
+          elements: z
+            .array(
+              z
+                .object({
+                  description: z.string().min(1).max(2_000).optional(),
+                  hidden: z.boolean().optional(),
+                  id: shapeIdSchema,
+                  label: z.string().min(1).max(2_000).optional(),
+                  title: z.string().min(1).max(2_000).optional(),
+                })
+                .refine(
+                  (value) =>
+                    value.label !== undefined ||
+                    value.title !== undefined ||
+                    value.description !== undefined ||
+                    value.hidden !== undefined,
+                  "Accessibility element requires at least one patch",
+                ),
+            )
+            .min(1)
+            .max(100),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+      ]),
+      outputSchema: z.object({
+        action: z.enum(["document", "elements"]),
+        backupCreated: z.boolean(),
+        ids: z.array(shapeIdSchema).optional(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(input.workspaceId, input.path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const changed =
+        input.action === "document"
+          ? updateSvgDocumentMetadata(source, input)
+          : updateSvgElementAccessibility(source, input.elements);
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: input.expectedRevision,
+        expectedRevision: input.expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        action: input.action,
+        backupCreated: committed.backupPath !== undefined,
+        ...(input.action === "elements"
+          ? { ids: input.elements.map((element) => element.id) }
+          : {}),
         revision: committed.revision,
       };
       return {

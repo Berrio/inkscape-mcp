@@ -1834,8 +1834,8 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [ ] `F07-T32` Símbolos y `<use>`/clones con cycle detection.
 - [ ] `F07-T33` Guías y grids documentales sin depender de preferencias globales.
-- [ ] `F07-T34` Metadata title/desc/RDF/license con sanitización.
-- [ ] `F07-T35` Accesibilidad básica y warnings de contraste/orden solo como heurística.
+- [~] `F07-T34` Metadata title/desc/RDF/license con sanitización. — `metadata_manage` edita title, desc y licencia como texto acotado y sanitizado; RDF libre permanece fuera de alcance hasta definir un modelo seguro.
+- [~] `F07-T35` Accesibilidad básica y warnings de contraste/orden solo como heurística. — `metadata_manage` establece `aria-label`, `aria-hidden`, title y desc por elemento con IDs explícitos. Los warnings de contraste/orden siguen pendientes.
 - [ ] `F07-T36` Investigar LPE; publicar únicamente subconjunto headless con smoke tests.
 
 #### Cobertura avanzada adicional

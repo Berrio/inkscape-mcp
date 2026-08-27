@@ -7,6 +7,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { gzipSync } from "node:zlib";
 
 const server = {
   args: ["dist/cli.js"],
@@ -976,6 +977,43 @@ try {
     /<script|onclick=/iu.test(importedText)
   )
     throw new Error("document_import_svg published unsafe SVG content");
+  const compressedImport = gzipSync(
+    '<svg xmlns="http://www.w3.org/2000/svg"><script>throw new Error("x")</script><rect id="compressed_safe" width="5" height="5"/></svg>',
+  );
+  await writeFile(join(workspaceRoot, "unsafe-import.svgz"), compressedImport);
+  const compressedRevision = createHash("sha256")
+    .update(compressedImport)
+    .digest("hex");
+  const importedSvgz = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: compressedRevision,
+      format: "svgz",
+      manifestPath: "safe-import-svgz.svg.import.json",
+      outputPath: "safe-import-svgz.svg",
+      path: "unsafe-import.svgz",
+      sanitizeMode: "preserve-local",
+      workspaceId: workspace.id,
+    },
+    name: "document_import",
+  });
+  const svgzManifest = importedSvgz.structuredContent?.manifest;
+  if (
+    importedSvgz.isError ||
+    svgzManifest?.format !== "svgz" ||
+    svgzManifest?.removed?.includes("element:script") !== true ||
+    !(
+      await readFile(join(workspaceRoot, "safe-import-svgz.svg"), "utf8")
+    ).includes('id="compressed_safe"') ||
+    !(
+      await readFile(
+        join(workspaceRoot, "safe-import-svgz.svg.import.json"),
+        "utf8",
+      )
+    ).includes('"schema": "inkscape-mcp-document-import/v1"')
+  )
+    throw new Error(
+      "document_import did not publish sanitized SVGZ and manifest",
+    );
   await writeFile(
     join(workspaceRoot, "normalize-ids.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="legacy:gradient"/></defs><style>#legacy\\:gradient { fill: url(#legacy:gradient); }</style><rect id="duplicate" fill="url(#legacy:gradient)"/><use href="#legacy:gradient"/><circle id="duplicate"/><path/></svg>',

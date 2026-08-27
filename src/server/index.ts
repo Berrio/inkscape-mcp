@@ -8,6 +8,7 @@ import { z } from "zod";
 import packageMetadata from "../../package.json" with { type: "json" };
 import { CapabilityService } from "../capabilities/index.js";
 import { assertDocumentWorkspace, type ServerConfig } from "../config/index.js";
+import { importSanitizedSvg } from "../import/svg-import.js";
 import {
   addSvgPage,
   adjustPageMarginsSvg,
@@ -1699,6 +1700,122 @@ export function buildServer(config: ServerConfig): McpServer {
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_import",
+    {
+      description:
+        "Imports one workspace-local SVG or SVGZ into a new sanitized SVG plus an adjacent reproducible conversion manifest. SVGZ expansion is hard-limited and no external resource is fetched.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          format: z.enum(["svg", "svgz"]),
+          manifestPath: z.string().min(1).max(1024),
+          outputPath: z.string().min(1).max(1024),
+          path: z.string().min(1).max(1024),
+          sanitizeMode: z
+            .enum(["strict", "preserve-local", "trusted"])
+            .default("preserve-local"),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        manifest: z.object({
+          format: z.enum(["svg", "svgz"]),
+          inputBytes: z.number().int().nonnegative(),
+          outputPath: z.string(),
+          outputSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+          removed: z.array(z.string()),
+          schema: z.literal("inkscape-mcp-document-import/v1"),
+          sourcePath: z.string(),
+          sourceSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+        }),
+        manifestPath: z.string(),
+        manifestRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        outputPath: z.string(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({
+      expectedRevision,
+      format,
+      manifestPath,
+      outputPath,
+      path,
+      sanitizeMode,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const input = await workspace.resolveExisting(workspaceId, path);
+      const output = await workspace.resolveNewOutput(workspaceId, outputPath);
+      const manifestOutput = await workspace.resolveNewOutput(
+        workspaceId,
+        manifestPath,
+      );
+      if (!/\.svg$/iu.test(output.relativePath))
+        throw new Error("document_import requires a .svg output path");
+      if (!/\.json$/iu.test(manifestOutput.relativePath))
+        throw new Error("document_import requires a .json manifest path");
+      if (
+        output.absolutePath.toLocaleLowerCase() ===
+        manifestOutput.absolutePath.toLocaleLowerCase()
+      )
+        throw new Error("Import output and manifest paths must differ");
+      const inputStats = await stat(input.absolutePath);
+      if (!inputStats.isFile() || inputStats.size > config.maxInputBytes)
+        throw new Error("SVG import exceeds the configured size limit");
+      const imported = importSanitizedSvg(await readFile(input.absolutePath), {
+        format,
+        maxInputBytes: config.maxInputBytes,
+        maximumMode: config.maximumSanitizeMode,
+        mode: sanitizeMode,
+      });
+      const contents = Buffer.from(imported.svg, "utf8");
+      const manifest = {
+        format,
+        inputBytes: imported.inputBytes,
+        outputPath: output.relativePath,
+        outputSha256: createHash("sha256").update(contents).digest("hex"),
+        removed: [...imported.removed],
+        schema: "inkscape-mcp-document-import/v1" as const,
+        sourcePath: input.relativePath,
+        sourceSha256: imported.sourceSha256,
+      };
+      const committed = await fileStore.commitBatch({
+        expectedRevision,
+        files: [
+          { contents, targetPath: output.absolutePath },
+          {
+            contents: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`),
+            targetPath: manifestOutput.absolutePath,
+          },
+        ],
+        sourcePath: input.absolutePath,
+      });
+      const revisions = new Map(
+        committed.files.map((file) => [file.targetPath, file.revision]),
+      );
+      const revision = revisions.get(output.absolutePath);
+      const manifestRevision = revisions.get(manifestOutput.absolutePath);
+      if (!revision || !manifestRevision)
+        throw new Error(
+          "document_import did not publish its complete manifest",
+        );
+      const result = {
+        manifest,
+        manifestPath: manifestOutput.relativePath,
+        manifestRevision,
+        outputPath: output.relativePath,
+        revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
       };
     },
   );

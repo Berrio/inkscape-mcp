@@ -1879,16 +1879,16 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Importación normalizada
 
-- [ ] `F08-T01` Diseñar pipeline `externo -> SVG temporal -> inspección -> incorporación/publicación`.
+- [~] `F08-T01` Diseñar pipeline `externo -> SVG temporal -> inspección -> incorporación/publicación`. — El tramo SVG/SVGZ usa decode limitado -> sanitización -> SVG nuevo + manifest atómico; falta conectar los convertidores externos raster/PDF a la misma tubería.
 - [ ] `F08-T02` Usar `--list-input-types` runtime como fuente de verdad.
-- [~] `F08-T03` Implementar SVG/SVGZ con sanitización/preserve modes. — `document_import_svg` importa SVG local con revisión SHA-256, commit atómico y modos strict/preserve-local/trusted limitados por configuración; la prueba MCP elimina script/event handler reales. SVGZ sigue pendiente.
+- [x] `F08-T03` Implementar SVG/SVGZ con sanitización/preserve modes. — `document_import` cubre SVG y SVGZ: valida cabecera gzip, limita el tamaño comprimido y descomprimido, aplica el máximo de política configurado y publica únicamente SVG saneado; conserva el importador SVG previo por compatibilidad.
 - [ ] `F08-T04` Implementar raster place/embed con sniffing y límites.
 - [ ] `F08-T05` Implementar PDF interno con `--pages` y estrategias de fuente allowlisted.
 - [ ] `F08-T06` Implementar PDF Poppler como modo distinto y advertir glyphs/rasterización.
 - [ ] `F08-T07` Gatear AI/EPS/PS/EMF/WMF/XAML/DXF y otros según sonda real.
 - [ ] `F08-T08` Detectar importadores que abren diálogo/requieren GUI y marcarlos no-headless.
 - [ ] `F08-T09` Probar archivo corrupto, password/encrypted, huge pages, zip bomb y dependencia ausente.
-- [ ] `F08-T10` Implementar `document_import` con manifest de conversión/pérdidas.
+- [~] `F08-T10` Implementar `document_import` con manifest de conversión/pérdidas. — Disponible para SVG/SVGZ: publica SVG y sidecar JSON con formato, hashes, bytes y eliminaciones mediante `commitBatch`; los adaptadores raster/PDF todavía no alimentan ese contrato.
 
 #### Exportaciones adicionales
 

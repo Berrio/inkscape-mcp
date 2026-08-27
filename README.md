@@ -46,6 +46,10 @@ Consulta la [guía de tamaños y exportación](./docs/design-size-guide.md) para
 trabajar con milímetros, `viewBox`, DPI, áreas PNG y páginas sin recortes ni
 deformaciones inesperadas.
 
+Consulta la [guía de formatos de exportación](./docs/export-guide.md) para
+elegir PNG, PDF o SVG, conocer las pérdidas por formato y verificar cada
+entregable.
+
 ## Ejecutar localmente
 
 ```powershell

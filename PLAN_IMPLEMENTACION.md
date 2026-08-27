@@ -1847,7 +1847,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F07-T28` Crop no destructivo mediante clip path. — `images_crop` crea un `clipPath` local de espacio de usuario, preserva el `href` y la geometría de la imagen, exige IDs/revisión/coordenadas tipados y rechaza reemplazar implícitamente un clip existente; pruebas unitarias y MCP por stdio verificadas.
 - [x] `F07-T29` Calcular DPI efectivo por transform como `dpiX`/`dpiY`; para skew/rotación reportar también rango por valores singulares y fidelity, nunca un único escalar engañoso. — `images_inspect_dpi` inspecciona PNG embebidos sin leer links, acumula transforms y devuelve `dpiX`/`dpiY`; ante skew/rotación calcula rango conservador con valores singulares y marca fidelidad explícita.
 - [ ] `F07-T30` Bitmap trace detrás de capability/preset allowlist y límites de costo.
-- [ ] `F07-T31` No descargar URLs; ofrecer error/remediación para recurso remoto.
+- [x] `F07-T31` No descargar URLs; ofrecer error/remediación para recurso remoto. — `resources_inspect_remote` detecta refs HTTP/HTTPS/file/protocol-relative en atributos o CSS sin descargarlas ni exponer el URL, e indica usar `images_manage` con un asset local del workspace.
 
 #### Otros objetos avanzados
 

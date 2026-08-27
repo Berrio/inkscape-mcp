@@ -653,6 +653,22 @@ try {
       "images_inspect_dpi did not report transformed DPI honestly",
     );
   await writeFile(
+    join(workspaceRoot, "remote-resource.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><image id="remote_photo" href="https://example.test/photo.png" width="1" height="1"/></svg>',
+  );
+  const remoteResources = await workspaceClient.callTool({
+    arguments: { path: "remote-resource.svg", workspaceId: workspace.id },
+    name: "resources_inspect_remote",
+  });
+  if (
+    remoteResources.isError ||
+    remoteResources.structuredContent?.resources?.[0]?.scheme !== "https" ||
+    !remoteResources.structuredContent?.remediation?.includes("images_manage")
+  )
+    throw new Error(
+      "resources_inspect_remote did not report a no-download remediation",
+    );
+  await writeFile(
     join(workspaceRoot, "clips.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><rect id="clipped_target" width="10" height="8"/></svg>',
   );

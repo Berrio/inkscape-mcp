@@ -49,6 +49,7 @@ import {
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
   inspectSvgImageDpi,
+  inspectSvgRemoteResources,
   normalizeFontFamilies,
   inspectSvgSettings,
   listSvgPages,
@@ -2922,6 +2923,49 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = inspectSvgImageDpi(
         await readFile(document.absolutePath, "utf8"),
       );
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "resources_inspect_remote",
+    {
+      description:
+        "Reports remote SVG resources without downloading them, with remediation to replace them using workspace-local linked or embedded image operations.",
+      inputSchema: z.object({
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        remediation: z.literal(
+          "Use images_manage with a workspace-local assetPath; remote downloads are intentionally unsupported.",
+        ),
+        resources: z.array(
+          z.object({
+            attribute: z.string(),
+            element: z.string(),
+            id: shapeIdSchema.optional(),
+            scheme: z.enum(["file", "http", "https", "protocol-relative"]),
+          }),
+        ),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const output = {
+        remediation:
+          "Use images_manage with a workspace-local assetPath; remote downloads are intentionally unsupported." as const,
+        resources: inspectSvgRemoteResources(
+          await readFile(document.absolutePath, "utf8"),
+        ),
+      };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

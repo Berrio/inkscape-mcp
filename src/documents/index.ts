@@ -94,6 +94,10 @@ export {
 } from "./images.js";
 export { inspectSvgImageDpi, type SvgImageDpiInspection } from "./image-dpi.js";
 export {
+  inspectSvgRemoteResources,
+  type RemoteSvgResource,
+} from "./remote-resources.js";
+export {
   applySvgFilter,
   createSvgFilter,
   createSvgBlurFilter,

@@ -43,6 +43,7 @@ export {
 export {
   createSvgShapes,
   combineSvgPaths,
+  createSvgConnector,
   breakApartSvgPath,
   reverseSvgPath,
   flattenSvgShapeTransforms,

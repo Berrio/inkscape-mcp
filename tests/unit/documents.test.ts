@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createSvgConnector,
   addSvgPage,
   adjustPageMarginsSvg,
   expandPdfMarginsSvg,
@@ -36,6 +37,24 @@ import {
 import { preflightSvg } from "../../src/documents/index.js";
 const mm = (value: number) => ({ unit: "mm" as const, value });
 describe("basic SVG documents", () => {
+  it("creates a typed Inkscape connector with explicit endpoints", () => {
+    const result = createSvgConnector(
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect id="from"/><rect id="to"/></svg>',
+      {
+        fromId: "from",
+        id: "connector",
+        points: [
+          [0, 0],
+          [5, 2],
+          [10, 0],
+        ],
+        toId: "to",
+      },
+    );
+    expect(result).toContain('id="connector"');
+    expect(result).toContain('inkscape:connection-start="#from"');
+    expect(result).toContain('inkscape:connection-end="#to"');
+  });
   it("provides immutable, versioned named page sizes", () => {
     const a4 = pageSizeFromPreset("a4-portrait");
     a4.width.value = 1;

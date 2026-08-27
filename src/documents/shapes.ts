@@ -209,6 +209,55 @@ export type ShapeSpec =
 
 const COLOR = /^#[a-fA-F0-9]{6}$/u;
 const SAFE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u;
+
+/** Creates one Inkscape semantic connector without accepting arbitrary XML. */
+export function createSvgConnector(
+  source: string,
+  spec: {
+    fromId: string;
+    id: string;
+    points: readonly [number, number][];
+    toId: string;
+  },
+): string {
+  if (
+    !SAFE_ID.test(spec.id) ||
+    !SAFE_ID.test(spec.fromId) ||
+    !SAFE_ID.test(spec.toId) ||
+    spec.fromId === spec.toId ||
+    spec.points.length < 2 ||
+    spec.points.length > 100 ||
+    spec.points.some(
+      (point) => !Number.isFinite(point[0]) || !Number.isFinite(point[1]),
+    )
+  )
+    throw new Error("Connector specification is invalid");
+  const document = parseSafeDocument(source);
+  const elements = Array.from(document.getElementsByTagName("*"));
+  if (elements.some((element) => element.getAttribute("id") === spec.id))
+    throw new Error("Connector ID already exists");
+  if (
+    !elements.some((element) => element.getAttribute("id") === spec.fromId) ||
+    !elements.some((element) => element.getAttribute("id") === spec.toId)
+  )
+    throw new Error("Connector endpoint ID does not exist");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("id", spec.id);
+  path.setAttribute(
+    "d",
+    spec.points
+      .map(
+        (point, index) => `${index === 0 ? "M" : "L"} ${point[0]} ${point[1]}`,
+      )
+      .join(" "),
+  );
+  path.setAttribute("fill", "none");
+  path.setAttribute("inkscape:connector-type", "polyline");
+  path.setAttribute("inkscape:connection-start", `#${spec.fromId}`);
+  path.setAttribute("inkscape:connection-end", `#${spec.toId}`);
+  document.documentElement?.appendChild(path);
+  return new XMLSerializer().serializeToString(document);
+}
 const SAFE_CLASS = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/u;
 
 export function createSvgShapes(

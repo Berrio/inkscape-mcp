@@ -13,7 +13,7 @@ import {
   parseAutonomousRecipeArguments,
   runAutonomousRecipe,
 } from "./automation/recipe-command.js";
-import { loadConfigFromCli } from "./config/index.js";
+import { loadConfigFromCli, redactDiagnostic } from "./config/index.js";
 import { formatDoctor, runDoctor } from "./doctor/index.js";
 import { buildServer } from "./server/index.js";
 import { recoverStaleScratch } from "./storage/index.js";
@@ -48,9 +48,7 @@ if (argument === "--help" || argument === "-h") {
       `${json ? JSON.stringify(report, null, 2) : formatDoctor(report)}\n`,
     );
   } catch (error: unknown) {
-    process.stderr.write(
-      `${error instanceof Error ? error.message : "Unable to run doctor"}\n`,
-    );
+    process.stderr.write(`${formatError(error, "Unable to run doctor")}\n`);
     process.exitCode = 1;
   }
 } else if (argument === "export") {
@@ -62,9 +60,7 @@ if (argument === "--help" || argument === "-h") {
     );
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } catch (error: unknown) {
-    process.stderr.write(
-      `${error instanceof Error ? error.message : "Unable to export preset"}\n`,
-    );
+    process.stderr.write(`${formatError(error, "Unable to export preset")}\n`);
     process.exitCode = 1;
   }
 } else if (argument === "run") {
@@ -76,9 +72,7 @@ if (argument === "--help" || argument === "-h") {
     );
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } catch (error: unknown) {
-    process.stderr.write(
-      `${error instanceof Error ? error.message : "Unable to run recipe"}\n`,
-    );
+    process.stderr.write(`${formatError(error, "Unable to run recipe")}\n`);
     process.exitCode =
       error instanceof AutonomousRecipeError ? error.exitCode : 3;
   }
@@ -98,12 +92,18 @@ if (argument === "--help" || argument === "-h") {
     serveStdio(() => buildServer(config), {
       legacy: "serve",
       onerror: (error) =>
-        process.stderr.write(`MCP stdio error: ${error.message}\n`),
+        process.stderr.write(
+          `MCP stdio error: ${redactDiagnostic(error.message)}\n`,
+        ),
     });
   } catch (error: unknown) {
     process.stderr.write(
-      `${error instanceof Error ? error.message : "Unable to start MCP server"}\n`,
+      `${formatError(error, "Unable to start MCP server")}\n`,
     );
     process.exitCode = 1;
   }
+}
+
+function formatError(error: unknown, fallback: string): string {
+  return redactDiagnostic(error instanceof Error ? error.message : fallback);
 }

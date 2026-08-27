@@ -8,7 +8,11 @@ export {
   parseConfigFlags,
   readConfigFile,
 } from "./load.js";
-export { redactConfig, type RedactedConfig } from "./redaction.js";
+export {
+  redactConfig,
+  redactDiagnostic,
+  type RedactedConfig,
+} from "./redaction.js";
 export {
   nativeSecurityPosture,
   type NativeSecurityPosture,

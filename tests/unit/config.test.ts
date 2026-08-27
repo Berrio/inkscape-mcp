@@ -9,6 +9,7 @@ import {
   nativeSecurityPosture,
   parseConfigFlags,
   redactConfig,
+  redactDiagnostic,
 } from "../../src/config/index.js";
 
 describe("configuration", () => {
@@ -117,6 +118,18 @@ describe("configuration", () => {
       scratchRoot: "configured",
       workspaceReady: true,
     });
+  });
+
+  it("redacts paths and credential-shaped values from stderr diagnostics", () => {
+    const redacted = redactDiagnostic(
+      "Failed at C:\\Users\\private\\design.svg with token=abc123 and Bearer auth-value",
+    );
+
+    expect(redacted).not.toContain("C:\\Users\\private");
+    expect(redacted).not.toContain("abc123");
+    expect(redacted).not.toContain("auth-value");
+    expect(redacted).toContain("<redacted-path>");
+    expect(redacted).toContain("token=<redacted>");
   });
 
   it("reports the unsandboxed native-parser boundary explicitly", () => {

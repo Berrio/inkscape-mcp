@@ -1804,7 +1804,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F07-T10` CRUD de linear/radial gradients y stops. — `gradients_manage` crea, actualiza, aplica o borra gradientes lineales/radiales con 2–64 stops ordenados y colores tipados. La eliminación rechaza referencias vivas; las pruebas unitarias y MCP cubren create/apply/update.
 - [ ] `F07-T11` Gradient units/transforms/spread y reutilización.
 - [x] `F07-T12` CRUD de patterns y aplicación con transforms. — `patterns_manage` crea/actualiza/aplica/elimina patrones tipados de dots/stripes, con colores hex estrictos, unidades y matriz invertible; bloquea borrados con refs SVG/CSS activas. Pruebas unitarias y MCP por stdio verificadas.
-- [ ] `F07-T13` CRUD de markers start/mid/end.
+- [x] `F07-T13` CRUD de markers start/mid/end. — `markers_manage` crea/actualiza/aplica/elimina flechas y puntos tipados, con color/tamaño/orientación/unidades validadas, para `line`, `path`, `polygon` y `polyline`; protege referencias activas. Pruebas unitarias y MCP por stdio verificadas.
 - [x] `F07-T14` Crear/aplicar/liberar clip paths y masks. — `clips_manage` y `masks_manage` crean recursos rectangulares tipados, los aplican/liberan sobre IDs explícitos y evitan borrar referencias SVG/CSS activas; las máscaras usan una región opaca de espacio de usuario sin admitir markup arbitrario. Pruebas unitarias y MCP por stdio verificadas.
 - [ ] `F07-T15` Detectar y limpiar defs no usados mediante plan/dryRun antes de vacuum.
 - [ ] `F07-T16` Implementar filtros seleccionados: blur, drop shadow, blend y color matrix con schemas tipados.

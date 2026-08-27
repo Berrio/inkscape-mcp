@@ -57,6 +57,10 @@ import {
   createSvgPattern,
   deleteSvgPattern,
   updateSvgPattern,
+  applySvgMarker,
+  createSvgMarker,
+  deleteSvgMarker,
+  updateSvgMarker,
   resizeContentSvg,
   resizePageOnlySvg,
   releaseSvgClipPath,
@@ -629,6 +633,14 @@ const patternSpecSchema = z.object({
     .optional(),
   units: z.enum(["objectBoundingBox", "userSpaceOnUse"]).optional(),
   weight: z.number().finite().positive(),
+});
+const markerSpecSchema = z.object({
+  color: z.string().regex(/^#[a-fA-F0-9]{6}$/u),
+  id: shapeIdSchema,
+  kind: z.enum(["arrow", "dot"]),
+  orient: z.enum(["auto", "auto-start-reverse"]).optional(),
+  size: z.number().finite().positive().max(1_000),
+  units: z.enum(["strokeWidth", "userSpaceOnUse"]).optional(),
 });
 const layoutAnchorSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("selection") }),
@@ -2729,6 +2741,101 @@ export function buildServer(config: ServerConfig): McpServer {
         ...(input.action === "elements"
           ? { ids: input.elements.map((element) => element.id) }
           : {}),
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "markers_manage",
+    {
+      description:
+        "Creates, replaces, applies or deletes typed SVG arrow/dot markers without accepting free path data or XML.",
+      inputSchema: z.discriminatedUnion("action", [
+        z.object({
+          action: z.literal("create"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          spec: markerSpecSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("update"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          spec: markerSpecSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("delete"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("apply"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          position: z.enum(["start", "mid", "end"]),
+          targetIds: z.array(shapeIdSchema).min(1).max(100),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+      ]),
+      outputSchema: z.object({
+        action: z.enum(["create", "update", "delete", "apply"]),
+        backupCreated: z.boolean(),
+        id: shapeIdSchema,
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        targetIds: z.array(shapeIdSchema).optional(),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(input.workspaceId, input.path);
+      const source = await readFile(document.absolutePath, "utf8");
+      let changed: string;
+      let id: string;
+      let targetIds: readonly string[] | undefined;
+      if (input.action === "create" || input.action === "update") {
+        changed =
+          input.action === "create"
+            ? createSvgMarker(source, input.spec)
+            : updateSvgMarker(source, input.spec);
+        id = input.spec.id;
+      } else if (input.action === "delete") {
+        changed = deleteSvgMarker(source, input.id);
+        id = input.id;
+      } else {
+        changed = applySvgMarker(
+          source,
+          input.id,
+          input.targetIds,
+          input.position,
+        );
+        id = input.id;
+        targetIds = input.targetIds;
+      }
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: input.expectedRevision,
+        expectedRevision: input.expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        action: input.action,
+        backupCreated: committed.backupPath !== undefined,
+        id,
+        ...(targetIds === undefined ? {} : { targetIds }),
         revision: committed.revision,
       };
       return {

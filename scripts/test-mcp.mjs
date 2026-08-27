@@ -263,6 +263,40 @@ try {
   if (patternUpdated.isError || patternUpdated.structuredContent?.id !== "dots")
     throw new Error("patterns_manage did not update a pattern");
   await writeFile(
+    join(workspaceRoot, "markers.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><path id="marker_line" d="M 0 0 L 10 0"/></svg>',
+  );
+  const markersRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "markers.svg")))
+    .digest("hex");
+  const markerCreated = await workspaceClient.callTool({
+    arguments: {
+      action: "create",
+      expectedRevision: markersRevision,
+      path: "markers.svg",
+      spec: { color: "#000000", id: "arrow", kind: "arrow", size: 5 },
+      workspaceId: workspace.id,
+    },
+    name: "markers_manage",
+  });
+  const markerCreatedRevision = markerCreated.structuredContent?.revision;
+  if (markerCreated.isError || typeof markerCreatedRevision !== "string")
+    throw new Error("markers_manage did not create a marker");
+  const markerApplied = await workspaceClient.callTool({
+    arguments: {
+      action: "apply",
+      expectedRevision: markerCreatedRevision,
+      id: "arrow",
+      path: "markers.svg",
+      position: "end",
+      targetIds: ["marker_line"],
+      workspaceId: workspace.id,
+    },
+    name: "markers_manage",
+  });
+  if (markerApplied.isError || markerApplied.structuredContent?.id !== "arrow")
+    throw new Error("markers_manage did not apply a marker");
+  await writeFile(
     join(workspaceRoot, "metadata.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><image id="accessible_image" href="data:image/png;base64,AA==" width="1" height="1"/></svg>',
   );

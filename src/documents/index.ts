@@ -71,6 +71,13 @@ export {
 export { attachSvgTextToPath, detachSvgTextFromPath } from "./text-path.js";
 export { cropSvgImage, type SvgImageCrop } from "./image-crop.js";
 export {
+  applySvgMarker,
+  createSvgMarker,
+  deleteSvgMarker,
+  updateSvgMarker,
+  type SvgMarkerSpec,
+} from "./markers.js";
+export {
   applySvgPattern,
   createSvgPattern,
   deleteSvgPattern,

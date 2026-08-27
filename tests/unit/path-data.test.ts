@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseSvgPathData,
   moveAbsoluteSvgPathNode,
+  editAbsoluteLinearSvgPathNode,
   reverseLinearSvgPathData,
   serializeSvgPathData,
   splitSvgPathSubpaths,
@@ -59,5 +60,28 @@ describe("SVG path AST", () => {
     expect(() =>
       moveAbsoluteSvgPathNode("M 0 0 l 4 2", 1, { x: 5, y: 3 }),
     ).toThrow("currently supports");
+  });
+
+  it("inserts, removes, and retags safe linear path nodes", () => {
+    expect(
+      editAbsoluteLinearSvgPathNode("M 0 0 L 4 2", {
+        action: "insert",
+        index: 1,
+        point: { x: 2, y: 1 },
+      }),
+    ).toBe("M 0 0 L 2 1 L 4 2");
+    expect(
+      editAbsoluteLinearSvgPathNode("M 0 0 L 2 1 L 4 2", {
+        action: "delete",
+        index: 1,
+      }),
+    ).toBe("M 0 0 L 4 2");
+    expect(
+      editAbsoluteLinearSvgPathNode("M 0 0 L 4 2", {
+        action: "set_command",
+        command: "T",
+        index: 1,
+      }),
+    ).toBe("M 0 0 T 4 2");
   });
 });

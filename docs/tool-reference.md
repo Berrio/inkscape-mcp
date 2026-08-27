@@ -83,6 +83,7 @@ exportación: inspección → `document_export_preset_plan` →
 | `path_break_apart` | Path compuesto y nuevos IDs explícitos.                                     | Separar subpaths preservando referencias seguras.        |
 | `path_reverse`     | Path lineal explícito.                                                      | Invertir dirección; curvas/arcos se rechazan.            |
 | `path_node_move`   | Path, índice de segmento y punto finito tipado.                             | Mover un nodo lineal sin enviar `d` libre.               |
+| `path_node_edit`   | Insert/delete/set_command sobre nodos lineales absolutos.                   | Ajustar la estructura de una polilínea.                  |
 
 ## Defs, estilos y reutilización
 

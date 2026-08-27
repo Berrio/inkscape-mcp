@@ -7,6 +7,7 @@ import {
 
 import { sanitizeSvg } from "../svg/index.js";
 import {
+  editAbsoluteLinearSvgPathNode,
   moveAbsoluteSvgPathNode,
   parseSvgPathData,
   reverseLinearSvgPathData,
@@ -475,6 +476,25 @@ export function moveSvgPathNode(
   const data = path.getAttribute("d");
   if (data === null) throw new Error("Path data is missing");
   path.setAttribute("d", moveAbsoluteSvgPathNode(data, index, point));
+  return { id, svg: new XMLSerializer().serializeToString(document) };
+}
+
+export function editSvgPathNode(
+  source: string,
+  id: string,
+  request:
+    | { action: "delete"; index: number }
+    | { action: "insert"; index: number; point: { x: number; y: number } }
+    | { action: "set_command"; command: "L" | "T"; index: number },
+): { id: string; svg: string } {
+  const document = parseSafeDocument(source);
+  const path = requirePathElement(
+    Array.from(document.getElementsByTagName("*")),
+    id,
+  );
+  const data = path.getAttribute("d");
+  if (data === null) throw new Error("Path data is missing");
+  path.setAttribute("d", editAbsoluteLinearSvgPathNode(data, request));
   return { id, svg: new XMLSerializer().serializeToString(document) };
 }
 

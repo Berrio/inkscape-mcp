@@ -172,6 +172,48 @@ export function moveAbsoluteSvgPathNode(
   return serializeSvgPathData(segments);
 }
 
+export function editAbsoluteLinearSvgPathNode(
+  value: string,
+  request:
+    | { action: "delete"; index: number }
+    | { action: "insert"; index: number; point: { x: number; y: number } }
+    | { action: "set_command"; command: "L" | "T"; index: number },
+): string {
+  const segments = parseSvgPathData(value);
+  if (!Number.isInteger(request.index) || request.index < 0)
+    throw new Error("Path node index is invalid");
+  if (request.action === "insert") {
+    if (
+      !Number.isFinite(request.point.x) ||
+      !Number.isFinite(request.point.y) ||
+      request.index < 1 ||
+      request.index > segments.length
+    )
+      throw new Error("Path node insertion is invalid");
+    segments.splice(request.index, 0, {
+      command: "L",
+      values: [request.point.x, request.point.y],
+    });
+    return serializeSvgPathData(segments);
+  }
+  if (request.index === 0)
+    throw new Error("The initial moveto cannot be edited");
+  const segment = segments[request.index];
+  if (!segment || (segment.command !== "L" && segment.command !== "T"))
+    throw new Error(
+      "Node editing currently supports absolute lineto and smooth quadratic segments",
+    );
+  if (request.action === "delete") {
+    segments.splice(request.index, 1);
+  } else {
+    segments[request.index] = {
+      command: request.command,
+      values: segment.values,
+    };
+  }
+  return serializeSvgPathData(segments);
+}
+
 function serializeReversedLinearSubpath(
   subpath: readonly SvgPathSegment[],
 ): string {

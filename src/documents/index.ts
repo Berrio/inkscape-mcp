@@ -46,6 +46,7 @@ export {
   breakApartSvgPath,
   reverseSvgPath,
   flattenSvgShapeTransforms,
+  editSvgPathNode,
   moveSvgPathNode,
   duplicateSvgShape,
   reparentSvgShapes,
@@ -169,6 +170,7 @@ export {
 export {
   parseSvgPathData,
   moveAbsoluteSvgPathNode,
+  editAbsoluteLinearSvgPathNode,
   reverseLinearSvgPathData,
   serializeSvgPathData,
   splitSvgPathSubpaths,

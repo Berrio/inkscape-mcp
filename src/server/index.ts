@@ -31,6 +31,7 @@ import {
   deleteSvgClipPath,
   deleteSvgFilter,
   deleteSvgMask,
+  editSvgPathNode,
   createSvgShapes,
   attachSvgTextToPath,
   detachSvgTextFromPath,
@@ -4957,6 +4958,79 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         backupCreated: committed.backupPath !== undefined,
         id: result.id,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "path_node_edit",
+    {
+      description:
+        "Inserts, deletes, or retags one explicit absolute linear path node by segment index without accepting raw SVG path data.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          operation: z.discriminatedUnion("action", [
+            z
+              .object({
+                action: z.literal("delete"),
+                index: z.number().int().min(1).max(9_999),
+              })
+              .strict(),
+            z
+              .object({
+                action: z.literal("insert"),
+                index: z.number().int().min(1).max(10_000),
+                point: z
+                  .object({ x: z.number().finite(), y: z.number().finite() })
+                  .strict(),
+              })
+              .strict(),
+            z
+              .object({
+                action: z.literal("set_command"),
+                command: z.enum(["L", "T"]),
+                index: z.number().int().min(1).max(9_999),
+              })
+              .strict(),
+          ]),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        id: shapeIdSchema,
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, id, operation, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const changed = editSvgPathNode(
+        await readFile(document.absolutePath, "utf8"),
+        id,
+        operation,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        id: changed.id,
         revision: committed.revision,
       };
       return {

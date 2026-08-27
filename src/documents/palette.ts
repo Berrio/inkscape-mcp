@@ -4,12 +4,15 @@ import { sanitizeSvg } from "../svg/index.js";
 
 const COLOR = /^#[0-9a-f]{6}$/iu;
 const PAINT_ATTRIBUTES = ["fill", "stroke", "stop-color"] as const;
+const CSS_VARIABLE_DECLARATION =
+  /(--[A-Za-z_][A-Za-z0-9_-]{0,63})\s*:\s*(#[0-9a-f]{6})\b/giu;
 
 export function inspectSvgPalette(
   source: string,
   limit = 128,
 ): {
   colors: readonly { color: string; uses: number }[];
+  cssVariables: readonly { color: string; name: string; uses: number }[];
   truncated: boolean;
 } {
   if (!Number.isInteger(limit) || limit < 1 || limit > 1_000)
@@ -36,7 +39,12 @@ export function inspectSvgPalette(
         rightUses - leftUses || leftColor.localeCompare(rightColor),
     )
     .map(([color, uses]) => ({ color, uses }));
-  return { colors: colors.slice(0, limit), truncated: colors.length > limit };
+  const cssVariables = inspectCssVariables(document.toString());
+  return {
+    colors: colors.slice(0, limit),
+    cssVariables: cssVariables.slice(0, limit),
+    truncated: colors.length > limit || cssVariables.length > limit,
+  };
 }
 
 /** Replaces only explicitly mapped direct document-local palette colors. */
@@ -73,5 +81,52 @@ export function applySvgPalette(
       element.setAttribute(name, replacement);
       count += 1;
     }
+  for (const style of Array.from(document.getElementsByTagName("style"))) {
+    const css = style.textContent ?? "";
+    const rewritten = css.replace(
+      CSS_VARIABLE_DECLARATION,
+      (whole, name: string, color: string) => {
+        const replacement = normalized.get(color.toLowerCase());
+        if (replacement === undefined) return whole;
+        count += 1;
+        return whole.replace(color, replacement);
+      },
+    );
+    if (rewritten !== css) style.textContent = rewritten;
+  }
   return { replacements: count, svg: document.toString() };
+}
+
+function inspectCssVariables(
+  source: string,
+): { color: string; name: string; uses: number }[] {
+  const variables = new Map<string, string>();
+  for (const match of source.matchAll(CSS_VARIABLE_DECLARATION)) {
+    const name = match[1];
+    const color = match[2];
+    if (name !== undefined && color !== undefined)
+      variables.set(name, color.toLowerCase());
+  }
+  return [...variables.entries()]
+    .map(([name, color]) => ({
+      color,
+      name,
+      uses: countCssVariableUses(source, name),
+    }))
+    .sort(
+      (left, right) =>
+        right.uses - left.uses || left.name.localeCompare(right.name),
+    );
+}
+
+function countCssVariableUses(source: string, name: string): number {
+  const expression = new RegExp(
+    `var\\(\\s*${escapeRegularExpression(name)}\\s*(?:,[^)]+)?\\)`,
+    "gu",
+  );
+  return [...source.matchAll(expression)].length;
+}
+
+function escapeRegularExpression(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

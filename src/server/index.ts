@@ -4788,7 +4788,7 @@ export function buildServer(
     "palette_apply",
     {
       description:
-        "Replaces explicitly mapped direct local hex paints without reading global Inkscape palettes or accepting CSS.",
+        "Replaces explicitly mapped direct local hex paints and local CSS variable values without reading global Inkscape palettes.",
       inputSchema: z
         .object({
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -4846,7 +4846,7 @@ export function buildServer(
     "palette_inspect",
     {
       description:
-        "Lists direct local hex colors used by fill, stroke, and gradient stops without reading global Inkscape palettes.",
+        "Lists direct local hex colors and local CSS variable values without reading global Inkscape palettes.",
       inputSchema: z
         .object({
           limit: z.number().int().min(1).max(1_000).default(128),
@@ -4859,6 +4859,13 @@ export function buildServer(
           z.object({
             color: z.string().regex(/^#[0-9a-f]{6}$/u),
             uses: z.number().int().positive(),
+          }),
+        ),
+        cssVariables: z.array(
+          z.object({
+            color: z.string().regex(/^#[0-9a-f]{6}$/u),
+            name: z.string().regex(/^--[A-Za-z_][A-Za-z0-9_-]{0,63}$/u),
+            uses: z.number().int().nonnegative(),
           }),
         ),
         truncated: z.boolean(),

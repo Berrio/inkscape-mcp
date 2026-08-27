@@ -2065,10 +2065,10 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 #### Paquete y release
 
-- [ ] `F11-T17` Build ESM `dist/` y bin con shebang.
-- [ ] `F11-T18` `package.json` bin `inkscape-mcp`, files allowlist y `mcpName` si corresponde.
-- [ ] `F11-T19` Instalar el `.tgz` producido en directorio temporal y ejecutar doctor/stdio real.
-- [ ] `F11-T20` Probar instalación con npm limpio y sin source tree.
+- [x] `F11-T17` Build ESM `dist/` y bin con shebang. — `npm run build` produce `dist/cli.js`; `test:pack` ejecuta el shim instalado.
+- [x] `F11-T18` `package.json` bin `inkscape-mcp`, files allowlist y `mcpName` si corresponde. — `npm run pack:check` verifica la allowlist y `test:pack` confirma que npm crea y resuelve el shim `inkscape-mcp`.
+- [x] `F11-T19` Instalar el `.tgz` producido en directorio temporal y ejecutar doctor/stdio real. — El smoke instala el tarball, parsea `--doctor --json` y conecta un cliente MCP al binario `dist` instalado.
+- [x] `F11-T20` Probar instalación con npm limpio y sin source tree. — `scripts/pack-smoke.mjs` usa un prefijo temporal independiente, instala sólo el `.tgz` con npm y ejecuta el binario publicado.
 - [ ] `F11-T21` Sincronizar versión package/server/changelog/server.json.
 - [ ] `F11-T22` Crear provenance/SBOM/checksums según infraestructura disponible.
 - [ ] `F11-T23` Publicar npm solo con autorización explícita del usuario.

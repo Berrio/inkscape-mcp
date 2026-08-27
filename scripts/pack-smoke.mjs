@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { Client } from "@modelcontextprotocol/client";
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import {
   existsSync,
   mkdirSync,
@@ -14,6 +16,7 @@ const npmCli = process.env.npm_execpath;
 const temporaryRoot = mkdtempSync(join(tmpdir(), "inkscape-mcp-pack-"));
 const packageDirectory = join(temporaryRoot, "package");
 const installDirectory = join(temporaryRoot, "install");
+const workspaceDirectory = join(temporaryRoot, "workspace");
 
 try {
   if (!npmCli) {
@@ -22,6 +25,7 @@ try {
 
   mkdirSync(packageDirectory);
   mkdirSync(installDirectory);
+  mkdirSync(workspaceDirectory);
 
   const packResult = execFileSync(
     process.execPath,
@@ -85,6 +89,58 @@ try {
 
   if (output.trim() !== packageMetadata.version) {
     throw new Error("Packed CLI version does not match package metadata");
+  }
+
+  const doctorOutput = execFileSync(
+    process.execPath,
+    [
+      npmCli,
+      "exec",
+      "--prefix",
+      installDirectory,
+      "--",
+      "inkscape-mcp",
+      "--doctor",
+      "--json",
+    ],
+    { encoding: "utf8" },
+  );
+  const doctor = JSON.parse(doctorOutput);
+  if (
+    typeof doctor !== "object" ||
+    doctor === null ||
+    typeof doctor.workspaceReady !== "boolean"
+  ) {
+    throw new Error("Packed CLI doctor did not return a valid report");
+  }
+
+  const client = new Client(
+    { name: "inkscape-mcp-pack-smoke", version: "0.0.0" },
+    { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+  );
+  const transport = new StdioClientTransport({
+    args: [
+      join(installedPackage, "dist", "cli.js"),
+      "--workspace-root",
+      workspaceDirectory,
+    ],
+    command: process.execPath,
+    cwd: installDirectory,
+    stderr: "pipe",
+  });
+  try {
+    await client.connect(transport);
+    const listed = await client.listTools();
+    if (!listed.tools.some((tool) => tool.name === "inkscape_status"))
+      throw new Error("Packed CLI did not list inkscape_status over stdio");
+    const status = await client.callTool({
+      arguments: {},
+      name: "inkscape_status",
+    });
+    if (status.isError || status.structuredContent === undefined)
+      throw new Error("Packed CLI did not answer inkscape_status over stdio");
+  } finally {
+    await client.close();
   }
 
   process.stdout.write(

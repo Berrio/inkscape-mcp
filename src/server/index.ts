@@ -13,6 +13,7 @@ import {
   adjustPageMarginsSvg,
   changePageOrientationSvg,
   createSvgDocument,
+  cropSvgImage,
   createSvgShapes,
   attachSvgTextToPath,
   detachSvgTextFromPath,
@@ -2299,6 +2300,71 @@ export function buildServer(config: ServerConfig): McpServer {
         backupCreated: committed.backupPath !== undefined,
         id: result.id,
         removedIds: result.removedIds,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "images_crop",
+    {
+      description:
+        "Crops one SVG image non-destructively by applying a new local user-space clipPath; the original image href and geometry remain unchanged.",
+      inputSchema: z
+        .object({
+          clipId: shapeIdSchema,
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          height: z.number().finite().positive(),
+          imageId: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          width: z.number().finite().positive(),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+          x: z.number().finite(),
+          y: z.number().finite(),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        clipId: shapeIdSchema,
+        imageId: shapeIdSchema,
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({
+      clipId,
+      expectedRevision,
+      height,
+      imageId,
+      path,
+      width,
+      workspaceId,
+      x,
+      y,
+    }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const changed = cropSvgImage(
+        await readFile(document.absolutePath, "utf8"),
+        { clipId, height, imageId, width, x, y },
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        clipId,
+        imageId,
         revision: committed.revision,
       };
       return {

@@ -283,6 +283,33 @@ try {
   )
     throw new Error("text_path_manage did not detach text from a path");
   await writeFile(
+    join(workspaceRoot, "image-crop.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><image id="photo" href="data:image/png;base64,AA==" width="10" height="8"/></svg>',
+  );
+  const imageCropRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "image-crop.svg")))
+    .digest("hex");
+  const croppedImage = await workspaceClient.callTool({
+    arguments: {
+      clipId: "photo_crop",
+      expectedRevision: imageCropRevision,
+      height: 4,
+      imageId: "photo",
+      path: "image-crop.svg",
+      width: 5,
+      workspaceId: workspace.id,
+      x: 1,
+      y: 2,
+    },
+    name: "images_crop",
+  });
+  if (
+    croppedImage.isError ||
+    croppedImage.structuredContent?.clipId !== "photo_crop" ||
+    croppedImage.structuredContent?.imageId !== "photo"
+  )
+    throw new Error("images_crop did not add a non-destructive crop");
+  await writeFile(
     join(workspaceRoot, "percentage.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="50%" viewBox="0 0 20 10"/>',
   );

@@ -1825,7 +1825,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F07-T25` Place linked local con path autorizado y URI relativa segura.
 - [ ] `F07-T26` Embed data URI con MIME/tamaño/dimensiones validados.
 - [ ] `F07-T27` Relink/embed/extract sin escapar del workspace.
-- [ ] `F07-T28` Crop no destructivo mediante clip path.
+- [x] `F07-T28` Crop no destructivo mediante clip path. — `images_crop` crea un `clipPath` local de espacio de usuario, preserva el `href` y la geometría de la imagen, exige IDs/revisión/coordenadas tipados y rechaza reemplazar implícitamente un clip existente; pruebas unitarias y MCP por stdio verificadas.
 - [ ] `F07-T29` Calcular DPI efectivo por transform como `dpiX`/`dpiY`; para skew/rotación reportar también rango por valores singulares y fidelity, nunca un único escalar engañoso.
 - [ ] `F07-T30` Bitmap trace detrás de capability/preset allowlist y límites de costo.
 - [ ] `F07-T31` No descargar URLs; ofrecer error/remediación para recurso remoto.

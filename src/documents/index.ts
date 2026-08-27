@@ -69,6 +69,7 @@ export {
   type ElementAccessibilityPatch,
 } from "./metadata.js";
 export { attachSvgTextToPath, detachSvgTextFromPath } from "./text-path.js";
+export { cropSvgImage, type SvgImageCrop } from "./image-crop.js";
 export {
   parseSvgPathData,
   reverseLinearSvgPathData,

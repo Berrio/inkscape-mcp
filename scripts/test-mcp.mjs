@@ -202,6 +202,67 @@ try {
   )
     throw new Error("gradients_manage did not update a gradient");
   await writeFile(
+    join(workspaceRoot, "patterns.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect id="pattern_target" width="10" height="5"/></svg>',
+  );
+  const patternsRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "patterns.svg")))
+    .digest("hex");
+  const patternCreated = await workspaceClient.callTool({
+    arguments: {
+      action: "create",
+      expectedRevision: patternsRevision,
+      path: "patterns.svg",
+      spec: {
+        background: "#ffffff",
+        foreground: "#000000",
+        id: "dots",
+        kind: "dots",
+        size: 4,
+        weight: 1,
+      },
+      workspaceId: workspace.id,
+    },
+    name: "patterns_manage",
+  });
+  const patternCreatedRevision = patternCreated.structuredContent?.revision;
+  if (patternCreated.isError || typeof patternCreatedRevision !== "string")
+    throw new Error("patterns_manage did not create a pattern");
+  const patternApplied = await workspaceClient.callTool({
+    arguments: {
+      action: "apply",
+      expectedRevision: patternCreatedRevision,
+      id: "dots",
+      paint: "fill",
+      path: "patterns.svg",
+      targetIds: ["pattern_target"],
+      workspaceId: workspace.id,
+    },
+    name: "patterns_manage",
+  });
+  const patternAppliedRevision = patternApplied.structuredContent?.revision;
+  if (patternApplied.isError || typeof patternAppliedRevision !== "string")
+    throw new Error("patterns_manage did not apply a pattern");
+  const patternUpdated = await workspaceClient.callTool({
+    arguments: {
+      action: "update",
+      expectedRevision: patternAppliedRevision,
+      path: "patterns.svg",
+      spec: {
+        foreground: "#ff0000",
+        id: "dots",
+        kind: "stripes",
+        size: 8,
+        transform: [1, 0, 0, 1, 2, 0],
+        weight: 2,
+      },
+      workspaceId: workspace.id,
+    },
+    name: "patterns_manage",
+  });
+  if (patternUpdated.isError || patternUpdated.structuredContent?.id !== "dots")
+    throw new Error("patterns_manage did not update a pattern");
+  await writeFile(
     join(workspaceRoot, "metadata.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><image id="accessible_image" href="data:image/png;base64,AA==" width="1" height="1"/></svg>',
   );

@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from "@modelcontextprotocol/client";
 
 import { DEFAULT_CONFIG } from "../../src/config/index.js";
 import {
@@ -137,6 +141,29 @@ describe("secure local HTTP transport", () => {
       });
       expect(response.status).toBe(401);
     } finally {
+      await server.close();
+    }
+  });
+
+  it("serves a modern authenticated MCP client end to end", async () => {
+    const server = await startHttpMcpServer(
+      { ...config, http: { ...config.http, port: 0 } },
+      token,
+    );
+    const client = new Client(
+      { name: "http-transport-test", version: "0.0.0" },
+      { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+    );
+    try {
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(server.url), {
+          authProvider: { token: async () => token },
+        }),
+      );
+      const { tools } = await client.listTools();
+      expect(tools.some((tool) => tool.name === "inkscape_status")).toBe(true);
+    } finally {
+      await client.close();
       await server.close();
     }
   });

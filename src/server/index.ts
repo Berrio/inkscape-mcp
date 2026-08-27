@@ -67,6 +67,17 @@ import {
   createSvgPattern,
   deleteSvgPattern,
   updateSvgPattern,
+  createSvgSymbol,
+  createSvgUseClone,
+  deleteSvgSymbol,
+  listSvgSymbols,
+  createSvgGrid,
+  createSvgGuide,
+  deleteSvgGrid,
+  deleteSvgGuide,
+  inspectSvgGuidesAndGrids,
+  updateSvgGrid,
+  updateSvgGuide,
   applySvgMarker,
   createSvgMarker,
   deleteSvgMarker,
@@ -662,6 +673,68 @@ const markerSpecSchema = z.object({
   size: z.number().finite().positive().max(1_000),
   units: z.enum(["strokeWidth", "userSpaceOnUse"]).optional(),
 });
+const symbolSpecSchema = z.object({
+  id: shapeIdSchema,
+  sourceId: shapeIdSchema,
+  viewBox: z
+    .tuple([
+      z.number().finite(),
+      z.number().finite(),
+      z.number().finite().positive(),
+      z.number().finite().positive(),
+    ])
+    .optional(),
+});
+const useCloneSpecSchema = z.object({
+  id: shapeIdSchema,
+  sourceId: shapeIdSchema,
+  x: z.number().finite().optional(),
+  y: z.number().finite().optional(),
+});
+const coordinatePairSchema = z.tuple([
+  z.number().finite(),
+  z.number().finite(),
+]);
+const guideSpecSchema = z.object({
+  id: shapeIdSchema,
+  label: z.string().min(0).max(256).optional(),
+  orientation: z.enum(["horizontal", "vertical"]),
+  position: coordinatePairSchema,
+});
+const guidePatchSchema = z
+  .object({
+    label: z.string().min(0).max(256).optional(),
+    orientation: z.enum(["horizontal", "vertical"]).optional(),
+    position: coordinatePairSchema.optional(),
+  })
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "Guide patch cannot be empty",
+  );
+const gridSpecSchema = z.object({
+  enabled: z.boolean(),
+  id: shapeIdSchema,
+  origin: coordinatePairSchema,
+  spacing: z.tuple([
+    z.number().finite().positive(),
+    z.number().finite().positive(),
+  ]),
+  type: z.literal("xygrid"),
+  visible: z.boolean(),
+});
+const gridPatchSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    origin: coordinatePairSchema.optional(),
+    spacing: z
+      .tuple([z.number().finite().positive(), z.number().finite().positive()])
+      .optional(),
+    visible: z.boolean().optional(),
+  })
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "Grid patch cannot be empty",
+  );
 const filterSpecSchema = z.discriminatedUnion("kind", [
   z.object({
     id: shapeIdSchema,
@@ -3581,6 +3654,277 @@ export function buildServer(config: ServerConfig): McpServer {
         backupCreated: committed.backupPath !== undefined,
         id,
         ...(targetIds === undefined ? {} : { targetIds }),
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "symbols_manage",
+    {
+      description:
+        "Lists, creates or deletes reusable SVG symbols and creates positioned local use clones. Existing cyclic or missing use references are rejected.",
+      inputSchema: z.discriminatedUnion("action", [
+        z.object({
+          action: z.literal("list"),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("create"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          spec: symbolSpecSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("clone"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          spec: useCloneSpecSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("delete"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+      ]),
+      outputSchema: z.object({
+        action: z.enum(["list", "create", "clone", "delete"]),
+        backupCreated: z.boolean().optional(),
+        id: shapeIdSchema.optional(),
+        revision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/u)
+          .optional(),
+        symbols: z
+          .array(
+            z.object({
+              id: shapeIdSchema,
+              viewBox: z
+                .tuple([
+                  z.number().finite(),
+                  z.number().finite(),
+                  z.number().finite().positive(),
+                  z.number().finite().positive(),
+                ])
+                .optional(),
+            }),
+          )
+          .optional(),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(input.workspaceId, input.path);
+      const source = await readFile(document.absolutePath, "utf8");
+      if (input.action === "list") {
+        const output = {
+          action: "list" as const,
+          symbols: listSvgSymbols(source),
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(output) }],
+          structuredContent: output,
+        };
+      }
+      let changed: string;
+      let id: string;
+      if (input.action === "create") {
+        changed = createSvgSymbol(source, input.spec);
+        id = input.spec.id;
+      } else if (input.action === "clone") {
+        changed = createSvgUseClone(source, input.spec);
+        id = input.spec.id;
+      } else {
+        changed = deleteSvgSymbol(source, input.id);
+        id = input.id;
+      }
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: input.expectedRevision,
+        expectedRevision: input.expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        action: input.action,
+        backupCreated: committed.backupPath !== undefined,
+        id,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "guides_grids_manage",
+    {
+      description:
+        "Inspects and safely changes document-local Inkscape guides and xygrids. It never reads or changes global Inkscape preferences.",
+      inputSchema: z.discriminatedUnion("action", [
+        z.object({
+          action: z.literal("inspect"),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("guide_create"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          spec: guideSpecSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("guide_update"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          patch: guidePatchSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("guide_delete"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("grid_create"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          spec: gridSpecSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("grid_update"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          patch: gridPatchSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("grid_delete"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+      ]),
+      outputSchema: z.object({
+        action: z.enum([
+          "inspect",
+          "guide_create",
+          "guide_update",
+          "guide_delete",
+          "grid_create",
+          "grid_update",
+          "grid_delete",
+        ]),
+        backupCreated: z.boolean().optional(),
+        grids: z
+          .array(
+            z.object({
+              enabled: z.boolean(),
+              id: shapeIdSchema,
+              origin: coordinatePairSchema,
+              spacing: z.tuple([
+                z.number().finite().positive(),
+                z.number().finite().positive(),
+              ]),
+              type: z.literal("xygrid"),
+              visible: z.boolean(),
+            }),
+          )
+          .optional(),
+        guides: z
+          .array(
+            z.object({
+              id: shapeIdSchema,
+              label: z.string().max(256).optional(),
+              orientation: z.enum(["horizontal", "vertical"]),
+              position: coordinatePairSchema,
+            }),
+          )
+          .optional(),
+        id: shapeIdSchema.optional(),
+        revision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/u)
+          .optional(),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(input.workspaceId, input.path);
+      const source = await readFile(document.absolutePath, "utf8");
+      if (input.action === "inspect") {
+        const output = {
+          action: "inspect" as const,
+          ...inspectSvgGuidesAndGrids(source),
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(output) }],
+          structuredContent: output,
+        };
+      }
+      let changed: string;
+      let id: string;
+      switch (input.action) {
+        case "guide_create":
+          changed = createSvgGuide(source, input.spec);
+          id = input.spec.id;
+          break;
+        case "guide_update":
+          changed = updateSvgGuide(source, input.id, input.patch);
+          id = input.id;
+          break;
+        case "guide_delete":
+          changed = deleteSvgGuide(source, input.id);
+          id = input.id;
+          break;
+        case "grid_create":
+          changed = createSvgGrid(source, input.spec);
+          id = input.spec.id;
+          break;
+        case "grid_update":
+          changed = updateSvgGrid(source, input.id, input.patch);
+          id = input.id;
+          break;
+        case "grid_delete":
+          changed = deleteSvgGrid(source, input.id);
+          id = input.id;
+          break;
+      }
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: input.expectedRevision,
+        expectedRevision: input.expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        action: input.action,
+        backupCreated: committed.backupPath !== undefined,
+        id,
         revision: committed.revision,
       };
       return {

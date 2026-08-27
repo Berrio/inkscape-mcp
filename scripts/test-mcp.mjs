@@ -137,6 +137,111 @@ try {
   )
     throw new Error("paths_boolean did not run Inkscape path union");
   await writeFile(
+    join(workspaceRoot, "symbols.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect id="badge" width="10" height="5"/></svg>',
+  );
+  const symbolsRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "symbols.svg")))
+    .digest("hex");
+  const symbolCreated = await workspaceClient.callTool({
+    arguments: {
+      action: "create",
+      expectedRevision: symbolsRevision,
+      path: "symbols.svg",
+      spec: { id: "badge_symbol", sourceId: "badge", viewBox: [0, 0, 10, 5] },
+      workspaceId: workspace.id,
+    },
+    name: "symbols_manage",
+  });
+  const symbolRevision = symbolCreated.structuredContent?.revision;
+  if (symbolCreated.isError || typeof symbolRevision !== "string")
+    throw new Error("symbols_manage did not create a symbol");
+  const cloneCreated = await workspaceClient.callTool({
+    arguments: {
+      action: "clone",
+      expectedRevision: symbolRevision,
+      path: "symbols.svg",
+      spec: { id: "badge_copy", sourceId: "badge_symbol", x: 12, y: 3 },
+      workspaceId: workspace.id,
+    },
+    name: "symbols_manage",
+  });
+  if (
+    cloneCreated.isError ||
+    cloneCreated.structuredContent?.id !== "badge_copy"
+  )
+    throw new Error("symbols_manage did not create a positioned use clone");
+  const symbolsListed = await workspaceClient.callTool({
+    arguments: {
+      action: "list",
+      path: "symbols.svg",
+      workspaceId: workspace.id,
+    },
+    name: "symbols_manage",
+  });
+  if (
+    symbolsListed.isError ||
+    symbolsListed.structuredContent?.symbols?.[0]?.id !== "badge_symbol"
+  )
+    throw new Error("symbols_manage did not list local symbols");
+  await writeFile(
+    join(workspaceRoot, "guides-grids.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"/>',
+  );
+  const guidesRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "guides-grids.svg")))
+    .digest("hex");
+  const guideCreated = await workspaceClient.callTool({
+    arguments: {
+      action: "guide_create",
+      expectedRevision: guidesRevision,
+      path: "guides-grids.svg",
+      spec: {
+        id: "guide_left",
+        orientation: "vertical",
+        position: [10, 0],
+      },
+      workspaceId: workspace.id,
+    },
+    name: "guides_grids_manage",
+  });
+  const guideRevision = guideCreated.structuredContent?.revision;
+  if (guideCreated.isError || typeof guideRevision !== "string")
+    throw new Error("guides_grids_manage did not create a guide");
+  const gridCreated = await workspaceClient.callTool({
+    arguments: {
+      action: "grid_create",
+      expectedRevision: guideRevision,
+      path: "guides-grids.svg",
+      spec: {
+        enabled: true,
+        id: "grid_mm",
+        origin: [0, 0],
+        spacing: [5, 5],
+        type: "xygrid",
+        visible: true,
+      },
+      workspaceId: workspace.id,
+    },
+    name: "guides_grids_manage",
+  });
+  if (gridCreated.isError || gridCreated.structuredContent?.id !== "grid_mm")
+    throw new Error("guides_grids_manage did not create a document grid");
+  const guidesInspected = await workspaceClient.callTool({
+    arguments: {
+      action: "inspect",
+      path: "guides-grids.svg",
+      workspaceId: workspace.id,
+    },
+    name: "guides_grids_manage",
+  });
+  if (
+    guidesInspected.isError ||
+    guidesInspected.structuredContent?.guides?.[0]?.id !== "guide_left" ||
+    guidesInspected.structuredContent?.grids?.[0]?.id !== "grid_mm"
+  )
+    throw new Error("guides_grids_manage did not inspect document metadata");
+  await writeFile(
     join(workspaceRoot, "gradients.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><rect id="gradient_target" width="10" height="5"/></svg>',
   );

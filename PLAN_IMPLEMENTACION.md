@@ -1,6 +1,6 @@
 # Plan maestro de implementación — Inkscape MCP
 
-> Estado: **F00-WP01 completado; el servidor MCP aún no tiene implementación funcional**
+> Estado: **servidor MCP funcional y publicado; P0 de diseño/recursos completado y la continuidad parte de P1**
 > Fecha de la auditoría: **2026-08-25**
 > Carpeta: `C:\Users\LENOVO\Documents\Repos\InKscape-MCP`
 > Prioridad del producto: tamaños de documento/página y exportación fiable a PNG, PDF y SVG; después, la mayor cobertura práctica posible de diseño vectorial.
@@ -42,20 +42,18 @@ Reglas de ejecución:
 
 Esta cola sustituye el orden numérico de fases **para el trabajo restante**. Su objetivo es que, si se agota el presupuesto de tokens en cualquier corte, el servidor ya publicado siga siendo útil, seguro y verificable. Cada bloque se termina con `npm run check`, smoke MCP real y commit/push antes de iniciar el siguiente.
 
-| Prioridad | Funcionalidades nuevas, en este orden                                                                                                                                      | Corte utilizable al terminar                                                                        |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| P0        | Mantener la regresión verde; cerrar `F07-T20` (text-on-path complejo) y `F07-T25–T27` (imagen local linked, embed, relink y extract restringidos al workspace).            | Composiciones reales con texto, tipografía y fotos se editan/exportan sin rutas externas inseguras. |
-| P0        | `F07-T29` DPI efectivo, `F07-T31` diagnóstico de recursos remotos y `F07-T35` heurísticas de contraste/orden.                                                              | El usuario puede detectar imágenes insuficientes y riesgos de entrega antes de exportar.            |
-| P1        | `F07-T11` reutilización de gradients; `T32–T33` símbolos/clones y guías/grids; completar seguridad de refs de texto/defs.                                                  | Diseño vectorial reutilizable y diagramación cotidiana sin depender de XML manual.                  |
-| P1        | `F08-T01–T10`: importación práctica (SVGZ, raster y PDF) con manifests, límites y capability gates.                                                                        | El MCP incorpora materiales habituales de diseño de forma segura.                                   |
-| P1        | `F08-T18–T24`: presets versionados web, print e iconos con `dryRun`/token de ejecución.                                                                                    | Flujos repetibles de entrega PNG/PDF/SVG sin reescribir parámetros.                                 |
-| P1        | Cerrar las puertas críticas ya implementadas de F01–F07: carreras de rutas, crash/cancel cleanup, fixtures visuales de paths/export, package smoke y documentación de uso. | El release Windows/stdio es reproducible y no depende de memoria del operador.                      |
-| P2        | Paths avanzados `F07-T01–T10,T36–T40`: nodos, booleanas ampliadas, LPE, mesh, conectores y paletas.                                                                        | Cobertura profesional avanzada; no bloquea el uso normal del MCP.                                   |
-| P2        | Formatos/extensiones no centrales `F08-T11–T17,T31–T34`: PS/EPS/EMF/WMF/XAML, optimizadores y adapters.                                                                    | Compatibilidad ampliada únicamente donde la capability real lo permita.                             |
-| P2        | `F09` completo: prompts, recursos, progreso, catálogo/snapshots y endurecimiento de jobs; conservar las APIs ya funcionales durante la migración.                          | Experiencia MCP más rica para clientes sofisticados.                                                |
-| P3        | `F10` HTTP, matriz macOS/Linux/1.5; `F12` GUI bridge, shell persistente, sandbox y CMYK/PDF-X.                                                                             | Extensiones opcionales; no deben retrasar el release Windows/stdio.                                 |
+| Prioridad | Funcionalidades nuevas, en este orden                                                                                                                                      | Corte utilizable al terminar                                                        |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| P0        | Mantener regresión verde y revisar de forma conservadora las referencias de texto/`defs` ya creadas antes de ampliar su edición.                                           | Lo ya publicado permanece seguro, atómico y verificable aunque se corte el trabajo. |
+| P1        | `F08-T01–T10`: importación práctica (SVGZ, raster y PDF) con manifests, límites y capability gates.                                                                        | El MCP incorpora materiales habituales de diseño de forma segura.                   |
+| P1        | `F08-T18–T24`: presets versionados web, print e iconos con `dryRun`/token de ejecución.                                                                                    | Flujos repetibles de entrega PNG/PDF/SVG sin reescribir parámetros.                 |
+| P1        | Cerrar las puertas críticas ya implementadas de F01–F07: carreras de rutas, crash/cancel cleanup, fixtures visuales de paths/export, package smoke y documentación de uso. | El release Windows/stdio es reproducible y no depende de memoria del operador.      |
+| P2        | Paths avanzados `F07-T01–T10,T36–T40`: nodos, booleanas ampliadas, LPE, mesh, conectores y paletas.                                                                        | Cobertura profesional avanzada; no bloquea el uso normal del MCP.                   |
+| P2        | Formatos/extensiones no centrales `F08-T11–T17,T31–T34`: PS/EPS/EMF/WMF/XAML, optimizadores y adapters.                                                                    | Compatibilidad ampliada únicamente donde la capability real lo permita.             |
+| P2        | `F09` completo: prompts, recursos, progreso, catálogo/snapshots y endurecimiento de jobs; conservar las APIs ya funcionales durante la migración.                          | Experiencia MCP más rica para clientes sofisticados.                                |
+| P3        | `F10` HTTP, matriz macOS/Linux/1.5; `F12` GUI bridge, shell persistente, sandbox y CMYK/PDF-X.                                                                             | Extensiones opcionales; no deben retrasar el release Windows/stdio.                 |
 
-Regla de corte: si sólo queda tiempo para una tarea, elegir siempre la primera pendiente de P0 y **no** iniciar una capacidad P1–P3. No mezclar en un mismo commit una capacidad nueva con refactors no relacionados.
+Regla de corte: si sólo queda tiempo para una tarea, elegir siempre la primera pendiente de P0; si P0 está cerrado, elegir la primera de P1 y **no** iniciar una capacidad P2–P3. No mezclar en un mismo commit una capacidad nueva con refactors no relacionados.
 
 ### Convenciones de estado
 
@@ -1851,8 +1849,8 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Otros objetos avanzados
 
-- [ ] `F07-T32` Símbolos y `<use>`/clones con cycle detection.
-- [ ] `F07-T33` Guías y grids documentales sin depender de preferencias globales.
+- [x] `F07-T32` Símbolos y `<use>`/clones con cycle detection. — `symbols_manage` lista, crea y elimina símbolos, y crea clones posicionados; solo permite referencias locales seguras y rechaza ciclos o IDs ausentes antes de mutar.
+- [x] `F07-T33` Guías y grids documentales sin depender de preferencias globales. — `guides_grids_manage` inspecciona y hace CRUD tipado de guías y `xygrid` en `sodipodi:namedview`, sin tocar configuración global de Inkscape.
 - [~] `F07-T34` Metadata title/desc/RDF/license con sanitización. — `metadata_manage` edita title, desc y licencia como texto acotado y sanitizado; las pruebas unitarias y MCP cubren documento y elemento. RDF libre permanece fuera de alcance hasta definir un modelo seguro.
 - [x] `F07-T35` Accesibilidad básica y warnings de contraste/orden solo como heurística. — `metadata_manage` establece `aria-label`, `aria-hidden`, title y desc; `accessibility_inspect` añade contraste de texto directo contra blanco y orden documental como heurísticas, con sus limitaciones explícitas.
 - [ ] `F07-T36` Investigar LPE; publicar únicamente subconjunto headless con smoke tests.

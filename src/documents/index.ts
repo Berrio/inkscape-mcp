@@ -130,6 +130,30 @@ export {
   type SvgPatternSpec,
 } from "./patterns.js";
 export {
+  createSvgSymbol,
+  createSvgUseClone,
+  deleteSvgSymbol,
+  listSvgSymbols,
+  type SvgSymbol,
+  type SvgSymbolSpec,
+  type SvgUseCloneSpec,
+} from "./symbols.js";
+export {
+  createSvgGrid,
+  createSvgGuide,
+  deleteSvgGrid,
+  deleteSvgGuide,
+  inspectSvgGuidesAndGrids,
+  updateSvgGrid,
+  updateSvgGuide,
+  type SvgGrid,
+  type SvgGridPatch,
+  type SvgGridSpec,
+  type SvgGuide,
+  type SvgGuidePatch,
+  type SvgGuideSpec,
+} from "./guides-grids.js";
+export {
   applySvgClipPath,
   applySvgMask,
   createSvgRectClipPath,

@@ -62,6 +62,17 @@ try {
   const packageMetadata = JSON.parse(
     readFileSync(join(installedPackage, "package.json"), "utf8"),
   );
+  const serverManifest = JSON.parse(
+    readFileSync(join(installedPackage, "server.json"), "utf8"),
+  );
+  if (
+    serverManifest.name !== packageMetadata.mcpName ||
+    serverManifest.version !== packageMetadata.version ||
+    serverManifest.packages?.[0]?.identifier !== packageMetadata.name ||
+    serverManifest.packages?.[0]?.transport?.type !== "stdio"
+  ) {
+    throw new Error("Packed server.json does not match package metadata");
+  }
   const binDirectory = join(installDirectory, "node_modules", ".bin");
   const binPath = join(
     binDirectory,
@@ -206,7 +217,7 @@ try {
   }
 
   const client = new Client(
-    { name: "inkscape-mcp-pack-smoke", version: "0.0.0" },
+    { name: "inkscape-mcp-pack-smoke", version: packageMetadata.version },
     { versionNegotiation: { mode: { pin: "2026-07-28" } } },
   );
   const transport = new StdioClientTransport({

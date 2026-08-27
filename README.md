@@ -69,6 +69,9 @@ Si una exportación, fuente, capability o receta falla, consulta el
 [troubleshooting de Windows](./docs/troubleshooting-windows.md) antes de
 reintentar o ampliar permisos.
 
+Para crear un tarball local con SBOM, provenance y hashes antes de cualquier
+publicación, sigue la [guía de evidencia de release](./docs/release-evidence.md).
+
 ## Ejecutar localmente
 
 ```powershell

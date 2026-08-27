@@ -45,6 +45,7 @@
     "test:conformance": "npx --no-install @modelcontextprotocol/conformance",
     "pack:check": "npm pack --dry-run --json",
     "test:pack": "npm run build --silent && node scripts/pack-smoke.mjs",
+    "release:provenance": "npm run build --silent && node scripts/release-provenance.mjs",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test"
   },
   "dependencies": {

@@ -59,6 +59,7 @@ import {
   inspectSvgImageDpi,
   inspectSvgMeshGradients,
   inspectSvgPalette,
+  applySvgPalette,
   inspectSvgPathEffects,
   inspectSvgAccessibility,
   inspectSvgRemoteResources,
@@ -4565,6 +4566,64 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = inspectSvgPathEffects(
         await readFile(document.absolutePath, "utf8"),
       );
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "palette_apply",
+    {
+      description:
+        "Replaces explicitly mapped direct local hex paints without reading global Inkscape palettes or accepting CSS.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          replacements: z
+            .array(
+              z
+                .object({
+                  from: z.string().regex(/^#[a-fA-F0-9]{6}$/u),
+                  to: z.string().regex(/^#[a-fA-F0-9]{6}$/u),
+                })
+                .strict(),
+            )
+            .min(1)
+            .max(128),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        replacements: z.number().int().nonnegative(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, path, replacements, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const changed = applySvgPalette(
+        await readFile(document.absolutePath, "utf8"),
+        replacements,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        replacements: changed.replacements,
+        revision: committed.revision,
+      };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

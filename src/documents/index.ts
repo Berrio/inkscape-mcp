@@ -84,7 +84,7 @@ export {
   type ElementAccessibilityPatch,
 } from "./metadata.js";
 export { attachSvgTextToPath, detachSvgTextFromPath } from "./text-path.js";
-export { inspectSvgPalette } from "./palette.js";
+export { applySvgPalette, inspectSvgPalette } from "./palette.js";
 export { inspectSvgPathEffects } from "./path-effects.js";
 export {
   updateSvgText,

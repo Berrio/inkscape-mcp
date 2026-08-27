@@ -534,7 +534,7 @@ export function breakApartSvgPath(
   };
 }
 
-/** Reverses line-only path subpaths while retaining element identity and style. */
+/** Reverses SVG path subpaths while retaining element identity and style. */
 export function reverseSvgPath(
   source: string,
   id: string,

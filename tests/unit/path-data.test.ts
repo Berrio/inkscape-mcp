@@ -48,8 +48,17 @@ describe("SVG path AST", () => {
     expect(reverseLinearSvgPathData("M 0 0 L 4 0 L 4 3 Z M 8 0 H 10 V 2")).toBe(
       "M 0 0 L 4 3 L 4 0 Z M 10 2 L 10 0 L 8 0",
     );
-    expect(() => reverseLinearSvgPathData("M 0 0 C 1 2 3 4 5 6")).toThrow(
-      "only moveto, lineto, horizontal, vertical and close",
+    expect(reverseLinearSvgPathData("M 0 0 C 1 2 3 4 5 6")).toBe(
+      "M 5 6 C 3 4 1 2 0 0",
+    );
+  });
+
+  it("reverses relative smooth curves and arcs without approximating geometry", () => {
+    expect(reverseLinearSvgPathData("m 0 0 c 1 2 3 4 5 6 s 2 2 4 4")).toBe(
+      "M 9 10 C 7 8 7 8 5 6 C 3 4 1 2 0 0",
+    );
+    expect(reverseLinearSvgPathData("M 0 0 A 2 3 45 0 1 8 9")).toBe(
+      "M 8 9 A 2 3 45 0 0 0 0",
     );
   });
 

@@ -139,12 +139,17 @@ export function splitSvgPathSubpaths(
   return result;
 }
 
-/** Reverses simple line-only subpaths without changing their fill closure. */
+/** Compatibility name for full semantic SVG path reversal. */
 export function reverseLinearSvgPathData(value: string): string {
-  const subpaths = splitSvgPathSubpaths(parseSvgPathData(value));
-  return subpaths
-    .map((subpath) => serializeReversedLinearSubpath(subpath))
-    .join(" ");
+  return reverseSvgPathData(value);
+}
+
+/** Reverses absolute/relative lines, Béziers, smooth commands and arcs exactly. */
+export function reverseSvgPathData(value: string): string {
+  const subpaths = splitSvgPathSubpaths(
+    absolutizeSvgPathSegments(parseSvgPathData(value)),
+  );
+  return subpaths.map((subpath) => serializeReversedSubpath(subpath)).join(" ");
 }
 
 /** Moves one explicit absolute node without accepting raw path data from callers. */
@@ -572,76 +577,150 @@ function validatePoint(point: { x: number; y: number }, name: string): void {
     throw new Error(`${name} coordinates must be finite`);
 }
 
-function serializeReversedLinearSubpath(
-  subpath: readonly SvgPathSegment[],
-): string {
-  if (subpath[0]?.command === "m")
-    throw new Error(
-      "Path reverse currently requires absolute moveto commands for each subpath",
-    );
-  let current = { x: 0, y: 0 };
-  let start = { x: 0, y: 0 };
+type ReversiblePathSegment = {
+  command: "A" | "C" | "L" | "Q";
+  end: { x: number; y: number };
+  start: { x: number; y: number };
+  values: readonly number[];
+};
+
+function serializeReversedSubpath(subpath: readonly SvgPathSegment[]): string {
+  const move = subpath[0];
+  if (!move || move.command !== "M")
+    throw new Error("Path reverse requires normalized absolute subpaths");
+  let current = { x: move.values[0]!, y: move.values[1]! };
+  const start = { ...current };
   let closed = false;
-  const points: { x: number; y: number }[] = [];
-  for (const segment of subpath) {
+  let lastCubicControl: { x: number; y: number } | undefined;
+  let lastQuadraticControl: { x: number; y: number } | undefined;
+  const segments: ReversiblePathSegment[] = [];
+  for (const segment of subpath.slice(1)) {
     switch (segment.command) {
-      case "M":
-        current = { x: segment.values[0]!, y: segment.values[1]! };
-        start = current;
-        points.push(current);
-        break;
-      case "m":
-        throw new Error(
-          "Path reverse currently requires absolute moveto commands for each subpath",
-        );
       case "L":
-        current = { x: segment.values[0]!, y: segment.values[1]! };
-        points.push(current);
-        break;
-      case "l":
-        current = {
-          x: current.x + segment.values[0]!,
-          y: current.y + segment.values[1]!,
-        };
-        points.push(current);
-        break;
       case "H":
-        current = { x: segment.values[0]!, y: current.y };
-        points.push(current);
+      case "V": {
+        const end =
+          segment.command === "L"
+            ? { x: segment.values[0]!, y: segment.values[1]! }
+            : segment.command === "H"
+              ? { x: segment.values[0]!, y: current.y }
+              : { x: current.x, y: segment.values[0]! };
+        segments.push({ command: "L", end, start: current, values: [] });
+        current = end;
+        lastCubicControl = undefined;
+        lastQuadraticControl = undefined;
         break;
-      case "h":
-        current = { x: current.x + segment.values[0]!, y: current.y };
-        points.push(current);
+      }
+      case "C": {
+        const end = { x: segment.values[4]!, y: segment.values[5]! };
+        segments.push({
+          command: "C",
+          end,
+          start: current,
+          values: [
+            segment.values[0]!,
+            segment.values[1]!,
+            segment.values[2]!,
+            segment.values[3]!,
+          ],
+        });
+        current = end;
+        lastCubicControl = { x: segment.values[2]!, y: segment.values[3]! };
+        lastQuadraticControl = undefined;
         break;
-      case "V":
-        current = { x: current.x, y: segment.values[0]! };
-        points.push(current);
+      }
+      case "S": {
+        const control1 = reflectedControl(current, lastCubicControl);
+        const end = { x: segment.values[2]!, y: segment.values[3]! };
+        segments.push({
+          command: "C",
+          end,
+          start: current,
+          values: [
+            control1.x,
+            control1.y,
+            segment.values[0]!,
+            segment.values[1]!,
+          ],
+        });
+        current = end;
+        lastCubicControl = { x: segment.values[0]!, y: segment.values[1]! };
+        lastQuadraticControl = undefined;
         break;
-      case "v":
-        current = { x: current.x, y: current.y + segment.values[0]! };
-        points.push(current);
+      }
+      case "Q": {
+        const end = { x: segment.values[2]!, y: segment.values[3]! };
+        segments.push({
+          command: "Q",
+          end,
+          start: current,
+          values: [segment.values[0]!, segment.values[1]!],
+        });
+        current = end;
+        lastQuadraticControl = { x: segment.values[0]!, y: segment.values[1]! };
+        lastCubicControl = undefined;
         break;
+      }
+      case "T": {
+        const control = reflectedControl(current, lastQuadraticControl);
+        const end = { x: segment.values[0]!, y: segment.values[1]! };
+        segments.push({
+          command: "Q",
+          end,
+          start: current,
+          values: [control.x, control.y],
+        });
+        current = end;
+        lastQuadraticControl = control;
+        lastCubicControl = undefined;
+        break;
+      }
+      case "A": {
+        const end = { x: segment.values[5]!, y: segment.values[6]! };
+        segments.push({
+          command: "A",
+          end,
+          start: current,
+          values: segment.values.slice(0, 5),
+        });
+        current = end;
+        lastCubicControl = undefined;
+        lastQuadraticControl = undefined;
+        break;
+      }
       case "Z":
-      case "z":
+        if (current.x !== start.x || current.y !== start.y)
+          segments.push({
+            command: "L",
+            end: start,
+            start: current,
+            values: [],
+          });
         current = start;
         closed = true;
         break;
       default:
-        throw new Error(
-          "Path reverse currently supports only moveto, lineto, horizontal, vertical and close commands",
-        );
+        throw new Error("Path reverse encountered an unsupported command");
     }
   }
-  const ordered = closed
-    ? [points[0]!, ...points.slice(1).toReversed()]
-    : [...points].toReversed();
-  const head = ordered[0];
-  if (!head) throw new Error("Path subpath is empty");
+  const head = closed ? start : (segments.at(-1)?.end ?? start);
+  const reversed = segments.toReversed();
   return [
     `M ${head.x} ${head.y}`,
-    ...ordered.slice(1).map((point) => `L ${point.x} ${point.y}`),
+    ...(closed ? reversed.slice(0, -1) : reversed).map(
+      serializeReversedSegment,
+    ),
     ...(closed ? ["Z"] : []),
   ].join(" ");
+}
+
+function serializeReversedSegment(segment: ReversiblePathSegment): string {
+  if (segment.command === "L") return `L ${segment.start.x} ${segment.start.y}`;
+  if (segment.command === "C")
+    return `C ${segment.values[2]!} ${segment.values[3]!} ${segment.values[0]!} ${segment.values[1]!} ${segment.start.x} ${segment.start.y}`;
+  if (segment.command === "Q")
+    return `Q ${segment.values[0]!} ${segment.values[1]!} ${segment.start.x} ${segment.start.y}`;
+  return `A ${segment.values[0]!} ${segment.values[1]!} ${segment.values[2]!} ${segment.values[3]!} ${segment.values[4] === 1 ? 0 : 1} ${segment.start.x} ${segment.start.y}`;
 }
 
 function validatePathValues(

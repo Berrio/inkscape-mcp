@@ -83,7 +83,7 @@ exportación: inspección → `document_export_preset_plan` →
 | `paths_boolean`        | Dos paths y operación union/difference/intersection/exclusion/division/cut. | Recortar o dividir una silueta mediante Inkscape nativo. |
 | `path_modify`          | Un path, operación simplify/inset/outset/offset y confirmación.             | Simplificar o crear un offset editable.                  |
 | `path_break_apart`     | Path compuesto y nuevos IDs explícitos.                                     | Separar subpaths preservando referencias seguras.        |
-| `path_reverse`         | Path lineal explícito.                                                      | Invertir dirección; curvas/arcos se rechazan.            |
+| `path_reverse`         | Path SVG tipado, incluidas curvas, smooth commands y arcos.                 | Invertir dirección sin aproximar geometría.              |
 | `path_node_move`       | Path, índice de segmento y punto finito tipado.                             | Mover un endpoint sin enviar `d` libre.                  |
 | `path_node_edit`       | Nodos lineales, open/close, handles Q/C/A y expansión smooth tipada.        | Ajustar una geometría sin enviar `d` libre.              |
 | `path_effects_inspect` | Efectos LPE locales y paths que los referencian.                            | Auditar efectos sin editar sus parámetros.               |

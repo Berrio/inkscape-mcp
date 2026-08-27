@@ -14,6 +14,9 @@ import {
   changePageOrientationSvg,
   createSvgDocument,
   cropSvgImage,
+  applySvgClipPath,
+  createSvgRectClipPath,
+  deleteSvgClipPath,
   createSvgShapes,
   attachSvgTextToPath,
   detachSvgTextFromPath,
@@ -49,6 +52,7 @@ import {
   updateSvgGradient,
   resizeContentSvg,
   resizePageOnlySvg,
+  releaseSvgClipPath,
   rewriteStagedAssetReferences,
   updateSvgPage,
   updateDocumentDisplaySettings,
@@ -2301,6 +2305,93 @@ export function buildServer(config: ServerConfig): McpServer {
         id: result.id,
         removedIds: result.removedIds,
         revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "clips_manage",
+    {
+      description:
+        "Creates typed rectangular SVG clipPaths, applies or releases them from explicit elements, and prevents deletion while any SVG or CSS reference remains.",
+      inputSchema: z.discriminatedUnion("action", [
+        z.object({
+          action: z.literal("create"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          spec: z.object({
+            height: z.number().finite().positive(),
+            id: shapeIdSchema,
+            units: z.enum(["objectBoundingBox", "userSpaceOnUse"]).optional(),
+            width: z.number().finite().positive(),
+            x: z.number().finite(),
+            y: z.number().finite(),
+          }),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("apply"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          targetIds: z.array(shapeIdSchema).min(1).max(100),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("release"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          targetIds: z.array(shapeIdSchema).min(1).max(100),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("delete"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+      ]),
+      outputSchema: z.object({
+        action: z.enum(["create", "apply", "release", "delete"]),
+        backupCreated: z.boolean(),
+        id: shapeIdSchema.optional(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        targetIds: z.array(shapeIdSchema).optional(),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(input.workspaceId, input.path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const changed =
+        input.action === "create"
+          ? createSvgRectClipPath(source, input.spec)
+          : input.action === "apply"
+            ? applySvgClipPath(source, input.id, input.targetIds)
+            : input.action === "release"
+              ? releaseSvgClipPath(source, input.targetIds)
+              : deleteSvgClipPath(source, input.id);
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: input.expectedRevision,
+        expectedRevision: input.expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        action: input.action,
+        backupCreated: committed.backupPath !== undefined,
+        ...("id" in input ? { id: input.id } : {}),
+        revision: committed.revision,
+        ...("targetIds" in input ? { targetIds: input.targetIds } : {}),
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],

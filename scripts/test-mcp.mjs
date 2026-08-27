@@ -310,6 +310,55 @@ try {
   )
     throw new Error("images_crop did not add a non-destructive crop");
   await writeFile(
+    join(workspaceRoot, "clips.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect id="clipped_target" width="10" height="8"/></svg>',
+  );
+  const clipsRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "clips.svg")))
+    .digest("hex");
+  const createdClip = await workspaceClient.callTool({
+    arguments: {
+      action: "create",
+      expectedRevision: clipsRevision,
+      path: "clips.svg",
+      spec: { height: 4, id: "window_clip", width: 5, x: 1, y: 2 },
+      workspaceId: workspace.id,
+    },
+    name: "clips_manage",
+  });
+  const createdClipRevision = createdClip.structuredContent?.revision;
+  if (createdClip.isError || typeof createdClipRevision !== "string")
+    throw new Error("clips_manage did not create a clipPath");
+  const appliedClip = await workspaceClient.callTool({
+    arguments: {
+      action: "apply",
+      expectedRevision: createdClipRevision,
+      id: "window_clip",
+      path: "clips.svg",
+      targetIds: ["clipped_target"],
+      workspaceId: workspace.id,
+    },
+    name: "clips_manage",
+  });
+  const appliedClipRevision = appliedClip.structuredContent?.revision;
+  if (appliedClip.isError || typeof appliedClipRevision !== "string")
+    throw new Error("clips_manage did not apply a clipPath");
+  const releasedClip = await workspaceClient.callTool({
+    arguments: {
+      action: "release",
+      expectedRevision: appliedClipRevision,
+      path: "clips.svg",
+      targetIds: ["clipped_target"],
+      workspaceId: workspace.id,
+    },
+    name: "clips_manage",
+  });
+  if (
+    releasedClip.isError ||
+    releasedClip.structuredContent?.action !== "release"
+  )
+    throw new Error("clips_manage did not release a clipPath");
+  await writeFile(
     join(workspaceRoot, "percentage.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="50%" viewBox="0 0 20 10"/>',
   );

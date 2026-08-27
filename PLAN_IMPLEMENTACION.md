@@ -1805,7 +1805,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F07-T11` Gradient units/transforms/spread y reutilización.
 - [ ] `F07-T12` CRUD de patterns y aplicación con transforms.
 - [ ] `F07-T13` CRUD de markers start/mid/end.
-- [ ] `F07-T14` Crear/aplicar/liberar clip paths y masks.
+- [~] `F07-T14` Crear/aplicar/liberar clip paths y masks. — `clips_manage` crea `clipPath` rectangulares tipados, los aplica/libera sobre IDs explícitos y evita borrar referencias SVG/CSS activas; faltan las máscaras SVG y sus fixtures de composición.
 - [ ] `F07-T15` Detectar y limpiar defs no usados mediante plan/dryRun antes de vacuum.
 - [ ] `F07-T16` Implementar filtros seleccionados: blur, drop shadow, blend y color matrix con schemas tipados.
 - [ ] `F07-T17` Preservar filtros desconocidos aunque no se puedan editar.

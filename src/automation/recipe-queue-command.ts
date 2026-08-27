@@ -94,11 +94,12 @@ export async function runDurableQueue(
   if (request.operation === "retry") return await queue.retry(request.id!);
   return await queue.work(
     request.maxJobs,
-    async (recipe) =>
+    async (recipe, options) =>
       await runAutonomousRecipeDefinition(
         recipe,
         request.configArguments,
         serverEntry,
+        options,
       ),
   );
 }

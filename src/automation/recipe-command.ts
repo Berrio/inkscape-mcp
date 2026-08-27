@@ -67,7 +67,8 @@ export type AutonomousRecipeRequest = {
 
 export class AutonomousRecipeError extends Error {
   public constructor(
-    public readonly code: "RECIPE_EXECUTION_FAILED" | "RECIPE_INVALID",
+    public readonly code:
+      "RECIPE_CANCELLED" | "RECIPE_EXECUTION_FAILED" | "RECIPE_INVALID",
     message: string,
   ) {
     super(`${code}: ${message}`);
@@ -159,15 +160,18 @@ export async function runAutonomousRecipeDefinition(
   recipe: AutonomousRecipe,
   configArguments: readonly string[],
   serverEntry: string,
+  options: { isCancellationRequested?: () => Promise<boolean> } = {},
 ): Promise<unknown> {
   try {
+    await assertRecipeNotCancelled(options.isCancellationRequested);
     return await withAutonomousMcp(
       {
         configArguments,
         workspaceIndex: recipe.workspaceIndex,
       },
       serverEntry,
-      async (session) => await executeRecipe(session, recipe),
+      async (session) =>
+        await executeRecipe(session, recipe, options.isCancellationRequested),
     );
   } catch (error) {
     if (error instanceof AutonomousRecipeError) throw error;
@@ -181,11 +185,14 @@ export async function runAutonomousRecipeDefinition(
 async function executeRecipe(
   session: AutonomousMcpSession,
   recipe: AutonomousRecipe,
+  isCancellationRequested?: () => Promise<boolean>,
 ): Promise<unknown> {
+  await assertRecipeNotCancelled(isCancellationRequested);
   const revision = await inspectAutonomousSource(session, recipe.source);
   const planned: PlannedOperation[] = [];
   const usedOutputPaths = new Set<string>();
   for (let index = 0; index < recipe.operations.length; index += 1) {
+    await assertRecipeNotCancelled(isCancellationRequested);
     const operation = recipe.operations[index]!;
     if (operation.kind === "inspect") continue;
     const plan = await createAutonomousPresetPlan(session, {
@@ -209,6 +216,7 @@ async function executeRecipe(
   const planByIndex = new Map(planned.map((entry) => [entry.index, entry]));
   const operations: unknown[] = [];
   for (let index = 0; index < recipe.operations.length; index += 1) {
+    await assertRecipeNotCancelled(isCancellationRequested);
     const operation = recipe.operations[index]!;
     if (operation.kind === "inspect") {
       operations.push({ kind: "inspect", revision, status: "completed" });
@@ -242,4 +250,14 @@ async function executeRecipe(
     source: recipe.source,
     workspaceIndex: recipe.workspaceIndex,
   };
+}
+
+async function assertRecipeNotCancelled(
+  isCancellationRequested: (() => Promise<boolean>) | undefined,
+): Promise<void> {
+  if (await isCancellationRequested?.())
+    throw new AutonomousRecipeError(
+      "RECIPE_CANCELLED",
+      "Recipe cancellation was requested; the current atomic batch is not interrupted",
+    );
 }

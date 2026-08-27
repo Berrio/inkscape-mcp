@@ -175,9 +175,10 @@ inkscape-mcp queue get $job.id --workspace-root C:\ruta\a\tus\disenos
 inkscape-mcp queue retry $job.id --workspace-root C:\ruta\a\tus\disenos
 ```
 
-`queue cancel` sólo cancela una receta aún en espera. No mata una exportación
-que ya está renderizando: conserva el límite atómico del batch y evita que un
-resultado parcial se presente como cancelado.
+`queue cancel` cancela inmediatamente una receta aún en espera. Si ya fue
+reclamada, registra una cancelación cooperativa: deja terminar el batch atómico
+en curso y detiene los pasos restantes de la receta; no mata Inkscape a ciegas
+ni presenta un resultado parcial como entrega completa.
 
 ### Automatización de Windows
 

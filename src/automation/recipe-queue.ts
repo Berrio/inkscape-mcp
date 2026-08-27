@@ -14,6 +14,7 @@ import { z } from "zod";
 
 import type { ServerConfig } from "../config/index.js";
 import {
+  AutonomousRecipeError,
   parseAutonomousRecipe,
   type AutonomousRecipe,
 } from "./recipe-command.js";
@@ -30,6 +31,7 @@ const jobStatusSchema = z.enum([
 const storedJobSchema = z
   .object({
     attempt: z.number().int().min(0).max(100),
+    cancellationRequestedAt: z.string().datetime().optional(),
     createdAt: z.string().datetime(),
     error: z.string().max(4_096).optional(),
     id: jobIdSchema,
@@ -44,6 +46,7 @@ const storedJobSchema = z
 export type DurableRecipeStatus = z.output<typeof jobStatusSchema>;
 export type DurableRecipeJob = {
   attempt: number;
+  cancellationRequestedAt?: string;
   createdAt: string;
   error?: string;
   id: string;
@@ -105,7 +108,7 @@ export class DurableRecipeQueue {
     return publicJob(await this.read(id));
   }
 
-  /** Cancels jobs that have not been claimed. Running work remains atomic. */
+  /** Requests cancellation; an active atomic batch completes before it takes effect. */
   public async cancel(id: string): Promise<DurableRecipeJob> {
     const job = await this.read(id);
     if (job.status === "queued") {
@@ -114,10 +117,18 @@ export class DurableRecipeQueue {
       await this.write(job);
       return publicJob(job);
     }
+    if (job.status === "running") {
+      if (job.cancellationRequestedAt === undefined) {
+        job.cancellationRequestedAt = new Date().toISOString();
+        job.updatedAt = job.cancellationRequestedAt;
+        await this.write(job);
+      }
+      return publicJob(job);
+    }
     if (job.status === "cancelled") return publicJob(job);
     throw new DurableRecipeQueueError(
       "QUEUE_STATE",
-      "Only queued recipes can be cancelled; a running export keeps its atomic batch boundary",
+      "Only queued or running recipes can be cancelled",
     );
   }
 
@@ -130,6 +141,7 @@ export class DurableRecipeQueue {
       );
     job.attempt += 1;
     delete job.error;
+    delete job.cancellationRequestedAt;
     delete job.receipt;
     delete job.startedAt;
     job.status = "queued";
@@ -141,8 +153,16 @@ export class DurableRecipeQueue {
   /** Claims and executes at most maxJobs recipes under an exclusive local lock. */
   public async work(
     maxJobs: number,
-    execute: (recipe: AutonomousRecipe) => Promise<unknown>,
-  ): Promise<{ completed: number; failed: number; processed: number }> {
+    execute: (
+      recipe: AutonomousRecipe,
+      options: { isCancellationRequested: () => Promise<boolean> },
+    ) => Promise<unknown>,
+  ): Promise<{
+    cancelled: number;
+    completed: number;
+    failed: number;
+    processed: number;
+  }> {
     if (!Number.isInteger(maxJobs) || maxJobs < 1 || maxJobs > 20)
       throw new DurableRecipeQueueError(
         "QUEUE_INVALID",
@@ -152,6 +172,7 @@ export class DurableRecipeQueue {
     try {
       await this.recoverInterrupted();
       let completed = 0;
+      let cancelled = 0;
       let failed = 0;
       let processed = 0;
       for (const job of await this.queuedJobs()) {
@@ -162,21 +183,47 @@ export class DurableRecipeQueue {
         job.updatedAt = job.startedAt;
         await this.write(job);
         try {
-          job.receipt = await execute(job.recipe);
-          job.status = "completed";
-          completed += 1;
+          job.receipt = await execute(job.recipe, {
+            isCancellationRequested: async () =>
+              (await this.read(job.id)).cancellationRequestedAt !== undefined,
+          });
+          const cancellationRequestedAt = await this.cancellationRequestedAt(
+            job.id,
+          );
+          if (cancellationRequestedAt !== undefined) {
+            job.cancellationRequestedAt = cancellationRequestedAt;
+            delete job.receipt;
+            job.status = "cancelled";
+            cancelled += 1;
+          } else {
+            job.status = "completed";
+            completed += 1;
+          }
         } catch (error) {
-          job.error =
-            error instanceof Error
-              ? error.message.slice(0, 4_096)
-              : "Recipe execution failed";
-          job.status = "failed";
-          failed += 1;
+          if (
+            error instanceof AutonomousRecipeError &&
+            error.code === "RECIPE_CANCELLED"
+          ) {
+            const cancellationRequestedAt = await this.cancellationRequestedAt(
+              job.id,
+            );
+            if (cancellationRequestedAt !== undefined)
+              job.cancellationRequestedAt = cancellationRequestedAt;
+            job.status = "cancelled";
+            cancelled += 1;
+          } else {
+            job.error =
+              error instanceof Error
+                ? error.message.slice(0, 4_096)
+                : "Recipe execution failed";
+            job.status = "failed";
+            failed += 1;
+          }
         }
         job.updatedAt = new Date().toISOString();
         await this.write(job);
       }
-      return { completed, failed, processed };
+      return { cancelled, completed, failed, processed };
     } finally {
       await release();
     }
@@ -240,6 +287,9 @@ export class DurableRecipeQueue {
       );
     return {
       attempt: parsed.data.attempt,
+      ...(parsed.data.cancellationRequestedAt === undefined
+        ? {}
+        : { cancellationRequestedAt: parsed.data.cancellationRequestedAt }),
       createdAt: parsed.data.createdAt,
       ...(parsed.data.error === undefined ? {} : { error: parsed.data.error }),
       id: parsed.data.id,
@@ -263,6 +313,12 @@ export class DurableRecipeQueue {
       flag: "wx",
     });
     await rename(temporary, target);
+  }
+
+  private async cancellationRequestedAt(
+    id: string,
+  ): Promise<string | undefined> {
+    return (await this.read(id)).cancellationRequestedAt;
   }
 
   private pathFor(id: string): string {

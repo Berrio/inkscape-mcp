@@ -92,6 +92,7 @@ export {
   setSvgImageHref,
   type EmbeddedRaster,
 } from "./images.js";
+export { inspectSvgImageDpi, type SvgImageDpiInspection } from "./image-dpi.js";
 export {
   applySvgFilter,
   createSvgFilter,

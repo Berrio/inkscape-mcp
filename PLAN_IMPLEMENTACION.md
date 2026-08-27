@@ -1845,7 +1845,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F07-T26` Embed data URI con MIME/tamaño/dimensiones validados. — `elements_create` valida firma raster y límite de bytes antes de producir data URI PNG/JPEG/GIF/WebP.
 - [x] `F07-T27` Relink/embed/extract sin escapar del workspace. — `images_manage` relinka o incrusta sólo assets canonizados del workspace, y extrae data URI hacia una salida con extensión/MIME validada mediante commit batch atómico.
 - [x] `F07-T28` Crop no destructivo mediante clip path. — `images_crop` crea un `clipPath` local de espacio de usuario, preserva el `href` y la geometría de la imagen, exige IDs/revisión/coordenadas tipados y rechaza reemplazar implícitamente un clip existente; pruebas unitarias y MCP por stdio verificadas.
-- [ ] `F07-T29` Calcular DPI efectivo por transform como `dpiX`/`dpiY`; para skew/rotación reportar también rango por valores singulares y fidelity, nunca un único escalar engañoso.
+- [x] `F07-T29` Calcular DPI efectivo por transform como `dpiX`/`dpiY`; para skew/rotación reportar también rango por valores singulares y fidelity, nunca un único escalar engañoso. — `images_inspect_dpi` inspecciona PNG embebidos sin leer links, acumula transforms y devuelve `dpiX`/`dpiY`; ante skew/rotación calcula rango conservador con valores singulares y marca fidelidad explícita.
 - [ ] `F07-T30` Bitmap trace detrás de capability/preset allowlist y límites de costo.
 - [ ] `F07-T31` No descargar URLs; ofrecer error/remediación para recurso remoto.
 

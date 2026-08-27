@@ -48,6 +48,7 @@ import {
   fitPageToBoundsSvg,
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
+  inspectSvgImageDpi,
   normalizeFontFamilies,
   inspectSvgSettings,
   listSvgPages,
@@ -2874,6 +2875,53 @@ export function buildServer(config: ServerConfig): McpServer {
         imageId: input.imageId,
         revision: documentCommit.revision,
       };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "images_inspect_dpi",
+    {
+      description:
+        "Reports effective DPI X/Y for embedded PNG images and a conservative singular-value range when transforms include rotation or skew. Linked image bytes are never read.",
+      inputSchema: z.object({
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        images: z.array(
+          z.object({
+            dpiRange: z
+              .object({
+                max: z.number().finite().positive(),
+                min: z.number().finite().positive(),
+              })
+              .optional(),
+            dpiX: z.number().finite().positive().optional(),
+            dpiY: z.number().finite().positive().optional(),
+            fidelity: z.enum([
+              "exact-axis-aligned",
+              "range-from-transform",
+              "unavailable",
+            ]),
+            id: shapeIdSchema.optional(),
+            warnings: z.array(z.string()),
+          }),
+        ),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const output = inspectSvgImageDpi(
+        await readFile(document.absolutePath, "utf8"),
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

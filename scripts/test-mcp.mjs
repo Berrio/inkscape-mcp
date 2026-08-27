@@ -635,6 +635,24 @@ try {
       "images_manage did not atomically extract an embedded image",
     );
   await writeFile(
+    join(workspaceRoot, "dpi.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="25.4mm" height="25.4mm" viewBox="0 0 10 10"><image id="dpi_photo" width="10" height="10" transform="rotate(20)" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg=="/></svg>',
+  );
+  const dpiInspection = await workspaceClient.callTool({
+    arguments: { path: "dpi.svg", workspaceId: workspace.id },
+    name: "images_inspect_dpi",
+  });
+  if (
+    dpiInspection.isError ||
+    dpiInspection.structuredContent?.images?.[0]?.fidelity !==
+      "range-from-transform" ||
+    typeof dpiInspection.structuredContent?.images?.[0]?.dpiRange?.min !==
+      "number"
+  )
+    throw new Error(
+      "images_inspect_dpi did not report transformed DPI honestly",
+    );
+  await writeFile(
     join(workspaceRoot, "clips.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><rect id="clipped_target" width="10" height="8"/></svg>',
   );

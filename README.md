@@ -61,6 +61,10 @@ anunciadas.
 Para añadir el servidor a Codex CLI o VS Code sin confundirlo con una receta de
 exportación, sigue la [guía de configuración de clientes](./docs/client-configuration.md).
 
+Si una exportación, fuente, capability o receta falla, consulta el
+[troubleshooting de Windows](./docs/troubleshooting-windows.md) antes de
+reintentar o ampliar permisos.
+
 ## Ejecutar localmente
 
 ```powershell

@@ -2074,7 +2074,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [x] `F11-T13` Guía de seguridad/workspace/overwrite/backups que distinga protección de estructura/rutas de contención de exploits nativos; documentar `securityLevel`, `nativeInputPolicy` y sandbox opcional sin afirmar aislamiento inexistente. — `doctor`/`inkscape_status` comparten la postura explícita y `docs/security-workspace-guide.md` documenta roots, revisiones, backups, recuperación y riesgos residuales.
 - [x] `F11-T14` Matriz de compatibilidad versionada. — `docs/compatibility-matrix.md` fija la evidencia Windows/MSIX 1.4.4, transporte, import/export, flags gateados y exclusiones explícitas por formato/plataforma.
 - [x] `F11-T15` Ejemplos de configuración para clientes MCP actuales, verificados al momento de release. — `docs/client-configuration.md` cubre Codex CLI 0.146.0 y VS Code 1.132.1 con plantilla stdio JSON validada y límites Windows explícitos.
-- [ ] `F11-T16` Troubleshooting de fuentes, GTK warnings, extensiones y outputs parciales.
+- [x] `F11-T16` Troubleshooting de fuentes, GTK warnings, extensiones y outputs parciales. — `docs/troubleshooting-windows.md` aporta diagnóstico/recovery para discovery, workspaces, revisiones, fuentes, capabilities, recetas y publicación tras fallo.
 
 #### Paquete y release
 

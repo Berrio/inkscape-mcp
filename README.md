@@ -38,6 +38,10 @@ avanzadas que aún están pendientes.
 - Inkscape 1.4.4 o compatible. En Windows se detectan instalaciones PATH,
   App Paths, registro y MSIX; confirma la detección con `--doctor`.
 
+Consulta [Inkscape en Windows](./docs/windows-inkscape.md) para diferencias
+entre Microsoft Store/MSIX e instaladores convencionales, y cómo configurar un
+binario local sólo cuando el diagnóstico lo requiera.
+
 ## Ejecutar localmente
 
 ```powershell

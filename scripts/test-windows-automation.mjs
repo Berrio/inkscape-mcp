@@ -14,10 +14,20 @@ const runnerPath = resolve(
   "windows",
   "Invoke-InkscapeMcpRecipe.ps1",
 );
+const queueRunnerPath = resolve(
+  "scripts",
+  "windows",
+  "Invoke-InkscapeMcpQueue.ps1",
+);
 const registrationPath = resolve(
   "scripts",
   "windows",
   "Register-InkscapeMcpDailyTask.ps1",
+);
+const queueRegistrationPath = resolve(
+  "scripts",
+  "windows",
+  "Register-InkscapeMcpQueueDailyTask.ps1",
 );
 
 async function assertPowerShellSyntax(path) {
@@ -32,7 +42,9 @@ async function assertPowerShellSyntax(path) {
 
 try {
   await assertPowerShellSyntax(runnerPath);
+  await assertPowerShellSyntax(queueRunnerPath);
   await assertPowerShellSyntax(registrationPath);
+  await assertPowerShellSyntax(queueRegistrationPath);
   await writeFile(
     join(workspaceRoot, "label.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" height="10mm"><rect width="10" height="10" fill="#dbeafe"/></svg>',
@@ -81,6 +93,62 @@ try {
       "Windows PowerShell runner did not publish and log a recipe",
     );
   }
+  const queueRecipePath = join(workspaceRoot, "queue recipe.json");
+  await writeFile(
+    queueRecipePath,
+    JSON.stringify({
+      operations: [
+        {
+          kind: "export",
+          outputDirectory: "queue output",
+          preset: "web-png",
+        },
+      ],
+      schema: "inkscape-mcp-recipe/v1",
+      source: "label.svg",
+    }),
+  );
+  const queued = await executeFile(
+    process.execPath,
+    [
+      "dist/cli.js",
+      "queue",
+      "enqueue",
+      queueRecipePath,
+      "--workspace-root",
+      workspaceRoot,
+    ],
+    { cwd: process.cwd(), maxBuffer: 1024 * 1024, windowsHide: true },
+  );
+  const queuedJob = JSON.parse(queued.stdout);
+  const queueLogPath = join(workspaceRoot, "logs", "queue worker.log");
+  const queueResult = await executeFile(
+    "powershell.exe",
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-File",
+      queueRunnerPath,
+      "-WorkspaceRoot",
+      workspaceRoot,
+      "-LogPath",
+      queueLogPath,
+      "-NonInteractive",
+    ],
+    { cwd: process.cwd(), maxBuffer: 1024 * 1024, windowsHide: true },
+  );
+  const queueSummary = JSON.parse(queueResult.stdout);
+  if (
+    queuedJob.status !== "queued" ||
+    queueSummary.completed !== 1 ||
+    !existsSync(join(workspaceRoot, "queue output", "web-1200.png")) ||
+    !(await readFile(queueLogPath, "utf8")).includes("queue worker exit=0")
+  ) {
+    throw new Error(
+      "Windows queue runner did not complete and log a queued recipe",
+    );
+  }
   const taskName = `inkscape-mcp-whatif-${process.pid}`;
   await executeFile(
     "powershell.exe",
@@ -98,6 +166,26 @@ try {
       workspaceRoot,
       "-LogPath",
       logPath,
+      "-DailyAt",
+      "02:00",
+      "-WhatIf",
+    ],
+    { cwd: process.cwd(), maxBuffer: 1024 * 1024, windowsHide: true },
+  );
+  await executeFile(
+    "powershell.exe",
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-File",
+      queueRegistrationPath,
+      "-TaskName",
+      `${taskName}-queue`,
+      "-WorkspaceRoot",
+      workspaceRoot,
+      "-LogPath",
+      queueLogPath,
       "-DailyAt",
       "02:00",
       "-WhatIf",

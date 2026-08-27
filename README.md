@@ -190,8 +190,10 @@ y `--limit 1` a `100`.
 
 El paquete incluye los scripts PowerShell
 `scripts\windows\Invoke-InkscapeMcpRecipe.ps1` y
-`scripts\windows\Register-InkscapeMcpDailyTask.ps1`. El primero ejecuta una
-receta y deja un log, sin abrir GUI ni solicitar credenciales:
+`scripts\windows\Register-InkscapeMcpDailyTask.ps1` para una receta, y
+`scripts\windows\Invoke-InkscapeMcpQueue.ps1` y
+`scripts\windows\Register-InkscapeMcpQueueDailyTask.ps1` para la cola durable.
+El runner de receta deja un log, sin abrir GUI ni solicitar credenciales:
 
 ```powershell
 & .\scripts\windows\Invoke-InkscapeMcpRecipe.ps1 `
@@ -201,10 +203,21 @@ receta y deja un log, sin abrir GUI ni solicitar credenciales:
   -NonInteractive
 ```
 
-El segundo **sólo cuando tú lo ejecutes** registra una tarea diaria para el
-usuario actual en modo `Interactive`, sin contraseña almacenada; por tanto se
-ejecuta mientras ese usuario haya iniciado sesión. Antes puedes inspeccionarlo
-con `-WhatIf`:
+Para procesar trabajos previamente encolados, incluso después de cerrar Codex,
+programa o ejecuta el worker de cola:
+
+```powershell
+& .\scripts\windows\Invoke-InkscapeMcpQueue.ps1 `
+  -WorkspaceRoot C:\disenos `
+  -LogPath C:\disenos\logs\queue.log `
+  -MaxJobs 20 `
+  -NonInteractive
+```
+
+Los scripts `Register-*` **sólo cuando tú los ejecutes** registran una tarea
+diaria para el usuario actual en modo `Interactive`, sin contraseña almacenada;
+por tanto se ejecutan mientras ese usuario haya iniciado sesión. Antes puedes
+inspeccionar el de receta con `-WhatIf`:
 
 ```powershell
 & .\scripts\windows\Register-InkscapeMcpDailyTask.ps1 `
@@ -213,6 +226,17 @@ con `-WhatIf`:
   -WorkspaceRoot C:\disenos `
   -LogPath C:\disenos\logs\exportaciones.log `
   -DailyAt "02:00" -WhatIf
+```
+
+El registro equivalente para la cola ejecuta todos los trabajos en espera hasta
+`-MaxJobs`, sin crear una receta nueva:
+
+```powershell
+& .\scripts\windows\Register-InkscapeMcpQueueDailyTask.ps1 `
+  -TaskName "Inkscape MCP - cola" `
+  -WorkspaceRoot C:\disenos `
+  -LogPath C:\disenos\logs\queue.log `
+  -DailyAt "02:15" -MaxJobs 20 -WhatIf
 ```
 
 Después de verificar la salida, elimina `-WhatIf` para registrar la tarea.

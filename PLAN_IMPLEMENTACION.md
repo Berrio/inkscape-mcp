@@ -2689,7 +2689,7 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 ### Continuidad sin tokens
 
 - [x] Exportación local por CLI, receta declarativa y runner Windows sin IA.
-- [x] Cola durable local: `queue enqueue/work/get/cancel/retry` persiste
+- [x] Cola durable local: `queue enqueue/work/list/get/cancel/retry` persiste
       recetas y recibos, recupera worker interrumpido como fallo explícito,
       permite reintento y registra cancelación cooperativa tras el batch
       atómico en curso.

@@ -13,6 +13,7 @@ import {
   inspectRasterImport,
   sniffRasterMime,
 } from "../import/raster-import.js";
+import { inspectNativeImportGates } from "../import/native-import-gates.js";
 import { importSanitizedSvg } from "../import/svg-import.js";
 import {
   addSvgPage,
@@ -2030,10 +2031,18 @@ export function buildServer(
     "document_import_capabilities",
     {
       description:
-        "Reports the exact input types observed from this local Inkscape --list-input-types probe. Future native import adapters must be gated by this result rather than filename assumptions.",
+        "Reports the exact input types observed from this local Inkscape --list-input-types probe, including explicitly blocked AI/EPS/PS/EMF/WMF/XAML/DXF gates. A detected type is never exposed until its real headless conversion fixture passes.",
       inputSchema: z.object({}),
       outputSchema: z.object({
         inputTypes: z.array(z.string().min(1).max(128)),
+        nativeImportGates: z.array(
+          z.object({
+            advertisedTypes: z.array(z.string().min(1).max(128)),
+            format: z.enum(["ai", "eps", "ps", "emf", "wmf", "xaml", "dxf"]),
+            headless: z.literal("not-validated"),
+            status: z.enum(["detected-but-blocked", "not-detected"]),
+          }),
+        ),
         nativeProbeAvailable: z.boolean(),
         rasterImport: z.literal("built-in-byte-sniffed"),
         svgzImport: z.literal("built-in-sanitized"),
@@ -2042,8 +2051,10 @@ export function buildServer(
     },
     async () => {
       const report = await runDoctor(config, process.cwd());
+      const inputTypes = [...(report.capabilities?.inputTypes ?? [])];
       const output = {
-        inputTypes: [...(report.capabilities?.inputTypes ?? [])],
+        inputTypes,
+        nativeImportGates: inspectNativeImportGates(inputTypes),
         nativeProbeAvailable:
           report.capabilities?.observations.inputTypes.available ?? false,
         rasterImport: "built-in-byte-sniffed" as const,

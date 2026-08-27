@@ -1084,6 +1084,9 @@ try {
     importCapabilities.structuredContent?.svgzImport !== "built-in-sanitized" ||
     importCapabilities.structuredContent?.rasterImport !==
       "built-in-byte-sniffed" ||
+    !importCapabilities.structuredContent?.nativeImportGates?.every(
+      (gate) => gate.headless === "not-validated",
+    ) ||
     typeof importCapabilities.structuredContent?.nativeProbeAvailable !==
       "boolean"
   )

@@ -4,6 +4,7 @@ import { comparePngVisual, decodePngRgba } from "../dist/export/index.js";
 import packageMetadata from "../package.json" with { type: "json" };
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -2848,6 +2849,38 @@ try {
   const genericPdfRevision = createHash("sha256")
     .update(genericPdfBytes)
     .digest("hex");
+  const encryptedPdfBytes = Buffer.from(
+    "%PDF-1.7\n1 0 obj\n<< /Encrypt 2 0 R >>\nendobj\n%%EOF\n",
+    "ascii",
+  );
+  await writeFile(join(workspaceRoot, "encrypted.pdf"), encryptedPdfBytes);
+  const encryptedPdf = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: createHash("sha256")
+        .update(encryptedPdfBytes)
+        .digest("hex"),
+      manifestPath: "encrypted.pdf.import.json",
+      mode: "internal",
+      outputPath: "encrypted.svg",
+      page: 1,
+      path: "encrypted.pdf",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_pdf",
+  });
+  if (
+    !encryptedPdf.isError ||
+    !encryptedPdf.content.some(
+      (item) =>
+        item.type === "text" &&
+        item.text.includes("Encrypted PDF import is unsupported"),
+    ) ||
+    existsSync(join(workspaceRoot, "encrypted.svg")) ||
+    existsSync(join(workspaceRoot, "encrypted.pdf.import.json"))
+  )
+    throw new Error(
+      "document_import_pdf did not reject an encrypted PDF before publication",
+    );
   const importedPdf = await workspaceClient.callTool({
     arguments: {
       expectedRevision: genericPdfRevision,

@@ -2158,6 +2158,8 @@ export function buildServer(
       const sourceBytes = await readFile(source.absolutePath);
       if (!sourceBytes.subarray(0, 5).equals(Buffer.from("%PDF-")))
         throw new Error("PDF import source does not have a PDF signature");
+      if (isLikelyEncryptedPdf(sourceBytes))
+        throw new Error("Encrypted PDF import is unsupported");
       const discovery = await locateInkscape({
         config,
         cwd: process.cwd(),
@@ -9042,6 +9044,62 @@ async function readBoundedRasterAsset(
   const bytes = await readFile(path);
   sniffRasterMime(bytes);
   return bytes;
+}
+
+/** Rejects encrypted PDFs before an interactive native password prompt is possible. */
+function isLikelyEncryptedPdf(bytes: Uint8Array): boolean {
+  for (let index = 0; index < bytes.length; index += 1) {
+    const byte = bytes[index]!;
+    if (byte === 0x25) {
+      while (
+        index < bytes.length &&
+        bytes[index] !== 0x0a &&
+        bytes[index] !== 0x0d
+      )
+        index += 1;
+      continue;
+    }
+    if (byte === 0x28) {
+      index = skipPdfLiteralString(bytes, index);
+      continue;
+    }
+    if (byte === 0x3c && bytes[index + 1] !== 0x3c) {
+      while (index < bytes.length && bytes[index] !== 0x3e) index += 1;
+      continue;
+    }
+    if (
+      byte === 0x2f &&
+      bytes[index + 1] === 0x45 &&
+      bytes[index + 2] === 0x6e &&
+      bytes[index + 3] === 0x63 &&
+      bytes[index + 4] === 0x72 &&
+      bytes[index + 5] === 0x79 &&
+      bytes[index + 6] === 0x70 &&
+      bytes[index + 7] === 0x74 &&
+      !isPdfNameByte(bytes[index + 8])
+    )
+      return true;
+  }
+  return false;
+}
+
+function skipPdfLiteralString(bytes: Uint8Array, start: number): number {
+  let depth = 1;
+  for (let index = start + 1; index < bytes.length; index += 1) {
+    if (bytes[index] === 0x5c) {
+      index += 1;
+      continue;
+    }
+    if (bytes[index] === 0x28) depth += 1;
+    if (bytes[index] === 0x29 && --depth === 0) return index;
+  }
+  return bytes.length;
+}
+
+function isPdfNameByte(value: number | undefined): boolean {
+  return (
+    value !== undefined && /[A-Za-z0-9#]/u.test(String.fromCharCode(value))
+  );
 }
 
 function matchesRasterExtension(path: string, mime: string): boolean {

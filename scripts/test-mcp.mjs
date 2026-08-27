@@ -40,6 +40,19 @@ for (const versionNegotiation of [
     if (result.isError || result.structuredContent === undefined) {
       throw new Error("inkscape_status did not return structured content");
     }
+    const posture = result.structuredContent.securityPosture;
+    if (
+      posture?.securityLevel !== "workspace-guarded-native-unsandboxed" ||
+      posture.nativeParserIsolation !== "none" ||
+      posture.nativeInputPolicy !== "trusted-local-only" ||
+      posture.maximumSanitizeMode !== "preserve-local" ||
+      !Array.isArray(posture.residualRisks) ||
+      posture.residualRisks.length !== 2
+    ) {
+      throw new Error(
+        "inkscape_status did not expose the native parser security posture",
+      );
+    }
   } finally {
     await client.close();
   }

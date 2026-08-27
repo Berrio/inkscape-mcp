@@ -173,9 +173,13 @@ const statusSchema = z.object({
     .optional(),
   securityPosture: z.object({
     externalResources: z.literal("deny"),
+    maximumSanitizeMode: z.enum(["strict", "preserve-local", "trusted"]),
     nativeInputPolicy: z.literal("trusted-local-only"),
+    nativeParserIsolation: z.literal("none"),
     overwriteDefault: z.literal(false),
     pathsRedacted: z.literal(true),
+    residualRisks: z.array(z.string()).length(2),
+    securityLevel: z.literal("workspace-guarded-native-unsandboxed"),
     workspaceReady: z.boolean(),
   }),
   workspaceReady: z.boolean(),
@@ -1181,10 +1185,10 @@ export function buildServer(config: ServerConfig): McpServer {
             }),
         securityPosture: {
           externalResources: config.externalResources,
-          nativeInputPolicy: config.nativeInputPolicy,
           overwriteDefault: config.overwriteDefault,
           pathsRedacted: true as const,
           workspaceReady: report.workspaceReady,
+          ...report.securityPosture,
         },
         workspaceReady: report.workspaceReady,
       };

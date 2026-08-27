@@ -5,7 +5,9 @@ import {
 } from "../capabilities/index.js";
 import {
   isWorkspaceReady,
+  nativeSecurityPosture,
   redactConfig,
+  type NativeSecurityPosture,
   type RedactedConfig,
   type ServerConfig,
 } from "../config/index.js";
@@ -29,6 +31,7 @@ export type DoctorReport = {
     version: string;
   };
   pngExportProbe?: { available: boolean; reason?: string };
+  securityPosture: NativeSecurityPosture;
   workspaceReady: boolean;
 };
 
@@ -74,6 +77,7 @@ export async function runDoctor(
         version: probe.version,
       },
       pngExportProbe,
+      securityPosture: nativeSecurityPosture(config),
       workspaceReady: isWorkspaceReady(config),
     };
   }
@@ -81,6 +85,7 @@ export async function runDoctor(
   return {
     config: redactConfig(config),
     diagnostics,
+    securityPosture: nativeSecurityPosture(config),
     workspaceReady: isWorkspaceReady(config),
   };
 }
@@ -90,6 +95,7 @@ export function formatDoctor(report: DoctorReport): string {
     "Inkscape MCP doctor",
     `Workspace: ${report.workspaceReady ? "ready" : "not configured (document tools unavailable)"}`,
     `Inkscape: ${report.inkscape ? `${report.inkscape.version} (${report.inkscape.installKind})` : "not found"}`,
+    `Security: ${report.securityPosture.securityLevel}; native parsers are unsandboxed (${report.securityPosture.nativeInputPolicy})`,
   ];
   if (report.capabilities) {
     lines.push(

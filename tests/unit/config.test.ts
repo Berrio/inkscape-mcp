@@ -6,6 +6,7 @@ import {
   ConfigurationError,
   loadConfig,
   loadConfigFromCli,
+  nativeSecurityPosture,
   parseConfigFlags,
   redactConfig,
 } from "../../src/config/index.js";
@@ -116,6 +117,17 @@ describe("configuration", () => {
       scratchRoot: "configured",
       workspaceReady: true,
     });
+  });
+
+  it("reports the unsandboxed native-parser boundary explicitly", () => {
+    const posture = nativeSecurityPosture(loadConfig());
+
+    expect(posture).toMatchObject({
+      nativeInputPolicy: "trusted-local-only",
+      nativeParserIsolation: "none",
+      securityLevel: "workspace-guarded-native-unsandboxed",
+    });
+    expect(posture.residualRisks.join(" ")).toContain("unsandboxed");
   });
 
   it("loads and validates the selected JSON configuration file", async () => {

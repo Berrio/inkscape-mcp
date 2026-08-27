@@ -50,6 +50,10 @@ Consulta la [guía de formatos de exportación](./docs/export-guide.md) para
 elegir PNG, PDF o SVG, conocer las pérdidas por formato y verificar cada
 entregable.
 
+Consulta la [guía de seguridad y workspaces](./docs/security-workspace-guide.md)
+antes de automatizar: la versión actual protege rutas y publicaciones, pero no
+es un sandbox para documentos de origen hostil.
+
 ## Ejecutar localmente
 
 ```powershell

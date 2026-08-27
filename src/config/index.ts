@@ -10,6 +10,10 @@ export {
 } from "./load.js";
 export { redactConfig, type RedactedConfig } from "./redaction.js";
 export {
+  nativeSecurityPosture,
+  type NativeSecurityPosture,
+} from "./security.js";
+export {
   configInputSchema,
   DEFAULT_CONFIG,
   HARD_LIMITS,

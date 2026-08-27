@@ -193,6 +193,80 @@ try {
     throw new Error("Packed CLI did not execute an autonomous recipe");
   }
 
+  const queueRecipePath = join(workspaceDirectory, "package-queue-recipe.json");
+  writeFileSync(
+    queueRecipePath,
+    JSON.stringify({
+      operations: [{ kind: "inspect" }],
+      schema: "inkscape-mcp-recipe/v1",
+      source: "package-cli.svg",
+    }),
+  );
+  const durableJob = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        npmCli,
+        "exec",
+        "--prefix",
+        installDirectory,
+        "--",
+        "inkscape-mcp",
+        "queue",
+        "enqueue",
+        queueRecipePath,
+        "--workspace-root",
+        workspaceDirectory,
+      ],
+      { encoding: "utf8" },
+    ),
+  );
+  const queueWorker = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        npmCli,
+        "exec",
+        "--prefix",
+        installDirectory,
+        "--",
+        "inkscape-mcp",
+        "queue",
+        "work",
+        "--workspace-root",
+        workspaceDirectory,
+      ],
+      { encoding: "utf8" },
+    ),
+  );
+  const durableReceipt = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        npmCli,
+        "exec",
+        "--prefix",
+        installDirectory,
+        "--",
+        "inkscape-mcp",
+        "queue",
+        "get",
+        durableJob.id,
+        "--workspace-root",
+        workspaceDirectory,
+      ],
+      { encoding: "utf8" },
+    ),
+  );
+  if (
+    durableJob.status !== "queued" ||
+    queueWorker.completed !== 1 ||
+    durableReceipt.status !== "completed" ||
+    durableReceipt.receipt?.schema !== "inkscape-mcp-recipe-receipt/v1"
+  ) {
+    throw new Error("Packed CLI did not persist and run a durable recipe");
+  }
+
   const doctorOutput = execFileSync(
     process.execPath,
     [

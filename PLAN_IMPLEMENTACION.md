@@ -2058,7 +2058,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 - [x] `F11-T01` Ejecutar fuzz/property tests de units, paths, selectors, XML, path data y export schemas. — `tests/unit/hardening-property.test.ts` recorre entradas pseudoaleatorias deterministas y casos frontera para conversiones, paths de workspace/output, AST de path, selectores y referencias SVG externas.
 - [x] `F11-T02` Ejecutar corpus adversarial de SVG/PDF/raster. — `tests/unit/adversarial-corpus.test.ts` cubre SVG activo/profundo/excesivo, PDF truncado y raster corrupto; los verificadores PNG exigen ahora IHDR/CRC/IEND completos y el inspector raster valida CRC de IHDR.
-- [ ] `F11-T03` Stress de archivos grandes, pages, objetos, DPI, lotes y concurrencia.
+- [x] `F11-T03` Stress de archivos grandes, pages, objetos, DPI, lotes y concurrencia. — `tests/unit/stress-limits.test.ts` cubre 10.000 objetos SVG, 128 páginas, DPI 0.1/10.000, 50 variantes y 64 escritores contendiendo el mismo lock canónico.
 - [ ] `F11-T04` Crash/cancel/kill tests y escaneo de temporales/procesos huérfanos.
 - [ ] `F11-T05` Revisar dependencias, advisories, licencias y SBOM.
 - [ ] `F11-T06` Revisión manual del threat model y de todo uso de filesystem/process/XML.

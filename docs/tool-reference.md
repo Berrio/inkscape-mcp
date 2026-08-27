@@ -100,7 +100,7 @@ exportación: inspección → `document_export_preset_plan` →
 | `mesh_gradients_inspect`   | Lista mesh gradients preservados, filas, patches y referencias. | Auditar un degradado de malla sin editarlo.         |
 | `palette_inspect`          | Colores hex, variables CSS locales y swatches Inkscape.         | Inventariar colores de un documento.                |
 | `palette_apply`            | Mapa explícito `from`/`to` para colores, variables y stops.     | Sustituir una paleta sin preferencias globales.     |
-| `color_management_inspect` | Perfiles SVG locales y usos `icc-color()`.                      | Detectar límites CMYK sin convertir el documento.   |
+| `color_management_inspect` | Perfiles SVG, ICC, CMYK y perfiles sin declarar.                | Auditar CMYK sin conversión.                        |
 | `patterns_manage`          | Crear/reemplazar/aplicar/eliminar dots/stripes tipados.         | Aplicar patrón sin CSS/XML libre.                   |
 | `markers_manage`           | Crear/reemplazar/aplicar/eliminar marcadores arrow/dot.         | Añadir punta de flecha a una línea.                 |
 | `filters_manage`           | Blur, shadow, blend o color matrix tipados.                     | Aplicar sombra declarada; revisar fidelidad visual. |

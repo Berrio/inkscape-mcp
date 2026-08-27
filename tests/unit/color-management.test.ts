@@ -9,6 +9,7 @@ describe("SVG color management inspection", () => {
         '<svg xmlns="http://www.w3.org/2000/svg"><defs><color-profile id="press" name="FOGRA39" rendering-intent="relative-colorimetric"/></defs><rect fill="icc-color(FOGRA39, 0.2, 0.3, 0.4, 0.1)" style="stroke:icc-color(FOGRA39, 0, 0, 0, 1)"/></svg>',
       ),
     ).toEqual({
+      cmykLikeReferenceCount: 2,
       iccReferenceCount: 2,
       limitations: ["NO_CMYK_CONVERSION", "NO_OUTPUT_INTENT_VALIDATION"],
       profiles: [
@@ -18,6 +19,19 @@ describe("SVG color management inspection", () => {
           renderingIntent: "relative-colorimetric",
         },
       ],
+      unresolvedProfileNames: [],
+    });
+  });
+
+  it("flags unresolved ICC names without claiming a color conversion", () => {
+    expect(
+      inspectSvgColorManagement(
+        '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="icc-color(UnknownCMYK, 0, 0.2, 0.3, 0.1)"/></svg>',
+      ),
+    ).toMatchObject({
+      cmykLikeReferenceCount: 1,
+      iccReferenceCount: 1,
+      unresolvedProfileNames: ["UnknownCMYK"],
     });
   });
 });

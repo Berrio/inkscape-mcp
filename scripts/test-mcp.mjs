@@ -225,6 +225,27 @@ try {
       "path_effects_manage did not delete an unused local effect",
     );
   await writeFile(
+    join(workspaceRoot, "color-management.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><defs><color-profile id="press" name="FOGRA39"/></defs><rect fill="icc-color(FOGRA39, 0.2, 0.3, 0.4, 0.1)" stroke="icc-color(UnknownCMYK, 0, 0, 0, 1)"/></svg>',
+  );
+  const colorManagement = await workspaceClient.callTool({
+    arguments: {
+      path: "color-management.svg",
+      workspaceId: workspace.id,
+    },
+    name: "color_management_inspect",
+  });
+  if (
+    colorManagement.isError ||
+    colorManagement.structuredContent?.cmykLikeReferenceCount !== 2 ||
+    colorManagement.structuredContent?.iccReferenceCount !== 2 ||
+    colorManagement.structuredContent?.unresolvedProfileNames?.[0] !==
+      "UnknownCMYK"
+  )
+    throw new Error(
+      "color_management_inspect did not report local CMYK-like ICC references",
+    );
+  await writeFile(
     join(workspaceRoot, "symbols.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><rect id="badge" width="10" height="5"/></svg>',
   );

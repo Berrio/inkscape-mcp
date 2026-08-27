@@ -4898,6 +4898,7 @@ export function buildServer(
         })
         .strict(),
       outputSchema: z.object({
+        cmykLikeReferenceCount: z.number().int().nonnegative(),
         iccReferenceCount: z.number().int().nonnegative(),
         limitations: z.tuple([
           z.literal("NO_CMYK_CONVERSION"),
@@ -4910,6 +4911,7 @@ export function buildServer(
             renderingIntent: z.string().optional(),
           }),
         ),
+        unresolvedProfileNames: z.array(z.string().min(1).max(128)),
       }),
       annotations: { readOnlyHint: true },
     },

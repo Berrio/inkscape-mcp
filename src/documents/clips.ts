@@ -19,6 +19,14 @@ export type SvgClipPathSpec = {
   y: number;
 };
 
+export type SvgMaskSpec = {
+  height: number;
+  id: string;
+  width: number;
+  x: number;
+  y: number;
+};
+
 export function createSvgRectClipPath(
   source: string,
   spec: SvgClipPathSpec,
@@ -97,6 +105,87 @@ export function deleteSvgClipPath(source: string, id: string): string {
   return serialize(document);
 }
 
+export function createSvgRectMask(source: string, spec: SvgMaskSpec): string {
+  validateMaskSpec(spec);
+  const document = parseDocument(source);
+  if (findById(document, spec.id)) throw new Error("Mask ID already exists");
+  const mask = document.createElementNS(SVG_NAMESPACE, "mask");
+  mask.setAttribute("id", spec.id);
+  mask.setAttribute("maskUnits", "userSpaceOnUse");
+  mask.setAttribute("maskContentUnits", "userSpaceOnUse");
+  mask.setAttribute("x", String(spec.x));
+  mask.setAttribute("y", String(spec.y));
+  mask.setAttribute("width", String(spec.width));
+  mask.setAttribute("height", String(spec.height));
+  const rect = document.createElementNS(SVG_NAMESPACE, "rect");
+  rect.setAttribute("x", String(spec.x));
+  rect.setAttribute("y", String(spec.y));
+  rect.setAttribute("width", String(spec.width));
+  rect.setAttribute("height", String(spec.height));
+  rect.setAttribute("fill", "#ffffff");
+  mask.appendChild(rect);
+  ensureDefs(document).appendChild(mask);
+  return serialize(document);
+}
+
+export function applySvgMask(
+  source: string,
+  id: string,
+  targetIds: readonly string[],
+): string {
+  if (!SAFE_ID.test(id)) throw new Error("Mask ID is invalid");
+  validateTargetIds(targetIds);
+  const document = parseDocument(source);
+  const mask = findById(document, id);
+  if (!mask || mask.localName !== "mask")
+    throw new Error("Mask ID does not name an SVG mask");
+  for (const targetId of targetIds) {
+    const target = findById(document, targetId);
+    if (!target) throw new Error("Shape ID does not exist");
+    if (target === mask || isDescendant(target, mask))
+      throw new Error("A mask cannot mask itself or its contents");
+    target.setAttribute("mask", `url(#${id})`);
+  }
+  return serialize(document);
+}
+
+export function releaseSvgMask(
+  source: string,
+  targetIds: readonly string[],
+): string {
+  validateTargetIds(targetIds);
+  const document = parseDocument(source);
+  for (const targetId of targetIds) {
+    const target = findById(document, targetId);
+    if (!target) throw new Error("Shape ID does not exist");
+    target.removeAttribute("mask");
+  }
+  return serialize(document);
+}
+
+export function deleteSvgMask(source: string, id: string): string {
+  if (!SAFE_ID.test(id)) throw new Error("Mask ID is invalid");
+  const document = parseDocument(source);
+  const mask = findById(document, id);
+  if (!mask || mask.localName !== "mask")
+    throw new Error("Mask ID does not name an SVG mask");
+  for (const element of Array.from(document.getElementsByTagName("*"))) {
+    if (element === mask || isDescendant(element, mask)) continue;
+    for (let index = 0; index < element.attributes.length; index += 1) {
+      const attribute = element.attributes.item(index);
+      if (attribute && referencesClip(attribute.value, id))
+        throw new Error("Deleting this mask would break an SVG reference");
+    }
+    if (
+      element.localName === "style" &&
+      referencesClip(element.textContent ?? "", id)
+    )
+      throw new Error("Deleting this mask would break an SVG reference");
+  }
+  mask.parentNode?.removeChild(mask);
+  return serialize(document);
+}
+
 function validateClipSpec(spec: SvgClipPathSpec): void {
   if (!SAFE_ID.test(spec.id)) throw new Error("Clip ID is invalid");
   for (const value of [spec.x, spec.y, spec.width, spec.height])
@@ -116,6 +205,15 @@ function validateClipSpec(spec: SvgClipPathSpec): void {
     throw new Error(
       "Object bounding box clip coordinates must be within zero and one",
     );
+}
+
+function validateMaskSpec(spec: SvgMaskSpec): void {
+  if (!SAFE_ID.test(spec.id)) throw new Error("Mask ID is invalid");
+  for (const value of [spec.x, spec.y, spec.width, spec.height])
+    if (!Number.isFinite(value))
+      throw new Error("Mask coordinates must be finite");
+  if (spec.width <= 0 || spec.height <= 0)
+    throw new Error("Mask width and height must be positive");
 }
 
 function validateTargetIds(targetIds: readonly string[]): void {

@@ -359,6 +359,55 @@ try {
   )
     throw new Error("clips_manage did not release a clipPath");
   await writeFile(
+    join(workspaceRoot, "masks.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><rect id="masked_target" width="10" height="8"/></svg>',
+  );
+  const masksRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "masks.svg")))
+    .digest("hex");
+  const createdMask = await workspaceClient.callTool({
+    arguments: {
+      action: "create",
+      expectedRevision: masksRevision,
+      path: "masks.svg",
+      spec: { height: 4, id: "window_mask", width: 5, x: 1, y: 2 },
+      workspaceId: workspace.id,
+    },
+    name: "masks_manage",
+  });
+  const createdMaskRevision = createdMask.structuredContent?.revision;
+  if (createdMask.isError || typeof createdMaskRevision !== "string")
+    throw new Error("masks_manage did not create a mask");
+  const appliedMask = await workspaceClient.callTool({
+    arguments: {
+      action: "apply",
+      expectedRevision: createdMaskRevision,
+      id: "window_mask",
+      path: "masks.svg",
+      targetIds: ["masked_target"],
+      workspaceId: workspace.id,
+    },
+    name: "masks_manage",
+  });
+  const appliedMaskRevision = appliedMask.structuredContent?.revision;
+  if (appliedMask.isError || typeof appliedMaskRevision !== "string")
+    throw new Error("masks_manage did not apply a mask");
+  const releasedMask = await workspaceClient.callTool({
+    arguments: {
+      action: "release",
+      expectedRevision: appliedMaskRevision,
+      path: "masks.svg",
+      targetIds: ["masked_target"],
+      workspaceId: workspace.id,
+    },
+    name: "masks_manage",
+  });
+  if (
+    releasedMask.isError ||
+    releasedMask.structuredContent?.action !== "release"
+  )
+    throw new Error("masks_manage did not release a mask");
+  await writeFile(
     join(workspaceRoot, "percentage.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="50%" viewBox="0 0 20 10"/>',
   );

@@ -12,7 +12,11 @@ export {
   type CommitFileBatchResult,
   type MutationDocumentRef,
 } from "./revisions.js";
-export { ScratchManager } from "./scratch.js";
+export {
+  DEFAULT_STALE_SCRATCH_AGE_MS,
+  recoverStaleScratch,
+  ScratchManager,
+} from "./scratch.js";
 export {
   createNativeInputBundle,
   type NativeInputBundle,

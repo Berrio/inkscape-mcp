@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const PREFIX = "inkscape-mcp-";
+export const DEFAULT_STALE_SCRATCH_AGE_MS = 24 * 60 * 60 * 1_000;
 
 export class ScratchManager {
   public constructor(private readonly root: string = tmpdir()) {}
@@ -52,4 +53,13 @@ export class ScratchManager {
     }
     return removed;
   }
+}
+
+/** Removes only stale server-owned scratch directories before a new local
+ * server starts. The age avoids deleting work from another live process. */
+export async function recoverStaleScratch(
+  root?: string,
+  maxAgeMs = DEFAULT_STALE_SCRATCH_AGE_MS,
+): Promise<number> {
+  return new ScratchManager(root).cleanupStale(maxAgeMs);
 }

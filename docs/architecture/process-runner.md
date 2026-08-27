@@ -16,3 +16,8 @@
 ## Límite conocido
 
 `taskkill /T` es el terminador de árbol disponible sin addon nativo y cubre descendientes normales. Un proceso que se desacople deliberadamente del árbol requiere un helper con Windows Job Object/aislamiento adicional; esa amenaza queda documentada para el hardening posterior. Las tools nunca controlan el PID ni el comando que se termina.
+
+Al arrancar por stdio, el CLI también elimina únicamente directorios scratch
+`inkscape-mcp-*` propios cuya antigüedad supera 24 horas. No intenta terminar
+PIDs que encuentre en un reinicio: sin un Job Object o una identidad de proceso
+verificable, hacerlo podría matar un proceso ajeno por reutilización de PID.

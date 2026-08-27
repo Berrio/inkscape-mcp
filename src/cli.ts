@@ -16,6 +16,7 @@ import {
 import { loadConfigFromCli } from "./config/index.js";
 import { formatDoctor, runDoctor } from "./doctor/index.js";
 import { buildServer } from "./server/index.js";
+import { recoverStaleScratch } from "./storage/index.js";
 
 const usage = `inkscape-mcp ${packageMetadata.version}
 
@@ -87,6 +88,13 @@ if (argument === "--help" || argument === "-h") {
     if (config.transport !== "stdio") {
       throw new Error("HTTP transport is not implemented yet");
     }
+    const staleScratchRemoved = await recoverStaleScratch(
+      config.scratchRoot === "auto" ? undefined : config.scratchRoot,
+    );
+    if (staleScratchRemoved > 0)
+      process.stderr.write(
+        `Recovered ${staleScratchRemoved} stale Inkscape MCP scratch directories\n`,
+      );
     serveStdio(() => buildServer(config), {
       legacy: "serve",
       onerror: (error) =>

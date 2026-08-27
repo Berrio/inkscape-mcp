@@ -20,6 +20,7 @@ import {
   createSvgRectClipPath,
   createSvgRectMask,
   createSvgFilter,
+  vacuumUnusedSvgDefs,
   deleteSvgClipPath,
   deleteSvgFilter,
   deleteSvgMask,
@@ -74,6 +75,7 @@ import {
   updateSvgPage,
   updateDocumentDisplaySettings,
   validateSvgPageLayout,
+  planUnusedSvgDefs,
   type ShapeSpec,
 } from "../documents/index.js";
 import {
@@ -2783,6 +2785,69 @@ export function buildServer(config: ServerConfig): McpServer {
         ...(input.action === "elements"
           ? { ids: input.elements.map((element) => element.id) }
           : {}),
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "defs_vacuum",
+    {
+      description:
+        "Plans or conservatively removes unused top-level SVG definitions. Defaults to dry-run and never rewrites referenced resources.",
+      inputSchema: z.object({
+        dryRun: z.boolean().default(true),
+        expectedRevision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/u)
+          .optional(),
+        path: z.string().min(1).max(1024),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        backupCreated: z.boolean().optional(),
+        candidateIds: z.array(z.string().min(1).max(1024)),
+        dryRun: z.boolean(),
+        removedIds: z.array(z.string().min(1).max(1024)),
+        revision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/u)
+          .optional(),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ dryRun, expectedRevision, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      if (dryRun) {
+        const plan = planUnusedSvgDefs(source);
+        const output = { ...plan, dryRun: true };
+        return {
+          content: [{ type: "text", text: JSON.stringify(output) }],
+          structuredContent: output,
+        };
+      }
+      if (expectedRevision === undefined)
+        throw new Error("expectedRevision is required when dryRun is false");
+      const result = vacuumUnusedSvgDefs(source);
+      const committed = await fileStore.commit({
+        contents: Buffer.from(result.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        ...result.plan,
+        backupCreated: committed.backupPath !== undefined,
+        dryRun: false,
         revision: committed.revision,
       };
       return {

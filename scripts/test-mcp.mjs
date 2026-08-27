@@ -358,6 +358,34 @@ try {
       "filters_manage did not safely delete an unreferenced filter",
     );
   await writeFile(
+    join(workspaceRoot, "defs.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="keep"/><filter id="unused"/></defs><rect fill="url(#keep)"/></svg>',
+  );
+  const defsPlan = await workspaceClient.callTool({
+    arguments: { path: "defs.svg", workspaceId: workspace.id },
+    name: "defs_vacuum",
+  });
+  if (
+    defsPlan.isError ||
+    defsPlan.structuredContent?.dryRun !== true ||
+    defsPlan.structuredContent?.removedIds?.[0] !== "unused"
+  )
+    throw new Error("defs_vacuum did not produce a conservative cleanup plan");
+  const defsRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "defs.svg")))
+    .digest("hex");
+  const defsVacuumed = await workspaceClient.callTool({
+    arguments: {
+      dryRun: false,
+      expectedRevision: defsRevision,
+      path: "defs.svg",
+      workspaceId: workspace.id,
+    },
+    name: "defs_vacuum",
+  });
+  if (defsVacuumed.isError || defsVacuumed.structuredContent?.dryRun !== false)
+    throw new Error("defs_vacuum did not commit its approved cleanup plan");
+  await writeFile(
     join(workspaceRoot, "metadata.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><image id="accessible_image" href="data:image/png;base64,AA==" width="1" height="1"/></svg>',
   );

@@ -24,6 +24,11 @@ export {
 } from "./preflight.js";
 export { inspectSvgInventory, type DocumentInventory } from "./inventory.js";
 export {
+  planUnusedSvgDefs,
+  vacuumUnusedSvgDefs,
+  type UnusedDefsPlan,
+} from "./defs-vacuum.js";
+export {
   querySvgElements,
   querySvgElementTargets,
   type ElementQuery,

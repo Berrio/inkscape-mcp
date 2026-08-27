@@ -1078,39 +1078,65 @@ function pdfCapabilityLabel(flag: string): string {
   return labels[flag] ?? "PDF renderer option";
 }
 
-export function buildServer(config: ServerConfig): McpServer {
+export type ServerRuntime = {
+  artifacts: ArtifactStore;
+  capabilities: CapabilityService;
+  exportPlans: ExportPlanStore;
+  fileStore: AtomicFileStore;
+  jobs: JobStore;
+  previewCache: PreviewCache;
+  runner: ProcessRunner;
+  scratch: ScratchManager;
+  snapshots: SnapshotStore;
+};
+
+/** Creates process-owned state shared by stateless HTTP server instances. */
+export function createServerRuntime(config: ServerConfig): ServerRuntime {
+  const fileStore = new AtomicFileStore();
+  const stateRoot =
+    config.scratchRoot === "auto" ? tmpdir() : config.scratchRoot;
+  return {
+    artifacts: new ArtifactStore(
+      join(stateRoot, "inkscape-mcp-artifacts"),
+      config.maxArtifactBytes,
+    ),
+    capabilities: new CapabilityService(),
+    exportPlans: new ExportPlanStore(),
+    fileStore,
+    jobs: new JobStore(),
+    previewCache: new PreviewCache(
+      join(stateRoot, "inkscape-mcp-preview-cache"),
+    ),
+    runner: new ProcessRunner(config.maxConcurrency),
+    scratch: new ScratchManager(
+      config.scratchRoot === "auto" ? undefined : config.scratchRoot,
+    ),
+    snapshots: new SnapshotStore(
+      join(stateRoot, "inkscape-mcp-snapshots"),
+      fileStore,
+    ),
+  };
+}
+
+export function buildServer(
+  config: ServerConfig,
+  runtime: ServerRuntime = createServerRuntime(config),
+): McpServer {
   const server = new McpServer({
     name: "inkscape-mcp",
     version: packageMetadata.version,
   });
-  const fileStore = new AtomicFileStore();
-  const exportPlans = new ExportPlanStore();
-  const jobs = new JobStore();
-  const runner = new ProcessRunner(config.maxConcurrency);
-  const capabilities = new CapabilityService();
-  const scratch = new ScratchManager(
-    config.scratchRoot === "auto" ? undefined : config.scratchRoot,
-  );
-  const snapshots = new SnapshotStore(
-    join(
-      config.scratchRoot === "auto" ? tmpdir() : config.scratchRoot,
-      "inkscape-mcp-snapshots",
-    ),
+  const {
+    artifacts,
+    capabilities,
+    exportPlans,
     fileStore,
-  );
-  const artifacts = new ArtifactStore(
-    join(
-      config.scratchRoot === "auto" ? tmpdir() : config.scratchRoot,
-      "inkscape-mcp-artifacts",
-    ),
-    config.maxArtifactBytes,
-  );
-  const previewCache = new PreviewCache(
-    join(
-      config.scratchRoot === "auto" ? tmpdir() : config.scratchRoot,
-      "inkscape-mcp-preview-cache",
-    ),
-  );
+    jobs,
+    previewCache,
+    runner,
+    scratch,
+    snapshots,
+  } = runtime;
   const workspaces = () => WorkspaceService.create(config.workspaceRoots);
   let fontCache:
     | { expiresAt: number; families: readonly string[]; source: string }

@@ -14,7 +14,7 @@ import {
 import { once } from "node:events";
 
 import { type ServerConfig } from "./config/index.js";
-import { buildServer } from "./server/index.js";
+import { buildServer, createServerRuntime } from "./server/index.js";
 
 const HTTP_PATH = "/mcp";
 const LOCAL_HOSTNAMES = ["127.0.0.1", "localhost"];
@@ -42,15 +42,19 @@ export function readHttpBearerToken(env: NodeJS.ProcessEnv): string {
 export function createSecureHttpHandler(
   config: ServerConfig,
   token: string,
-  handler: FetchHandler = createMcpHandler(() => buildServer(config), {
-    legacy: "reject",
-    maxSubscriptions: 16,
-    onerror: () => undefined,
-  }),
+  handler?: FetchHandler,
 ): FetchHandler {
+  const runtime = createServerRuntime(config);
+  const securedHandler =
+    handler ??
+    createMcpHandler(() => buildServer(config, runtime), {
+      legacy: "reject",
+      maxSubscriptions: 16,
+      onerror: () => undefined,
+    });
   const limiter = new LocalRateLimiter();
   return {
-    close: () => handler.close(),
+    close: () => securedHandler.close(),
     async fetch(request: Request): Promise<Response> {
       if (new URL(request.url).pathname !== HTTP_PATH)
         return new Response("Not found", { status: 404 });
@@ -68,7 +72,7 @@ export function createSecureHttpHandler(
         token,
       );
       if (auth instanceof Response) return auth;
-      return handler.fetch(request, { authInfo: auth });
+      return securedHandler.fetch(request, { authInfo: auth });
     },
   };
 }

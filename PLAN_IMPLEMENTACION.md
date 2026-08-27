@@ -2069,7 +2069,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [x] `F11-T08` README: instalación de Inkscape, npm, doctor, config, stdio y ejemplos. — README actualizado con instalación Windows/MSIX, arranque stdio, configuración MCP, revisión esperada y catálogo agrupado de tools reales.
 - [x] `F11-T09` Documentar MSIX versus instalación CLI-friendly y resolución de ruta. — `docs/windows-inkscape.md` explica discovery/redacción, diagnóstico, configuración de arranque y la prohibición de fijar directorios MSIX versionados o alterar `WindowsApps`.
 - [ ] `F11-T10` Documentar cada tool/schema/errores/ejemplos.
-- [ ] `F11-T11` Guía de tamaños, viewBox, DPI, áreas y multipágina.
+- [x] `F11-T11` Guía de tamaños, viewBox, DPI, áreas y multipágina. — `docs/design-size-guide.md` distingue viewport físico de `viewBox`, documenta resize/fit, DPI y áreas PNG, IDs de páginas y los dos contratos PDF, con un flujo seguro verificable.
 - [ ] `F11-T12` Guía de export PNG/PDF/SVG y pérdida por formato.
 - [ ] `F11-T13` Guía de seguridad/workspace/overwrite/backups que distinga protección de estructura/rutas de contención de exploits nativos; documentar `securityLevel`, `nativeInputPolicy` y sandbox opcional sin afirmar aislamiento inexistente.
 - [ ] `F11-T14` Matriz de compatibilidad versionada.

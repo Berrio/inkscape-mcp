@@ -42,6 +42,10 @@ Consulta [Inkscape en Windows](./docs/windows-inkscape.md) para diferencias
 entre Microsoft Store/MSIX e instaladores convencionales, y cómo configurar un
 binario local sólo cuando el diagnóstico lo requiera.
 
+Consulta la [guía de tamaños y exportación](./docs/design-size-guide.md) para
+trabajar con milímetros, `viewBox`, DPI, áreas PNG y páginas sin recortes ni
+deformaciones inesperadas.
+
 ## Ejecutar localmente
 
 ```powershell

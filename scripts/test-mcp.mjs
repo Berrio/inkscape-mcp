@@ -586,6 +586,54 @@ try {
     croppedImage.structuredContent?.imageId !== "photo"
   )
     throw new Error("images_crop did not add a non-destructive crop");
+  const managedPixel = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await writeFile(join(workspaceRoot, "managed-photo.png"), managedPixel);
+  await writeFile(
+    join(workspaceRoot, "images-manage.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><image id="managed_photo" href="managed-photo.png" width="1" height="1"/></svg>',
+  );
+  const managedImageRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "images-manage.svg")))
+    .digest("hex");
+  const embeddedImage = await workspaceClient.callTool({
+    arguments: {
+      action: "relink",
+      assetPath: "managed-photo.png",
+      embedding: "embed",
+      expectedRevision: managedImageRevision,
+      imageId: "managed_photo",
+      path: "images-manage.svg",
+      workspaceId: workspace.id,
+    },
+    name: "images_manage",
+  });
+  const embeddedImageRevision = embeddedImage.structuredContent?.revision;
+  if (embeddedImage.isError || typeof embeddedImageRevision !== "string")
+    throw new Error("images_manage did not embed a workspace image");
+  const extractedImage = await workspaceClient.callTool({
+    arguments: {
+      action: "extract",
+      expectedRevision: embeddedImageRevision,
+      imageId: "managed_photo",
+      outputPath: "extracted-photo.png",
+      path: "images-manage.svg",
+      workspaceId: workspace.id,
+    },
+    name: "images_manage",
+  });
+  if (
+    extractedImage.isError ||
+    extractedImage.structuredContent?.assetPath !== "extracted-photo.png" ||
+    !Buffer.from(
+      await readFile(join(workspaceRoot, "extracted-photo.png")),
+    ).equals(managedPixel)
+  )
+    throw new Error(
+      "images_manage did not atomically extract an embedded image",
+    );
   await writeFile(
     join(workspaceRoot, "clips.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><rect id="clipped_target" width="10" height="8"/></svg>',

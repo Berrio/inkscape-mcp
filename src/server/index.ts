@@ -15,6 +15,7 @@ import {
   createSvgDocument,
   applySvgFilter,
   cropSvgImage,
+  extractEmbeddedRaster,
   applySvgClipPath,
   applySvgMask,
   createSvgRectClipPath,
@@ -75,6 +76,7 @@ import {
   releaseSvgMask,
   releaseSvgFilter,
   rewriteStagedAssetReferences,
+  setSvgImageHref,
   updateSvgPage,
   updateDocumentDisplaySettings,
   validateSvgPageLayout,
@@ -2738,6 +2740,139 @@ export function buildServer(config: ServerConfig): McpServer {
         clipId,
         imageId,
         revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "images_manage",
+    {
+      description:
+        "Relinks, embeds, or extracts explicit SVG raster images using only workspace-confined files and bounded supported MIME types.",
+      inputSchema: z.discriminatedUnion("action", [
+        z.object({
+          action: z.literal("relink"),
+          assetPath: z.string().min(1).max(1024),
+          embedding: z.enum(["embed", "link"]),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          imageId: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("extract"),
+          expectedOutputRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          imageId: shapeIdSchema,
+          outputPath: z.string().min(1).max(1024),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+      ]),
+      outputSchema: z.object({
+        action: z.enum(["relink", "extract"]),
+        assetPath: z.string().min(1).max(1024),
+        backupCreated: z.boolean(),
+        imageId: shapeIdSchema,
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const document = await workspace.resolveExisting(
+        input.workspaceId,
+        input.path,
+      );
+      const source = await readFile(document.absolutePath, "utf8");
+      if (input.action === "relink") {
+        const asset = await workspace.resolveExisting(
+          input.workspaceId,
+          input.assetPath,
+        );
+        const bytes = await readBoundedRasterAsset(
+          asset.absolutePath,
+          config.maxInputBytes,
+        );
+        const mime = sniffRasterMime(bytes);
+        const href =
+          input.embedding === "embed"
+            ? `data:${mime};base64,${bytes.toString("base64")}`
+            : relative(
+                dirname(document.absolutePath),
+                asset.absolutePath,
+              ).replaceAll("\\", "/");
+        const changed = setSvgImageHref(source, input.imageId, href);
+        const committed = await fileStore.commit({
+          contents: Buffer.from(changed),
+          expectedOutputRevision: input.expectedRevision,
+          expectedRevision: input.expectedRevision,
+          sourcePath: document.absolutePath,
+          targetPath: document.absolutePath,
+        });
+        const output = {
+          action: input.action,
+          assetPath: asset.relativePath,
+          backupCreated: committed.backupPath !== undefined,
+          imageId: input.imageId,
+          revision: committed.revision,
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(output) }],
+          structuredContent: output,
+        };
+      }
+      const outputAsset = await workspace.resolveNewOutput(
+        input.workspaceId,
+        input.outputPath,
+      );
+      const embedded = extractEmbeddedRaster(
+        source,
+        input.imageId,
+        config.maxInputBytes,
+      );
+      if (!matchesRasterExtension(outputAsset.relativePath, embedded.mime))
+        throw new Error(
+          "Extracted image output extension does not match its MIME type",
+        );
+      const href = relative(
+        dirname(document.absolutePath),
+        outputAsset.absolutePath,
+      ).replaceAll("\\", "/");
+      const changed = setSvgImageHref(source, input.imageId, href);
+      const committed = await fileStore.commitBatch({
+        expectedRevision: input.expectedRevision,
+        sourcePath: document.absolutePath,
+        files: [
+          {
+            contents: Buffer.from(changed),
+            expectedOutputRevision: input.expectedRevision,
+            targetPath: document.absolutePath,
+          },
+          {
+            contents: embedded.bytes,
+            ...(input.expectedOutputRevision === undefined
+              ? {}
+              : { expectedOutputRevision: input.expectedOutputRevision }),
+            targetPath: outputAsset.absolutePath,
+          },
+        ],
+      });
+      const documentCommit = committed.files[0]!;
+      const output = {
+        action: input.action,
+        assetPath: outputAsset.relativePath,
+        backupCreated: documentCommit.backupPath !== undefined,
+        imageId: input.imageId,
+        revision: documentCommit.revision,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
@@ -6906,6 +7041,28 @@ function sniffRasterMime(bytes: Uint8Array): string {
   )
     return "image/webp";
   throw new Error("Image asset is not a supported raster format");
+}
+
+async function readBoundedRasterAsset(
+  path: string,
+  maximumBytes: number,
+): Promise<Buffer> {
+  const metadata = await stat(path);
+  if (metadata.size < 1 || metadata.size > maximumBytes)
+    throw new Error("Image asset exceeds the configured size limit");
+  const bytes = await readFile(path);
+  sniffRasterMime(bytes);
+  return bytes;
+}
+
+function matchesRasterExtension(path: string, mime: string): boolean {
+  const extension = path.toLowerCase().split(".").at(-1);
+  return (
+    (mime === "image/png" && extension === "png") ||
+    (mime === "image/jpeg" && (extension === "jpg" || extension === "jpeg")) ||
+    (mime === "image/gif" && extension === "gif") ||
+    (mime === "image/webp" && extension === "webp")
+  );
 }
 
 async function artifactResource(

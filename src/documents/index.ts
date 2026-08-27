@@ -87,6 +87,12 @@ export {
 } from "./text.js";
 export { cropSvgImage, type SvgImageCrop } from "./image-crop.js";
 export {
+  extractEmbeddedRaster,
+  parseEmbeddedRasterDataUri,
+  setSvgImageHref,
+  type EmbeddedRaster,
+} from "./images.js";
+export {
   applySvgFilter,
   createSvgFilter,
   createSvgBlurFilter,

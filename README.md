@@ -54,6 +54,10 @@ Consulta la [guía de seguridad y workspaces](./docs/security-workspace-guide.md
 antes de automatizar: la versión actual protege rutas y publicaciones, pero no
 es un sandbox para documentos de origen hostil.
 
+La [matriz de compatibilidad](./docs/compatibility-matrix.md) separa el baseline
+Windows/Inkscape 1.4.4 probado de formatos, plataformas y capacidades aún no
+anunciadas.
+
 ## Ejecutar localmente
 
 ```powershell

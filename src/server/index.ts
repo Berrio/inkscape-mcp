@@ -33,6 +33,7 @@ import {
   deleteSvgMask,
   editSvgPathNode,
   createSvgShapes,
+  createSvgConnector,
   attachSvgTextToPath,
   detachSvgTextFromPath,
   updateSvgDocumentMetadata,
@@ -2656,6 +2657,68 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         backupCreated: committed.backupPath !== undefined,
         ids: created.ids,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "connector_create",
+    {
+      description:
+        "Creates one typed Inkscape polyline connector between two existing local element IDs without accepting SVG/XML or arbitrary connection attributes.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          fromId: shapeIdSchema,
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          points: z
+            .array(z.tuple([z.number().finite(), z.number().finite()]))
+            .min(2)
+            .max(100),
+          toId: shapeIdSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        id: shapeIdSchema,
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({
+      expectedRevision,
+      fromId,
+      id,
+      path,
+      points,
+      toId,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const svg = createSvgConnector(
+        await readFile(document.absolutePath, "utf8"),
+        { fromId, id, points, toId },
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        id,
         revision: committed.revision,
       };
       return {

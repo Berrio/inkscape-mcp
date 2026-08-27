@@ -57,6 +57,7 @@ exportación: inspección → `document_export_preset_plan` →
 | ---------------------------- | ----------------------------------------------------------- | -------------------------------------------------- |
 | `elements_query`             | IDs, tipo, layer o selector compuesto seguro; paginación.   | Buscar `rect.card` sin XPath/CSS arbitrario.       |
 | `elements_create`            | Batch de shapes tipadas, estilos allowlisted y layer/grupo. | Añadir un rectángulo y texto sin enviar XML.       |
+| `connector_create`           | Dos endpoints existentes y polilínea de puntos finitos.     | Conectar dos bloques de un diagrama.               |
 | `elements_update`            | Patch discriminado de geometría, estilo, texto o layer.     | Cambiar fill/stroke o etiqueta de capa.            |
 | `elements_delete`            | IDs explícitos y revisión.                                  | Eliminar objetos sólo si no rompe referencias.     |
 | `elements_duplicate`         | Copia independiente o clone `use`.                          | Repetir un sello o crear instancia reutilizable.   |

@@ -4726,7 +4726,7 @@ export function buildServer(config: ServerConfig): McpServer {
     "paths_boolean",
     {
       description:
-        "Runs Inkscape's native union, difference, intersection or exclusion on exactly two safe SVG path IDs in a staged copy, then atomically publishes the sanitized result.",
+        "Runs an allowlisted native boolean, division, or cut operation on exactly two safe SVG path IDs in a staged copy, then atomically publishes the sanitized result. For difference, division, and cut, ids[0] is the target and ids[1] is the cutter.",
       inputSchema: z
         .object({
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -4736,6 +4736,8 @@ export function buildServer(config: ServerConfig): McpServer {
             "difference",
             "intersection",
             "exclusion",
+            "division",
+            "cut",
           ]),
           path: z.string().min(1).max(1024),
           workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
@@ -4744,7 +4746,14 @@ export function buildServer(config: ServerConfig): McpServer {
       outputSchema: z.object({
         backupCreated: z.boolean(),
         diff: semanticDiffSchema,
-        operation: z.enum(["union", "difference", "intersection", "exclusion"]),
+        operation: z.enum([
+          "union",
+          "difference",
+          "intersection",
+          "exclusion",
+          "division",
+          "cut",
+        ]),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
       }),
       annotations: { destructiveHint: true },
@@ -8568,7 +8577,8 @@ async function runNativePathBoolean(request: {
   document: ResolvedWorkspacePath;
   expectedRevision: string;
   ids: readonly [string, string] | readonly string[];
-  operation: "difference" | "exclusion" | "intersection" | "union";
+  operation:
+    "cut" | "difference" | "division" | "exclusion" | "intersection" | "union";
   runner: ProcessRunner;
   scratch: ScratchManager;
 }): Promise<string> {
@@ -8613,7 +8623,7 @@ async function runNativePathBoolean(request: {
       timeoutMs: request.config.processTimeoutMs,
     });
     if (run.exitCode !== 0 || run.terminationReason !== "completed")
-      throw new Error("Inkscape path boolean operation failed");
+      throw new Error("Inkscape path operation failed");
     const exported = await readFile(outputPath, "utf8");
     const sanitized = sanitizeSvg(exported, {
       maxElements: 100_000,

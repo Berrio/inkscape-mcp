@@ -51,6 +51,9 @@ describe("basic SVG documents", () => {
         toId: "to",
       },
     );
+    expect(result).toContain(
+      'xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"',
+    );
     expect(result).toContain('id="connector"');
     expect(result).toContain('inkscape:connection-start="#from"');
     expect(result).toContain('inkscape:connection-end="#to"');

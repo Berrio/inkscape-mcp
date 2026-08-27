@@ -209,6 +209,7 @@ export type ShapeSpec =
 
 const COLOR = /^#[a-fA-F0-9]{6}$/u;
 const SAFE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u;
+const INKSCAPE_NAMESPACE = "http://www.inkscape.org/namespaces/inkscape";
 
 /** Creates one Inkscape semantic connector without accepting arbitrary XML. */
 export function createSvgConnector(
@@ -241,6 +242,10 @@ export function createSvgConnector(
     !elements.some((element) => element.getAttribute("id") === spec.toId)
   )
     throw new Error("Connector endpoint ID does not exist");
+  const root = document.documentElement;
+  if (!root) throw new Error("SVG root is missing");
+  if (!root.hasAttribute("xmlns:inkscape"))
+    root.setAttribute("xmlns:inkscape", INKSCAPE_NAMESPACE);
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
   path.setAttribute("id", spec.id);
   path.setAttribute(
@@ -255,7 +260,7 @@ export function createSvgConnector(
   path.setAttribute("inkscape:connector-type", "polyline");
   path.setAttribute("inkscape:connection-start", `#${spec.fromId}`);
   path.setAttribute("inkscape:connection-end", `#${spec.toId}`);
-  document.documentElement?.appendChild(path);
+  root.appendChild(path);
   return new XMLSerializer().serializeToString(document);
 }
 const SAFE_CLASS = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/u;

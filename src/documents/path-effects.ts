@@ -2,6 +2,8 @@ import { DOMParser } from "@xmldom/xmldom";
 
 import { sanitizeSvg } from "../svg/index.js";
 
+const INKSCAPE_NAMESPACE = "http://www.inkscape.org/namespaces/inkscape";
+
 export function inspectSvgPathEffects(source: string): {
   effects: readonly { id: string; type: string; usedBy: readonly string[] }[];
 } {
@@ -22,7 +24,13 @@ export function inspectSvgPathEffects(source: string): {
         if (!id) return [];
         const usedBy = all
           .filter((element) =>
-            element.getAttribute("inkscape:path-effect")?.includes(`#${id}`),
+            (
+              element.getAttributeNS(INKSCAPE_NAMESPACE, "path-effect") ??
+              element.getAttribute("inkscape:path-effect") ??
+              ""
+            )
+              .split(/[;,\s]+/u)
+              .includes(`#${id}`),
           )
           .map((element) => element.getAttribute("id"))
           .filter((candidate): candidate is string => candidate !== null);

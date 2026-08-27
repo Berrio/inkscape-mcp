@@ -14,6 +14,8 @@ import {
   changePageOrientationSvg,
   createSvgDocument,
   createSvgShapes,
+  attachSvgTextToPath,
+  detachSvgTextFromPath,
   updateSvgDocumentMetadata,
   updateSvgElementAccessibility,
   applySvgGradient,
@@ -2298,6 +2300,72 @@ export function buildServer(config: ServerConfig): McpServer {
         id: result.id,
         removedIds: result.removedIds,
         revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "text_path_manage",
+    {
+      description:
+        "Attaches text (including tspans) to a local SVG path or detaches it without accepting markup.",
+      inputSchema: z.discriminatedUnion("action", [
+        z.object({
+          action: z.literal("attach"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          pathId: shapeIdSchema,
+          startOffset: z.number().finite().optional(),
+          textId: shapeIdSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+        z.object({
+          action: z.literal("detach"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          path: z.string().min(1).max(1024),
+          textId: shapeIdSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        }),
+      ]),
+      outputSchema: z.object({
+        action: z.enum(["attach", "detach"]),
+        backupCreated: z.boolean(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        textId: shapeIdSchema,
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(input.workspaceId, input.path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const changed =
+        input.action === "attach"
+          ? attachSvgTextToPath(
+              source,
+              input.textId,
+              input.pathId,
+              input.startOffset,
+            )
+          : detachSvgTextFromPath(source, input.textId);
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed),
+        expectedOutputRevision: input.expectedRevision,
+        expectedRevision: input.expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        action: input.action,
+        backupCreated: committed.backupPath !== undefined,
+        revision: committed.revision,
+        textId: input.textId,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],

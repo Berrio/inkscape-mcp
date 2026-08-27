@@ -68,6 +68,7 @@ export {
   type DocumentMetadataPatch,
   type ElementAccessibilityPatch,
 } from "./metadata.js";
+export { attachSvgTextToPath, detachSvgTextFromPath } from "./text-path.js";
 export {
   parseSvgPathData,
   reverseLinearSvgPathData,

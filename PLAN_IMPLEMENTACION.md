@@ -1814,7 +1814,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [ ] `F07-T18` Editar contenido/tspans conservando estructura o reemplazándola según modo explícito.
 - [ ] `F07-T19` Soportar multiline, baseline, letter/word spacing, direction y writing mode cuando SVG/Inkscape lo permitan.
-- [ ] `F07-T20` Crear/quitar text-on-path y mantener refs.
+- [~] `F07-T20` Crear/quitar text-on-path y mantener refs. — `text_path_manage` adjunta o libera un `<textPath href="#id">`, preservando contenido y tspans; IDs de texto/path son estrictos. Falta smoke MCP y cobertura de referencias complejas.
 - [ ] `F07-T21` Inspeccionar flowed text y ofrecer conversión gateada.
 - [ ] `F07-T22` Descubrir fuentes del sistema de forma acotada y cacheada.
 - [ ] `F07-T23` Preflight de fuente ausente/sustitución y limitaciones de incrustación.

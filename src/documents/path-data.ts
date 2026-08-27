@@ -147,6 +147,31 @@ export function reverseLinearSvgPathData(value: string): string {
     .join(" ");
 }
 
+/** Moves one explicit absolute node without accepting raw path data from callers. */
+export function moveAbsoluteSvgPathNode(
+  value: string,
+  index: number,
+  point: { x: number; y: number },
+): string {
+  if (!Number.isInteger(index) || index < 0)
+    throw new Error("Path node index is invalid");
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y))
+    throw new Error("Path node coordinates must be finite");
+  const segments = parseSvgPathData(value);
+  const segment = segments[index];
+  if (!segment) throw new Error("Path node index does not exist");
+  if (
+    segment.command !== "M" &&
+    segment.command !== "L" &&
+    segment.command !== "T"
+  )
+    throw new Error(
+      "Node move currently supports absolute moveto, lineto, and smooth quadratic endpoints",
+    );
+  segments[index] = { command: segment.command, values: [point.x, point.y] };
+  return serializeSvgPathData(segments);
+}
+
 function serializeReversedLinearSubpath(
   subpath: readonly SvgPathSegment[],
 ): string {

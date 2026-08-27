@@ -7,6 +7,7 @@ import {
 
 import { sanitizeSvg } from "../svg/index.js";
 import {
+  moveAbsoluteSvgPathNode,
   parseSvgPathData,
   reverseLinearSvgPathData,
   splitSvgPathSubpaths,
@@ -456,6 +457,24 @@ export function reverseSvgPath(
   const data = path.getAttribute("d");
   if (data === null) throw new Error("Path data is missing");
   path.setAttribute("d", reverseLinearSvgPathData(data));
+  return { id, svg: new XMLSerializer().serializeToString(document) };
+}
+
+/** Moves a safe subset of explicit path nodes while preserving element identity. */
+export function moveSvgPathNode(
+  source: string,
+  id: string,
+  index: number,
+  point: { x: number; y: number },
+): { id: string; svg: string } {
+  const document = parseSafeDocument(source);
+  const path = requirePathElement(
+    Array.from(document.getElementsByTagName("*")),
+    id,
+  );
+  const data = path.getAttribute("d");
+  if (data === null) throw new Error("Path data is missing");
+  path.setAttribute("d", moveAbsoluteSvgPathNode(data, index, point));
   return { id, svg: new XMLSerializer().serializeToString(document) };
 }
 

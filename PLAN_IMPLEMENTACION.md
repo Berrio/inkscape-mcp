@@ -1870,7 +1870,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Cobertura avanzada adicional
 
-- [ ] `F07-T37` Implementar edición de nodos tipada: insertar/mover/eliminar, cambiar comando, handles, abrir/cerrar subpath y mantener índices/revisión.
+- [~] `F07-T37` Implementar edición de nodos tipada: insertar/mover/eliminar, cambiar comando, handles, abrir/cerrar subpath y mantener índices/revisión. — `path_node_move` mueve nodos M/L/T absolutos por índice con punto tipado, revisión y backup; inserción/eliminación, handles, comandos y cierre de subpath permanecen pendientes.
 - [ ] `F07-T38` Inspeccionar/preservar mesh gradients y gatear su edición hasta tener modelo y fixtures fiables.
 - [ ] `F07-T39` Modelar conectores/diagramas como paths + markers + referencias, preservando semántica Inkscape cuando exista.
 - [ ] `F07-T40` Implementar inventario/aplicación de paletas y swatches documentales sin depender de preferencias globales.

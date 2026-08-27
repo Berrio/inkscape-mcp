@@ -60,6 +60,7 @@ import {
   normalizeFontFamilies,
   inspectSvgSettings,
   listSvgPages,
+  moveSvgPathNode,
   pageSizeFromPreset,
   parseViewportLength,
   preflightSvg,
@@ -4956,6 +4957,60 @@ export function buildServer(config: ServerConfig): McpServer {
       const output = {
         backupCreated: committed.backupPath !== undefined,
         id: result.id,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "path_node_move",
+    {
+      description:
+        "Moves one explicit absolute moveto, lineto, or smooth-quadratic path node by zero-based segment index without accepting raw SVG path data.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          id: shapeIdSchema,
+          index: z.number().int().min(0).max(9_999),
+          path: z.string().min(1).max(1024),
+          point: z
+            .object({ x: z.number().finite(), y: z.number().finite() })
+            .strict(),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        id: shapeIdSchema,
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, id, index, path, point, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const changed = moveSvgPathNode(
+        await readFile(document.absolutePath, "utf8"),
+        id,
+        index,
+        point,
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        id: changed.id,
         revision: committed.revision,
       };
       return {

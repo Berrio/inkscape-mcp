@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseSvgPathData,
+  moveAbsoluteSvgPathNode,
   reverseLinearSvgPathData,
   serializeSvgPathData,
   splitSvgPathSubpaths,
@@ -49,5 +50,14 @@ describe("SVG path AST", () => {
     expect(() => reverseLinearSvgPathData("M 0 0 C 1 2 3 4 5 6")).toThrow(
       "only moveto, lineto, horizontal, vertical and close",
     );
+  });
+
+  it("moves only explicit supported absolute endpoints", () => {
+    expect(
+      moveAbsoluteSvgPathNode("M 0 0 L 4 2 T 8 1", 1, { x: 5, y: 3 }),
+    ).toBe("M 0 0 L 5 3 T 8 1");
+    expect(() =>
+      moveAbsoluteSvgPathNode("M 0 0 l 4 2", 1, { x: 5, y: 3 }),
+    ).toThrow("currently supports");
   });
 });

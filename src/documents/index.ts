@@ -46,6 +46,7 @@ export {
   breakApartSvgPath,
   reverseSvgPath,
   flattenSvgShapeTransforms,
+  moveSvgPathNode,
   duplicateSvgShape,
   reparentSvgShapes,
   arrangeSvgShapes,
@@ -167,6 +168,7 @@ export {
 } from "./clips.js";
 export {
   parseSvgPathData,
+  moveAbsoluteSvgPathNode,
   reverseLinearSvgPathData,
   serializeSvgPathData,
   splitSvgPathSubpaths,

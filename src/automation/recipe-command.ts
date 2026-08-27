@@ -113,6 +113,11 @@ export async function readAutonomousRecipe(
       "recipe file must contain valid JSON",
     );
   }
+  return parseAutonomousRecipe(input);
+}
+
+/** Validates an already-loaded recipe before it enters a durable queue. */
+export function parseAutonomousRecipe(input: unknown): AutonomousRecipe {
   try {
     return recipeSchema.parse(input);
   } catch (error) {
@@ -142,10 +147,23 @@ export async function runAutonomousRecipe(
   serverEntry: string,
 ): Promise<unknown> {
   const recipe = await readAutonomousRecipe(request.recipePath);
+  return await runAutonomousRecipeDefinition(
+    recipe,
+    request.configArguments,
+    serverEntry,
+  );
+}
+
+/** Executes a validated stored recipe through the same private stdio MCP flow. */
+export async function runAutonomousRecipeDefinition(
+  recipe: AutonomousRecipe,
+  configArguments: readonly string[],
+  serverEntry: string,
+): Promise<unknown> {
   try {
     return await withAutonomousMcp(
       {
-        configArguments: request.configArguments,
+        configArguments,
         workspaceIndex: recipe.workspaceIndex,
       },
       serverEntry,

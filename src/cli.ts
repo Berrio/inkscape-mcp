@@ -13,6 +13,10 @@ import {
   parseAutonomousRecipeArguments,
   runAutonomousRecipe,
 } from "./automation/recipe-command.js";
+import {
+  parseDurableQueueArguments,
+  runDurableQueue,
+} from "./automation/recipe-queue-command.js";
 import { loadConfigFromCli, redactDiagnostic } from "./config/index.js";
 import { formatDoctor, runDoctor } from "./doctor/index.js";
 import { readHttpBearerToken, startHttpMcpServer } from "./http.js";
@@ -27,6 +31,7 @@ Usage:
   inkscape-mcp --doctor [--json] [configuración]
   inkscape-mcp export --source <svg> --preset <name> --output-directory <dir> [--dry-run] [configuración]
   inkscape-mcp run <recipe.json> [configuración]
+  inkscape-mcp queue <enqueue|work|get|cancel|retry> [argumentos] [configuración]
 
 With no command, it serves MCP through stdio.`;
 
@@ -76,6 +81,20 @@ if (argument === "--help" || argument === "-h") {
     process.stderr.write(`${formatError(error, "Unable to run recipe")}\n`);
     process.exitCode =
       error instanceof AutonomousRecipeError ? error.exitCode : 3;
+  }
+} else if (argument === "queue") {
+  try {
+    const request = parseDurableQueueArguments(argumentsList.slice(1));
+    const result = await runDurableQueue(
+      request,
+      fileURLToPath(import.meta.url),
+    );
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+  } catch (error: unknown) {
+    process.stderr.write(
+      `${formatError(error, "Unable to run recipe queue")}\n`,
+    );
+    process.exitCode = 3;
   }
 } else {
   try {

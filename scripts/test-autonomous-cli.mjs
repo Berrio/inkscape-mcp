@@ -34,6 +34,25 @@ async function runRecipe(recipePath) {
   return JSON.parse(result.stdout);
 }
 
+async function runQueue(argumentsList) {
+  const result = await executeFile(
+    process.execPath,
+    [
+      "dist/cli.js",
+      "queue",
+      ...argumentsList,
+      "--workspace-root",
+      workspaceRoot,
+    ],
+    {
+      cwd: process.cwd(),
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    },
+  );
+  return JSON.parse(result.stdout);
+}
+
 try {
   await writeFile(
     join(workspaceRoot, "label.svg"),
@@ -102,6 +121,28 @@ try {
     !existsSync(join(workspaceRoot, "recipe-output", "web-1200.png"))
   ) {
     throw new Error("Autonomous recipe did not preflight and publish safely");
+  }
+  const queueRecipePath = join(workspaceRoot, "queue-recipe.json");
+  await writeFile(
+    queueRecipePath,
+    JSON.stringify({
+      operations: [{ kind: "inspect" }],
+      schema: "inkscape-mcp-recipe/v1",
+      source: "label.svg",
+    }),
+  );
+  const durable = await runQueue(["enqueue", queueRecipePath]);
+  if (durable.status !== "queued" || typeof durable.id !== "string")
+    throw new Error("Durable queue did not persist a recipe");
+  const worked = await runQueue(["work"]);
+  if (worked.completed !== 1 || worked.failed !== 0)
+    throw new Error("Durable queue worker did not complete a recipe");
+  const durableReceipt = await runQueue(["get", durable.id]);
+  if (
+    durableReceipt.status !== "completed" ||
+    durableReceipt.receipt?.schema !== "inkscape-mcp-recipe-receipt/v1"
+  ) {
+    throw new Error("Durable queue did not retain its recipe receipt");
   }
   const invalidRecipePath = join(workspaceRoot, "invalid-recipe.json");
   await writeFile(

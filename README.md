@@ -162,6 +162,23 @@ un archivo si deseas conservarlo. Sus códigos de salida son `0` (éxito), `2`
 capabilities, rutas y colisiones entre outputs previstos antes de publicar el
 primer export; cada export se publica mediante su lote atómico habitual.
 
+Para no perder un lote si termina una sesión de IA, la cola durable guarda una
+receta validada y su recibo bajo `.inkscape-mcp\recipe-queue` del workspace.
+Un worker se ejecuta explícitamente (por ejemplo, desde el Programador de
+tareas); sólo un worker local puede reclamar la cola y una receta interrumpida
+queda como fallida hasta que decidas reintentarla:
+
+```powershell
+$job = inkscape-mcp queue enqueue .\exportaciones.json --workspace-root C:\ruta\a\tus\disenos | ConvertFrom-Json
+inkscape-mcp queue work --workspace-root C:\ruta\a\tus\disenos
+inkscape-mcp queue get $job.id --workspace-root C:\ruta\a\tus\disenos
+inkscape-mcp queue retry $job.id --workspace-root C:\ruta\a\tus\disenos
+```
+
+`queue cancel` sólo cancela una receta aún en espera. No mata una exportación
+que ya está renderizando: conserva el límite atómico del batch y evita que un
+resultado parcial se presente como cancelado.
+
 ### Automatización de Windows
 
 El paquete incluye los scripts PowerShell

@@ -51,17 +51,17 @@ PowerShell o el Programador de tareas de Windows. No se confunde con los
 Cada bloque se termina con `npm run check`, smoke real, commit/push y una
 instrucción copiable en README antes de iniciar el siguiente.
 
-| Prioridad | Estado | Funcionalidad, en este orden                                                                                                                                                                    | Corte utilizable al terminar                                                       |
-| --------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| P0        | `[x]`  | Mantener regresión verde y cerrar el preset preflight/token ya iniciado.                                                                                                                        | La entrega actual PNG/PDF/SVG permanece atómica y comprobada.                      |
-| P0        | `[x]`  | **CLI autónoma `export`**: un comando humano `inkscape-mcp export` para un SVG local, preset, directorio y `--dry-run`; obtiene la revisión, llama al MCP por stdio y devuelve JSON/exit code.  | Se exporta sin chat ni modelo, desde PowerShell.                                   |
-| P0        | `[x]`  | **Recetas declarativas**: `inkscape-mcp run receta.json` con schema cerrado para inspección, preflight y uno o varios exports; validación previa, manifest/recibo y códigos de salida estables. | Un lote repetible puede guardarse en Git y ejecutarse sin recordar tools MCP.      |
-| P0        | `[x]`  | **Integración Windows**: ejemplos `.ps1` y Programador de tareas, rutas con espacios, logs a fichero y modo `--non-interactive`; no GUI ni credenciales.                                        | Las exportaciones de etiquetas se programan o lanzan con una instrucción copiable. |
-| P1        | `[ ]`  | **Cola local durable**: recetas encoladas, reintento explícito, cancelación y recibos; nunca publicar un resultado parcial en modo atómico.                                                     | Un cierre de sesión o fallo transitorio no obliga a rehacer manualmente el lote.   |
-| P1        | `[ ]`  | `F08-T01–T10`: completar los importadores prácticos restantes (raster, fuentes/perfiles bajo policy) con manifests y capability gates.                                                          | Materiales habituales entran de forma segura.                                      |
-| P1        | `[ ]`  | Cerrar puertas F01–F09 y release Windows/stdio: carreras, cleanup, fixtures visuales, Inspector, package smoke y documentación.                                                                 | Paquete instalable y operable sin memoria del operador.                            |
-| P2        | `[ ]`  | Paths avanzados y formatos/extensiones no centrales: LPE, mesh, conectores, PS/EPS/EMF/WMF/XAML y optimizadores, todos gateados.                                                                | Cobertura profesional que no bloquea el flujo autónomo base.                       |
-| P3        | `[ ]`  | HTTP, matriz macOS/Linux/1.5, GUI bridge, sandbox y CMYK/PDF-X.                                                                                                                                 | Opcionales; no retrasan Windows/stdio ni la automatización local.                  |
+| Prioridad | Estado | Funcionalidad, en este orden                                                                                                                                                                    | Corte utilizable al terminar                                                                                                               |
+| --------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| P0        | `[x]`  | Mantener regresión verde y cerrar el preset preflight/token ya iniciado.                                                                                                                        | La entrega actual PNG/PDF/SVG permanece atómica y comprobada.                                                                              |
+| P0        | `[x]`  | **CLI autónoma `export`**: un comando humano `inkscape-mcp export` para un SVG local, preset, directorio y `--dry-run`; obtiene la revisión, llama al MCP por stdio y devuelve JSON/exit code.  | Se exporta sin chat ni modelo, desde PowerShell.                                                                                           |
+| P0        | `[x]`  | **Recetas declarativas**: `inkscape-mcp run receta.json` con schema cerrado para inspección, preflight y uno o varios exports; validación previa, manifest/recibo y códigos de salida estables. | Un lote repetible puede guardarse en Git y ejecutarse sin recordar tools MCP.                                                              |
+| P0        | `[x]`  | **Integración Windows**: ejemplos `.ps1` y Programador de tareas, rutas con espacios, logs a fichero y modo `--non-interactive`; no GUI ni credenciales.                                        | Las exportaciones de etiquetas se programan o lanzan con una instrucción copiable.                                                         |
+| P1        | `[~]`  | **Cola local durable**: recetas encoladas, reintento explícito, cancelación y recibos; nunca publicar un resultado parcial en modo atómico.                                                     | La receta/recibo sobrevive reinicios y se trabaja con worker explícito; cancelación activa sigue limitada por el límite atómico del batch. |
+| P1        | `[ ]`  | `F08-T01–T10`: completar los importadores prácticos restantes (raster, fuentes/perfiles bajo policy) con manifests y capability gates.                                                          | Materiales habituales entran de forma segura.                                                                                              |
+| P1        | `[ ]`  | Cerrar puertas F01–F09 y release Windows/stdio: carreras, cleanup, fixtures visuales, Inspector, package smoke y documentación.                                                                 | Paquete instalable y operable sin memoria del operador.                                                                                    |
+| P2        | `[ ]`  | Paths avanzados y formatos/extensiones no centrales: LPE, mesh, conectores, PS/EPS/EMF/WMF/XAML y optimizadores, todos gateados.                                                                | Cobertura profesional que no bloquea el flujo autónomo base.                                                                               |
+| P3        | `[ ]`  | HTTP, matriz macOS/Linux/1.5, GUI bridge, sandbox y CMYK/PDF-X.                                                                                                                                 | Opcionales; no retrasan Windows/stdio ni la automatización local.                                                                          |
 
 Regla de corte: si queda tiempo para una tarea, elegir la primera pendiente de
 P0. La CLI no aceptará shell, XML ni rutas fuera del workspace; ejecutará el
@@ -2689,8 +2689,10 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 ### Continuidad sin tokens
 
 - [x] Exportación local por CLI, receta declarativa y runner Windows sin IA.
-- [ ] **Siguiente: cola durable local** para recetas, con estado persistente,
-      cancelación, reintento explícito y recibo recuperable.
+- [~] Cola durable local: `queue enqueue/work/get/cancel/retry` persiste
+  recetas y recibos, recupera worker interrumpido como fallo explícito y
+  exige reintento; queda pendiente cancelación cooperativa de una receta
+  ya en renderizado.
 - [ ] Después: cerrar gates reales F01–F09/F11 que impiden declarar el release
       Windows/stdio como 1.0.
 

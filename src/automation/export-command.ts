@@ -1,4 +1,5 @@
 import { Client } from "@modelcontextprotocol/client";
+import packageMetadata from "../../package.json" with { type: "json" };
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { z } from "zod";
 
@@ -149,7 +150,7 @@ export async function withAutonomousMcp<T>(
   operation: (session: AutonomousMcpSession) => Promise<T>,
 ): Promise<T> {
   const client = new Client(
-    { name: "inkscape-mcp-autonomous-cli", version: "0.0.0" },
+    { name: "inkscape-mcp-autonomous-cli", version: packageMetadata.version },
     { versionNegotiation: { mode: { pin: "2026-07-28" } } },
   );
   const transport = new StdioClientTransport({

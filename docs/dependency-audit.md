@@ -1,7 +1,7 @@
 # Auditoría de dependencias
 
 Esta auditoría se ejecutó el 2026-08-27 sobre el lockfile de `inkscape-mcp`
-0.0.0 con npm 11.16.0 y Node 24.18.0.
+0.1.0 con npm 11.16.0 y Node 24.18.0.
 
 ## Resultado
 

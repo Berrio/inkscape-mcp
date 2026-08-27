@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import packageMetadata from "../../package.json" with { type: "json" };
 
 import { describe, expect, it } from "vitest";
 
@@ -20,6 +21,6 @@ describe("inkscape-mcp CLI bootstrap", () => {
       encoding: "utf8",
     });
 
-    expect(stdout.trim()).toBe("0.0.0");
+    expect(stdout.trim()).toBe(packageMetadata.version);
   });
 });

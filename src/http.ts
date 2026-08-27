@@ -25,6 +25,13 @@ export type HttpMcpServer = {
   close: () => Promise<void>;
   url: string;
 };
+export type HttpLogEvent = {
+  event: "http_listening" | "http_request_rejected" | "http_server_error";
+  status?: 400 | 401 | 403 | 413 | 429 | 500 | undefined;
+};
+export type HttpMcpServerOptions = {
+  log?: ((event: HttpLogEvent) => void) | undefined;
+};
 
 type FetchHandler = Pick<McpHttpHandler, "close" | "fetch">;
 
@@ -43,14 +50,16 @@ export function createSecureHttpHandler(
   config: ServerConfig,
   token: string,
   handler?: FetchHandler,
+  options: HttpMcpServerOptions = {},
 ): FetchHandler {
+  const log = options.log ?? writeHttpLog;
   const runtime = createServerRuntime(config);
   const securedHandler =
     handler ??
     createMcpHandler(() => buildServer(config, runtime), {
       legacy: "reject",
       maxSubscriptions: 16,
-      onerror: () => undefined,
+      onerror: () => log({ event: "http_server_error", status: 500 }),
     });
   const limiter = new LocalRateLimiter();
   return {
@@ -61,17 +70,28 @@ export function createSecureHttpHandler(
       const rejected =
         hostHeaderValidationResponse(request, LOCAL_HOSTNAMES) ??
         originValidationResponse(request, LOCAL_HOSTNAMES);
-      if (rejected) return rejected;
-      if (!limiter.allow("loopback"))
+      if (rejected) {
+        log({
+          event: "http_request_rejected",
+          status: rejected.status as 400 | 403,
+        });
+        return rejected;
+      }
+      if (!limiter.allow("loopback")) {
+        log({ event: "http_request_rejected", status: 429 });
         return new Response("Too many requests", {
           headers: { "Retry-After": "60" },
           status: 429,
         });
+      }
       const auth = authenticateBearer(
         request.headers.get("authorization"),
         token,
       );
-      if (auth instanceof Response) return auth;
+      if (auth instanceof Response) {
+        log({ event: "http_request_rejected", status: 401 });
+        return auth;
+      }
       return securedHandler.fetch(request, { authInfo: auth });
     },
   };
@@ -81,12 +101,14 @@ export function createSecureHttpHandler(
 export async function startHttpMcpServer(
   config: ServerConfig,
   token: string,
+  options: HttpMcpServerOptions = {},
 ): Promise<HttpMcpServer> {
   if (config.transport !== "http")
     throw new Error("HTTP server requires transport=http");
-  const handler = createSecureHttpHandler(config, token);
+  const log = options.log ?? writeHttpLog;
+  const handler = createSecureHttpHandler(config, token, undefined, { log });
   const server = createServer((request, response) => {
-    void handleNodeRequest(request, response, config, handler);
+    void handleNodeRequest(request, response, config, handler, log);
   });
   server.requestTimeout = config.processTimeoutMs;
   server.headersTimeout = Math.min(config.processTimeoutMs, 60_000);
@@ -98,6 +120,7 @@ export async function startHttpMcpServer(
     server.close();
     throw new Error("HTTP listener did not expose a TCP address");
   }
+  log({ event: "http_listening" });
   return {
     close: async () => {
       await handler.close();
@@ -141,6 +164,7 @@ async function handleNodeRequest(
   response: ServerResponse,
   config: ServerConfig,
   handler: FetchHandler,
+  log: (event: HttpLogEvent) => void,
 ): Promise<void> {
   try {
     const webRequest = await toWebRequest(request, config);
@@ -148,6 +172,7 @@ async function handleNodeRequest(
     await writeWebResponse(response, webResponse);
   } catch (error: unknown) {
     const status = error instanceof RequestBodyTooLargeError ? 413 : 400;
+    log({ event: "http_request_rejected", status });
     if (!response.headersSent) response.writeHead(status);
     response.end(status === 413 ? "Request body too large" : "Bad request");
   }
@@ -235,4 +260,10 @@ class LocalRateLimiter {
     current.count += 1;
     return true;
   }
+}
+
+function writeHttpLog(event: HttpLogEvent): void {
+  process.stderr.write(
+    `${JSON.stringify({ component: "inkscape-mcp", transport: "http", ...event })}\n`,
+  );
 }

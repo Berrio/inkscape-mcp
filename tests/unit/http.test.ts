@@ -28,13 +28,19 @@ describe("secure local HTTP transport", () => {
 
   it("gates the official handler behind host, origin and bearer validation", async () => {
     const calls: Request[] = [];
-    const handler = createSecureHttpHandler(config, token, {
-      close: async () => undefined,
-      fetch: async (request) => {
-        calls.push(request);
-        return new Response("ok");
+    const events: unknown[] = [];
+    const handler = createSecureHttpHandler(
+      config,
+      token,
+      {
+        close: async () => undefined,
+        fetch: async (request) => {
+          calls.push(request);
+          return new Response("ok");
+        },
       },
-    });
+      { log: (event) => events.push(event) },
+    );
 
     expect(
       (
@@ -95,13 +101,23 @@ describe("secure local HTTP transport", () => {
       ).status,
     ).toBe(200);
     expect(calls).toHaveLength(1);
+    expect(JSON.stringify(events)).not.toContain(token);
+    expect(events).toContainEqual({
+      event: "http_request_rejected",
+      status: 401,
+    });
   });
 
   it("rate limits even if a caller forges forwarding headers", async () => {
-    const handler = createSecureHttpHandler(config, token, {
-      close: async () => undefined,
-      fetch: async () => new Response("ok"),
-    });
+    const handler = createSecureHttpHandler(
+      config,
+      token,
+      {
+        close: async () => undefined,
+        fetch: async () => new Response("ok"),
+      },
+      { log: () => undefined },
+    );
     for (let index = 0; index < 120; index += 1) {
       const response = await handler.fetch(
         new Request("http://127.0.0.1:3000/mcp", {
@@ -126,12 +142,14 @@ describe("secure local HTTP transport", () => {
   });
 
   it("binds the real listener locally and refuses unauthenticated requests", async () => {
+    const events: unknown[] = [];
     const server = await startHttpMcpServer(
       {
         ...config,
         http: { ...config.http, port: 0 },
       },
       token,
+      { log: (event) => events.push(event) },
     );
     try {
       const response = await fetch(server.url, {
@@ -140,6 +158,7 @@ describe("secure local HTTP transport", () => {
         method: "POST",
       });
       expect(response.status).toBe(401);
+      expect(events).toContainEqual({ event: "http_listening" });
     } finally {
       await server.close();
     }
@@ -149,6 +168,7 @@ describe("secure local HTTP transport", () => {
     const server = await startHttpMcpServer(
       { ...config, http: { ...config.http, port: 0 } },
       token,
+      { log: () => undefined },
     );
     const client = new Client(
       { name: "http-transport-test", version: "0.0.0" },

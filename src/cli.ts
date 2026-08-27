@@ -92,7 +92,6 @@ if (argument === "--help" || argument === "-h") {
         config,
         readHttpBearerToken(process.env),
       );
-      process.stderr.write(`MCP HTTP listening at ${server.url}\n`);
       const stop = () => {
         void server.close();
       };

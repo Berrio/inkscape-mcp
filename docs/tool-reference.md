@@ -122,14 +122,14 @@ exportación: inspección → `document_export_preset_plan` →
 
 ## Importación y empaquetado
 
-| Tool                           | Schema/operación                                             | Ejemplo de uso                                          |
-| ------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------- |
-| `document_import_capabilities` | Sin mutación; capabilities observadas.                       | Confirmar adaptadores locales antes de importar.        |
-| `document_import`              | SVG/SVGZ local, output y política de sanitización permitida. | Convertir SVGZ a SVG saneado con manifest.              |
-| `document_import_svg`          | SVG local, output y política.                                | Importar un SVG como documento editable nuevo.          |
-| `document_import_raster`       | PNG/JPEG/GIF/WebP local, link/embed, límite de megapíxeles.  | Crear SVG desde un raster aprobado.                     |
-| `document_import_pdf`          | PDF local, página e importador internal/Poppler gateado.     | Importar una página declarando pérdida de editabilidad. |
-| `assets_package`               | Documento/revisión y directorio nuevo.                       | Publicar SVG, assets locales y manifest juntos.         |
+| Tool                           | Schema/operación                                                | Ejemplo de uso                                          |
+| ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------- |
+| `document_import_capabilities` | Sin mutación; capabilities observadas.                          | Confirmar adaptadores locales antes de importar.        |
+| `document_import`              | SVG/SVGZ local, output y política de sanitización permitida.    | Convertir SVGZ a SVG saneado con manifest.              |
+| `document_import_svg`          | SVG local, output y política.                                   | Importar un SVG como documento editable nuevo.          |
+| `document_import_raster`       | BMP/PNG/JPEG/GIF/WebP local, link/embed, límite de megapíxeles. | Crear SVG desde un raster aprobado.                     |
+| `document_import_pdf`          | PDF local, página e importador internal/Poppler gateado.        | Importar una página declarando pérdida de editabilidad. |
+| `assets_package`               | Documento/revisión y directorio nuevo.                          | Publicar SVG, assets locales y manifest juntos.         |
 
 ## Exportación, presets y jobs
 

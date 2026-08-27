@@ -29,6 +29,21 @@ function png(width: number, height: number): Buffer {
   return bytes;
 }
 
+function bmp(width: number, height: number): Buffer {
+  const rowBytes = Math.ceil((width * 3) / 4) * 4;
+  const bytes = Buffer.alloc(54 + rowBytes * height);
+  bytes.write("BM", 0, "ascii");
+  bytes.writeUInt32LE(bytes.length, 2);
+  bytes.writeUInt32LE(54, 10);
+  bytes.writeUInt32LE(40, 14);
+  bytes.writeInt32LE(width, 18);
+  bytes.writeInt32LE(height, 22);
+  bytes.writeUInt16LE(1, 26);
+  bytes.writeUInt16LE(24, 28);
+  bytes.writeUInt32LE(rowBytes * height, 34);
+  return bytes;
+}
+
 describe("raster import", () => {
   it("sniffs and bounds PNG dimensions without trusting the filename", () => {
     const bytes = png(3, 2);
@@ -43,7 +58,8 @@ describe("raster import", () => {
     );
   });
 
-  it("recognizes JPEG, GIF and WebP intrinsic dimensions", () => {
+  it("recognizes BMP, JPEG, GIF and WebP intrinsic dimensions", () => {
+    const bitmap = bmp(3, 2);
     const jpeg = Buffer.from([
       0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x05, 0x00, 0x04, 0x01,
       0x11, 0x00, 0x00,
@@ -55,6 +71,11 @@ describe("raster import", () => {
     webp.write("VP8X", 12, "ascii");
     webp[24] = 5;
     webp[27] = 6;
+    expect(inspectRasterImport(bitmap, 1)).toMatchObject({
+      height: 2,
+      mime: "image/bmp",
+      width: 3,
+    });
     expect(inspectRasterImport(jpeg, 1)).toMatchObject({
       height: 5,
       mime: "image/jpeg",
@@ -70,6 +91,8 @@ describe("raster import", () => {
       mime: "image/webp",
       width: 6,
     });
+    const truncated = bmp(1, 1).subarray(0, 54);
+    expect(() => inspectRasterImport(truncated, 1)).toThrow("pixel data");
   });
 
   it("produces a self-contained XML-safe SVG wrapper", () => {

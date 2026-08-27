@@ -1126,6 +1126,56 @@ try {
     throw new Error(
       "document_import_raster did not retain a workspace-local relative link",
     );
+  const importedBitmapBytes = Buffer.alloc(58);
+  importedBitmapBytes.write("BM", 0, "ascii");
+  importedBitmapBytes.writeUInt32LE(importedBitmapBytes.length, 2);
+  importedBitmapBytes.writeUInt32LE(54, 10);
+  importedBitmapBytes.writeUInt32LE(40, 14);
+  importedBitmapBytes.writeInt32LE(1, 18);
+  importedBitmapBytes.writeInt32LE(1, 22);
+  importedBitmapBytes.writeUInt16LE(1, 26);
+  importedBitmapBytes.writeUInt16LE(24, 28);
+  importedBitmapBytes.writeUInt32LE(4, 34);
+  await writeFile(
+    join(workspaceRoot, "raster-import-bitmap.bin"),
+    importedBitmapBytes,
+  );
+  const importedBitmap = await workspaceClient.callTool({
+    arguments: {
+      embedding: "embed",
+      expectedRevision: createHash("sha256")
+        .update(importedBitmapBytes)
+        .digest("hex"),
+      manifestPath: "raster-import-bitmap.svg.import.json",
+      outputPath: "raster-import-bitmap.svg",
+      path: "raster-import-bitmap.bin",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_raster",
+  });
+  const bitmapRevision = importedBitmap.structuredContent?.revision;
+  if (
+    importedBitmap.isError ||
+    importedBitmap.structuredContent?.manifest?.mime !== "image/bmp" ||
+    typeof bitmapRevision !== "string"
+  )
+    throw new Error(
+      "document_import_raster did not import a byte-sniffed BMP document",
+    );
+  const bitmapPreview = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: bitmapRevision,
+      outputPath: "raster-import-bitmap-preview.png",
+      path: "raster-import-bitmap.svg",
+      width: 16,
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  if (bitmapPreview.isError)
+    throw new Error(
+      "document_import_raster did not render a byte-sniffed BMP document",
+    );
   await writeFile(
     join(workspaceRoot, "normalize-ids.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="legacy:gradient"/></defs><style>#legacy\\:gradient { fill: url(#legacy:gradient); }</style><rect id="duplicate" fill="url(#legacy:gradient)"/><use href="#legacy:gradient"/><circle id="duplicate"/><path/></svg>',

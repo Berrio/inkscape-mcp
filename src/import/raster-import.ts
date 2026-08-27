@@ -1,6 +1,6 @@
 export type RasterImportMetadata = {
   height: number;
-  mime: "image/gif" | "image/jpeg" | "image/png" | "image/webp";
+  mime: "image/bmp" | "image/gif" | "image/jpeg" | "image/png" | "image/webp";
   width: number;
 };
 
@@ -22,6 +22,8 @@ export function createRasterImportSvg(
 export function sniffRasterMime(
   bytes: Uint8Array,
 ): RasterImportMetadata["mime"] {
+  if (bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d)
+    return "image/bmp";
   if (
     bytes.length >= 8 &&
     bytes[0] === 0x89 &&
@@ -64,18 +66,59 @@ export function inspectRasterImport(
     throw new Error("Raster megapixel limit is invalid");
   const mime = sniffRasterMime(bytes);
   const dimensions =
-    mime === "image/png"
-      ? pngDimensions(bytes)
-      : mime === "image/jpeg"
-        ? jpegDimensions(bytes)
-        : mime === "image/gif"
-          ? gifDimensions(bytes)
-          : webpDimensions(bytes);
+    mime === "image/bmp"
+      ? bmpDimensions(bytes)
+      : mime === "image/png"
+        ? pngDimensions(bytes)
+        : mime === "image/jpeg"
+          ? jpegDimensions(bytes)
+          : mime === "image/gif"
+            ? gifDimensions(bytes)
+            : webpDimensions(bytes);
   if (dimensions.width < 1 || dimensions.height < 1)
     throw new Error("Raster image has invalid intrinsic dimensions");
   if (dimensions.width * dimensions.height > maximumMegapixels * 1_000_000)
     throw new Error("Raster image exceeds the configured megapixel limit");
   return { ...dimensions, mime };
+}
+
+function bmpDimensions(bytes: Uint8Array): { height: number; width: number } {
+  if (bytes.length < 18) throw new Error("BMP image is missing its DIB header");
+  const pixelOffset = readUInt32LE(bytes, 10);
+  const dibSize = readUInt32LE(bytes, 14);
+  let bitsPerPixel: number;
+  let height: number;
+  let width: number;
+  if (dibSize === 12) {
+    if (bytes.length < 26)
+      throw new Error("BMP image is missing core header dimensions");
+    if (readUInt16LE(bytes, 22) !== 1)
+      throw new Error("BMP image must contain exactly one plane");
+    width = readUInt16LE(bytes, 18);
+    height = readUInt16LE(bytes, 20);
+    bitsPerPixel = readUInt16LE(bytes, 24);
+  } else {
+    if (dibSize < 40 || bytes.length < 54)
+      throw new Error("BMP image has an unsupported DIB header");
+    if (readUInt16LE(bytes, 26) !== 1)
+      throw new Error("BMP image must contain exactly one plane");
+    if (readUInt32LE(bytes, 30) !== 0)
+      throw new Error("BMP image compression is not supported");
+    width = readInt32LE(bytes, 18);
+    const rawHeight = readInt32LE(bytes, 22);
+    if (rawHeight === -2_147_483_648)
+      throw new Error("BMP image has invalid dimensions");
+    height = Math.abs(rawHeight);
+    bitsPerPixel = readUInt16LE(bytes, 28);
+  }
+  if (width <= 0 || height <= 0)
+    throw new Error("BMP image has invalid dimensions");
+  if (![1, 4, 8, 16, 24, 32].includes(bitsPerPixel))
+    throw new Error("BMP image has an unsupported pixel format");
+  const rowBytes = Math.ceil((width * bitsPerPixel) / 32) * 4;
+  if (pixelOffset < 14 + dibSize || pixelOffset > bytes.length - rowBytes)
+    throw new Error("BMP image is missing pixel data");
+  return { height, width };
 }
 
 function pngDimensions(bytes: Uint8Array): { height: number; width: number } {
@@ -202,6 +245,17 @@ function readUInt32LE(bytes: Uint8Array, offset: number): number {
     (bytes[offset + 1]! << 8) +
     (bytes[offset + 2]! << 16) +
     bytes[offset + 3]! * 0x1_00_00_00
+  );
+}
+
+function readInt32LE(bytes: Uint8Array, offset: number): number {
+  if (offset + 4 > bytes.length)
+    throw new Error("Raster dimension header is truncated");
+  return (
+    bytes[offset]! |
+    (bytes[offset + 1]! << 8) |
+    (bytes[offset + 2]! << 16) |
+    (bytes[offset + 3]! << 24)
   );
 }
 

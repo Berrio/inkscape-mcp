@@ -1876,7 +1876,7 @@ export function buildServer(
     "document_import_raster",
     {
       description:
-        "Imports one workspace-local PNG, JPEG, GIF, or WebP as a new SVG document with a byte-sniffed, megapixel-bounded raster wrapper and conversion manifest. It can embed the approved bytes or retain one workspace-local relative link; it never fetches a URL.",
+        "Imports one workspace-local BMP, PNG, JPEG, GIF, or WebP as a new SVG document with a byte-sniffed, megapixel-bounded raster wrapper and conversion manifest. It can embed the approved bytes or retain one workspace-local relative link; it never fetches a URL.",
       inputSchema: z
         .object({
           embedding: z.enum(["embed", "link"]).default("embed"),
@@ -1893,7 +1893,13 @@ export function buildServer(
           format: z.literal("raster"),
           height: z.number().int().positive(),
           inputBytes: z.number().int().positive(),
-          mime: z.enum(["image/gif", "image/jpeg", "image/png", "image/webp"]),
+          mime: z.enum([
+            "image/bmp",
+            "image/gif",
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+          ]),
           outputPath: z.string(),
           outputSha256: z.string().regex(/^[a-f0-9]{64}$/u),
           removed: z.array(z.string()),
@@ -9039,6 +9045,7 @@ async function readBoundedRasterAsset(
 function matchesRasterExtension(path: string, mime: string): boolean {
   const extension = path.toLowerCase().split(".").at(-1);
   return (
+    (mime === "image/bmp" && extension === "bmp") ||
     (mime === "image/png" && extension === "png") ||
     (mime === "image/jpeg" && (extension === "jpg" || extension === "jpeg")) ||
     (mime === "image/gif" && extension === "gif") ||

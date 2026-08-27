@@ -100,7 +100,7 @@ describe("file revisions and atomic store", () => {
     await mkdir(staging);
     await writeFile(
       source,
-      '<svg><image href="data:image/png;base64,AA=="/></svg>',
+      '<svg><image href="data:image/png;base64,AA=="/><image href="data:image/bmp;base64,AA=="/></svg>',
     );
     const bundle = await createNativeInputBundle(
       source,
@@ -111,6 +111,9 @@ describe("file revisions and atomic store", () => {
     expect(bundle.manifest.dependencies).toEqual([]);
     await expect(readFile(bundle.path, "utf8")).resolves.toContain(
       "data:image/png;base64,AA==",
+    );
+    await expect(readFile(bundle.path, "utf8")).resolves.toContain(
+      "data:image/bmp;base64,AA==",
     );
   });
   it("rejects dependencies outside the workspace and detects a concurrent dependency writer", async () => {

@@ -1974,7 +1974,7 @@ function validateImageHref(value: string): void {
   )
     throw new Error("Image href is invalid");
   if (
-    /^data:image\/(?:gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
+    /^data:image\/(?:bmp|gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
       value,
     )
   )

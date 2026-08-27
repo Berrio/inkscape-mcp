@@ -9,6 +9,7 @@ import { sanitizeSvg } from "../svg/index.js";
 
 const SAFE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u;
 const IMAGE_MIME_TYPES = new Set([
+  "image/bmp",
   "image/gif",
   "image/jpeg",
   "image/png",
@@ -71,7 +72,7 @@ export function parseEmbeddedRasterDataUri(
 
 function isSafeImageHref(href: string): boolean {
   return (
-    /^data:image\/(?:gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
+    /^data:image\/(?:bmp|gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
       href,
     ) ||
     (/^(?!\/|\\|[A-Za-z]:|\/\/)[A-Za-z0-9._~!$&'()*+,;=@%/\\-]+$/u.test(href) &&

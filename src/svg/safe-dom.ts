@@ -130,7 +130,7 @@ function isForbiddenReference(value: string, mode: SanitizeMode): boolean {
   return /^(?:https?:|file:|data:|javascript:|\/\/)/iu.test(value);
 }
 function isSafeEmbeddedRasterDataUri(value: string): boolean {
-  return /^data:image\/(?:gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
+  return /^data:image\/(?:bmp|gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
     value,
   );
 }

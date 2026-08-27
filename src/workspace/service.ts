@@ -181,7 +181,7 @@ export function assertSafeRelativePath(value: string): void {
       "PATH_INVALID",
       "Path must be a safe relative path",
     );
-  const segments = value.split(/[\\/]+/u);
+  const segments = value.split(/[\\/]/u);
   if (
     segments.some(
       (segment) =>

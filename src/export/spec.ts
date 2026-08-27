@@ -15,7 +15,9 @@ const relativePathSchema = z
   .refine(
     (value) =>
       SAFE_RELATIVE_PATH.test(value) &&
-      value.split(/[\\/]/u).every((part) => part !== "." && part !== "..") &&
+      value
+        .split(/[\\/]/u)
+        .every((part) => part.length > 0 && part !== "." && part !== "..") &&
       !hasControlCharacters(value),
     "Output path is unsafe",
   );

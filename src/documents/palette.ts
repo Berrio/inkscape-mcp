@@ -1,0 +1,39 @@
+import { DOMParser } from "@xmldom/xmldom";
+
+import { sanitizeSvg } from "../svg/index.js";
+
+const COLOR = /^#[0-9a-f]{6}$/iu;
+
+export function inspectSvgPalette(
+  source: string,
+  limit = 128,
+): {
+  colors: readonly { color: string; uses: number }[];
+  truncated: boolean;
+} {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 1_000)
+    throw new Error("Palette limit is invalid");
+  const sanitized = sanitizeSvg(source, {
+    maxElements: 100_000,
+    maxInputBytes: 50 * 1024 * 1024,
+    mode: "preserve-local",
+  });
+  if (sanitized.removed.length > 0)
+    throw new Error("SVG must be sanitized before inspecting its palette");
+  const document = new DOMParser().parseFromString(source, "image/svg+xml");
+  const counts = new Map<string, number>();
+  for (const element of Array.from(document.getElementsByTagName("*")))
+    for (const name of ["fill", "stroke", "stop-color"]) {
+      const value = element.getAttribute(name)?.trim();
+      if (!value || !COLOR.test(value)) continue;
+      const color = value.toLowerCase();
+      counts.set(color, (counts.get(color) ?? 0) + 1);
+    }
+  const colors = [...counts.entries()]
+    .sort(
+      ([leftColor, leftUses], [rightColor, rightUses]) =>
+        rightUses - leftUses || leftColor.localeCompare(rightColor),
+    )
+    .map(([color, uses]) => ({ color, uses }));
+  return { colors: colors.slice(0, limit), truncated: colors.length > limit };
+}

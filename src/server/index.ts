@@ -58,6 +58,7 @@ import {
   inspectSvgInventory,
   inspectSvgImageDpi,
   inspectSvgMeshGradients,
+  inspectSvgPalette,
   inspectSvgAccessibility,
   inspectSvgRemoteResources,
   normalizeFontFamilies,
@@ -4526,6 +4527,45 @@ export function buildServer(config: ServerConfig): McpServer {
         id,
         revision: committed.revision,
       };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "palette_inspect",
+    {
+      description:
+        "Lists direct local hex colors used by fill, stroke, and gradient stops without reading global Inkscape palettes.",
+      inputSchema: z
+        .object({
+          limit: z.number().int().min(1).max(1_000).default(128),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        colors: z.array(
+          z.object({
+            color: z.string().regex(/^#[0-9a-f]{6}$/u),
+            uses: z.number().int().positive(),
+          }),
+        ),
+        truncated: z.boolean(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ limit, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const output = inspectSvgPalette(
+        await readFile(document.absolutePath, "utf8"),
+        limit,
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,

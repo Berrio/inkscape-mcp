@@ -2582,6 +2582,56 @@ try {
   ) {
     throw new Error("document_export did not publish the generic PDF export");
   }
+  const genericPdfBytes = await readFile(join(workspaceRoot, "a4-generic.pdf"));
+  const genericPdfRevision = createHash("sha256")
+    .update(genericPdfBytes)
+    .digest("hex");
+  const importedPdf = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: genericPdfRevision,
+      fontStrategy: "substitute",
+      manifestPath: "a4-imported.pdf.import.json",
+      mode: "internal",
+      outputPath: "a4-imported.svg",
+      page: 1,
+      path: "a4-generic.pdf",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_pdf",
+  });
+  if (
+    importedPdf.isError ||
+    importedPdf.structuredContent?.manifest?.format !== "pdf" ||
+    importedPdf.structuredContent.manifest?.warnings?.[0] !==
+      "PDF_INTERNAL_IMPORT_FIDELITY_NOT_GUARANTEED" ||
+    !(await readFile(join(workspaceRoot, "a4-imported.svg"), "utf8")).includes(
+      "<svg",
+    )
+  ) {
+    throw new Error("document_import_pdf did not publish a sanitized PDF page");
+  }
+  const importedPdfPoppler = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: genericPdfRevision,
+      manifestPath: "a4-imported-poppler.pdf.import.json",
+      mode: "poppler",
+      outputPath: "a4-imported-poppler.svg",
+      page: 1,
+      path: "a4-generic.pdf",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_pdf",
+  });
+  if (
+    importedPdfPoppler.isError ||
+    importedPdfPoppler.structuredContent?.manifest?.warnings?.[0] !==
+      "PDF_POPPLER_GLYPH_EDITABILITY_LIMITED" ||
+    !(
+      await readFile(join(workspaceRoot, "a4-imported-poppler.svg"), "utf8")
+    ).includes("<svg")
+  ) {
+    throw new Error("document_import_pdf did not publish a Poppler PDF page");
+  }
   const genericBatch = await workspaceClient.callTool({
     arguments: {
       mode: "all_or_nothing",

@@ -1849,6 +1849,233 @@ export function buildServer(config: ServerConfig): McpServer {
   );
 
   server.registerTool(
+    "document_import_pdf",
+    {
+      description:
+        "Imports exactly one page of a workspace-local PDF through the local Inkscape importer into a sanitized SVG and conversion manifest. The internal and Poppler importers are explicit, capability-gated modes with fidelity warnings.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          fontStrategy: z
+            .enum([
+              "draw-missing",
+              "draw-all",
+              "delete-missing",
+              "delete-all",
+              "substitute",
+              "keep",
+            ])
+            .optional(),
+          manifestPath: z.string().min(1).max(1024),
+          mode: z.enum(["internal", "poppler"]),
+          outputPath: z.string().min(1).max(1024),
+          page: z.number().int().min(1).max(10_000),
+          path: z.string().min(1).max(1024),
+          sanitizeMode: z
+            .enum(["strict", "preserve-local", "trusted"])
+            .default("preserve-local"),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict()
+        .superRefine((value, context) => {
+          if (value.mode === "poppler" && value.fontStrategy !== undefined)
+            context.addIssue({
+              code: "custom",
+              message:
+                "fontStrategy is only supported by the internal PDF importer",
+              path: ["fontStrategy"],
+            });
+        }),
+      outputSchema: z.object({
+        manifest: z.object({
+          fontStrategy: z
+            .enum([
+              "draw-missing",
+              "draw-all",
+              "delete-missing",
+              "delete-all",
+              "substitute",
+              "keep",
+            ])
+            .optional(),
+          format: z.literal("pdf"),
+          inputBytes: z.number().int().nonnegative(),
+          mode: z.enum(["internal", "poppler"]),
+          outputPath: z.string(),
+          outputSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+          page: z.number().int().positive(),
+          removed: z.array(z.string()),
+          schema: z.literal("inkscape-mcp-document-import/v1"),
+          sourcePath: z.string(),
+          sourceSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+          warnings: z.array(z.string()),
+        }),
+        manifestPath: z.string(),
+        manifestRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        outputPath: z.string(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const source = await workspace.resolveExisting(
+        input.workspaceId,
+        input.path,
+      );
+      const output = await workspace.resolveNewOutput(
+        input.workspaceId,
+        input.outputPath,
+      );
+      const manifestOutput = await workspace.resolveNewOutput(
+        input.workspaceId,
+        input.manifestPath,
+      );
+      if (!/\.pdf$/iu.test(source.relativePath))
+        throw new Error("document_import_pdf requires a .pdf source path");
+      if (!/\.svg$/iu.test(output.relativePath))
+        throw new Error("document_import_pdf requires a .svg output path");
+      if (!/\.json$/iu.test(manifestOutput.relativePath))
+        throw new Error("document_import_pdf requires a .json manifest path");
+      if (
+        output.absolutePath.toLocaleLowerCase() ===
+        manifestOutput.absolutePath.toLocaleLowerCase()
+      )
+        throw new Error("Import output and manifest paths must differ");
+      const sourceStats = await stat(source.absolutePath);
+      if (!sourceStats.isFile() || sourceStats.size < 5)
+        throw new Error("PDF import source is not a regular non-empty file");
+      if (sourceStats.size > config.maxInputBytes)
+        throw new Error("PDF import exceeds the configured size limit");
+      const sourceBytes = await readFile(source.absolutePath);
+      if (!sourceBytes.subarray(0, 5).equals(Buffer.from("%PDF-")))
+        throw new Error("PDF import source does not have a PDF signature");
+      const discovery = await locateInkscape({
+        config,
+        cwd: process.cwd(),
+        runner,
+      });
+      const candidate = discovery.candidates[0];
+      if (!candidate)
+        throw new Error("Inkscape executable could not be located");
+      const probe = await probeInkscapeCandidate(
+        runner,
+        candidate,
+        process.cwd(),
+      );
+      if (!("version" in probe))
+        throw new Error("Inkscape executable could not be validated");
+      const observed = await capabilities.inspect(
+        runner,
+        candidate,
+        probe.version,
+        process.cwd(),
+      );
+      if (!observed.inputTypes.includes("pdf"))
+        throw new Error(
+          "This Inkscape installation does not advertise PDF import",
+        );
+      const flags = new Set(observed.helpOptions);
+      if (!flags.has("--pages"))
+        throw new Error(
+          "This Inkscape installation does not support PDF page selection",
+        );
+      if (input.mode === "poppler" && !flags.has("--pdf-poppler"))
+        throw new Error(
+          "This Inkscape installation does not support Poppler PDF import",
+        );
+      if (input.fontStrategy !== undefined && !flags.has("--pdf-font-strategy"))
+        throw new Error(
+          "This Inkscape installation does not support PDF font strategies",
+        );
+      const imported = await scratch.withDirectory(
+        "staging",
+        async (directory) => {
+          const temporaryOutput = join(directory, "imported.svg");
+          const args = [
+            source.absolutePath,
+            `--pages=${input.page}`,
+            ...(input.mode === "poppler" ? ["--pdf-poppler"] : []),
+            ...(input.fontStrategy === undefined
+              ? []
+              : [`--pdf-font-strategy=${input.fontStrategy}`]),
+            "--export-type=svg",
+            `--export-filename=${temporaryOutput}`,
+          ];
+          const result = await runner.run(candidate.executablePath, {
+            args,
+            cwd: directory,
+            maxStderrBytes: config.maxStderrBytes,
+            maxStdoutBytes: config.maxStdoutBytes,
+            timeoutMs: config.processTimeoutMs,
+          });
+          if (result.exitCode !== 0 || result.terminationReason !== "completed")
+            throw new Error("Inkscape PDF import failed");
+          const bytes = await readFile(temporaryOutput);
+          return importSanitizedSvg(bytes, {
+            format: "svg",
+            maxInputBytes: config.maxInputBytes,
+            maximumMode: config.maximumSanitizeMode,
+            mode: input.sanitizeMode,
+          });
+        },
+      );
+      const contents = Buffer.from(imported.svg, "utf8");
+      const manifest = {
+        ...(input.fontStrategy === undefined
+          ? {}
+          : { fontStrategy: input.fontStrategy }),
+        format: "pdf" as const,
+        inputBytes: sourceBytes.length,
+        mode: input.mode,
+        outputPath: output.relativePath,
+        outputSha256: createHash("sha256").update(contents).digest("hex"),
+        page: input.page,
+        removed: [...imported.removed],
+        schema: "inkscape-mcp-document-import/v1" as const,
+        sourcePath: source.relativePath,
+        sourceSha256: createHash("sha256").update(sourceBytes).digest("hex"),
+        warnings:
+          input.mode === "poppler"
+            ? ["PDF_POPPLER_GLYPH_EDITABILITY_LIMITED"]
+            : ["PDF_INTERNAL_IMPORT_FIDELITY_NOT_GUARANTEED"],
+      };
+      const committed = await fileStore.commitBatch({
+        expectedRevision: input.expectedRevision,
+        files: [
+          { contents, targetPath: output.absolutePath },
+          {
+            contents: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`),
+            targetPath: manifestOutput.absolutePath,
+          },
+        ],
+        sourcePath: source.absolutePath,
+      });
+      const revisions = new Map(
+        committed.files.map((file) => [file.targetPath, file.revision]),
+      );
+      const revision = revisions.get(output.absolutePath);
+      const manifestRevision = revisions.get(manifestOutput.absolutePath);
+      if (!revision || !manifestRevision)
+        throw new Error(
+          "document_import_pdf did not publish its complete manifest",
+        );
+      const outputResult = {
+        manifest,
+        manifestPath: manifestOutput.relativePath,
+        manifestRevision,
+        outputPath: output.relativePath,
+        revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(outputResult) }],
+        structuredContent: outputResult,
+      };
+    },
+  );
+
+  server.registerTool(
     "document_import_svg",
     {
       description:

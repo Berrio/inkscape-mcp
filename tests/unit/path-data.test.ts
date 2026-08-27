@@ -66,6 +66,12 @@ describe("SVG path AST", () => {
         y: 8,
       }),
     ).toBe("M 0 0 C 1 2 3 4 7 8 A 2 3 0 0 1 8 9");
+    expect(moveAbsoluteSvgPathNode("M 0 0 H 4 V 5", 1, { x: 7, y: 9 })).toBe(
+      "M 0 0 H 7 V 5",
+    );
+    expect(moveAbsoluteSvgPathNode("M 0 0 H 4 V 5", 2, { x: 7, y: 9 })).toBe(
+      "M 0 0 H 4 V 9",
+    );
   });
 
   it("inserts, removes, and retags safe linear path nodes", () => {

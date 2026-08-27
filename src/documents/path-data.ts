@@ -161,6 +161,14 @@ export function moveAbsoluteSvgPathNode(
   const segment = segments[index];
   if (!segment) throw new Error("Path node index does not exist");
   const endpointOffset = absoluteEndpointOffset(segment.command);
+  if (segment.command === "H") {
+    segments[index] = { command: "H", values: [point.x] };
+    return serializeSvgPathData(segments);
+  }
+  if (segment.command === "V") {
+    segments[index] = { command: "V", values: [point.y] };
+    return serializeSvgPathData(segments);
+  }
   if (endpointOffset === undefined)
     throw new Error(
       "Node move currently supports absolute moveto, lineto, quadratic, cubic, smooth, and arc endpoints",

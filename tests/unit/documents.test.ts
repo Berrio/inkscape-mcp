@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createSvgConnector,
   retargetSvgConnector,
+  routeSvgConnector,
   addSvgPage,
   adjustPageMarginsSvg,
   expandPdfMarginsSvg,
@@ -71,6 +72,28 @@ describe("basic SVG documents", () => {
     expect(result).toContain('d="M 0 0 L 5 2 L 10 0"');
     expect(() =>
       retargetSvgConnector(result, "connector", "next", "missing"),
+    ).toThrow("endpoint ID");
+  });
+
+  it("routes semantic connectors through simple endpoint centers", () => {
+    const result = routeSvgConnector(
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><rect id="from" x="0" y="0" width="10" height="8"/><ellipse id="to" cx="30" cy="20" rx="5" ry="3"/><path id="connector" d="M 0 0 L 1 1" inkscape:connector-type="polyline"/></svg>',
+      { axis: "horizontal-first", fromId: "from", id: "connector", toId: "to" },
+    );
+    expect(result.points).toEqual([
+      [5, 4],
+      [17.5, 4],
+      [17.5, 20],
+      [30, 20],
+    ]);
+    expect(result.svg).toContain('d="M 5 4 L 17.5 4 L 17.5 20 L 30 20"');
+    expect(() =>
+      routeSvgConnector(result.svg, {
+        axis: "auto",
+        fromId: "missing",
+        id: "connector",
+        toId: "to",
+      }),
     ).toThrow("endpoint ID");
   });
   it("provides immutable, versioned named page sizes", () => {

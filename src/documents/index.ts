@@ -45,6 +45,7 @@ export {
   combineSvgPaths,
   createSvgConnector,
   retargetSvgConnector,
+  routeSvgConnector,
   breakApartSvgPath,
   reverseSvgPath,
   flattenSvgShapeTransforms,

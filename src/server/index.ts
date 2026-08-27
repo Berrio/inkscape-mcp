@@ -35,6 +35,7 @@ import {
   createSvgShapes,
   createSvgConnector,
   retargetSvgConnector,
+  routeSvgConnector,
   attachSvgTextToPath,
   detachSvgTextFromPath,
   updateSvgDocumentMetadata,
@@ -2742,6 +2743,61 @@ export function buildServer(
       const output = {
         backupCreated: committed.backupPath !== undefined,
         id,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "connector_route",
+    {
+      description:
+        "Routes a semantic Inkscape connector orthogonally between centers of explicit untransformed rect, circle, or ellipse endpoints. It does not claim obstacle avoidance.",
+      inputSchema: z
+        .object({
+          axis: z
+            .enum(["auto", "horizontal-first", "vertical-first"])
+            .default("auto"),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          fromId: shapeIdSchema,
+          id: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          toId: shapeIdSchema,
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        id: shapeIdSchema,
+        points: z.array(z.tuple([z.number().finite(), z.number().finite()])),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ axis, expectedRevision, fromId, id, path, toId, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const changed = routeSvgConnector(
+        await readFile(document.absolutePath, "utf8"),
+        { axis, fromId, id, toId },
+      );
+      const committed = await fileStore.commit({
+        contents: Buffer.from(changed.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        id,
+        points: changed.points,
         revision: committed.revision,
       };
       return {

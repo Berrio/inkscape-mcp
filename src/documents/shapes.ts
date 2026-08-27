@@ -298,6 +298,122 @@ export function retargetSvgConnector(
   connector.setAttribute("inkscape:connection-end", `#${toId}`);
   return new XMLSerializer().serializeToString(document);
 }
+
+/** Routes one semantic connector through centers of simple, untransformed shapes. */
+export function routeSvgConnector(
+  source: string,
+  request: {
+    axis: "auto" | "horizontal-first" | "vertical-first";
+    fromId: string;
+    id: string;
+    toId: string;
+  },
+): { points: readonly [number, number][]; svg: string } {
+  if (
+    !SAFE_ID.test(request.id) ||
+    !SAFE_ID.test(request.fromId) ||
+    !SAFE_ID.test(request.toId) ||
+    request.fromId === request.toId
+  )
+    throw new Error("Connector route specification is invalid");
+  const document = parseSafeDocument(source);
+  const elements = Array.from(document.getElementsByTagName("*"));
+  const connector = elements.find(
+    (element) => element.getAttribute("id") === request.id,
+  );
+  if (
+    !connector ||
+    connector.localName !== "path" ||
+    connector.getAttribute("inkscape:connector-type") === null
+  )
+    throw new Error("Connector ID does not reference a semantic connector");
+  const from = elements.find(
+    (element) => element.getAttribute("id") === request.fromId,
+  );
+  const to = elements.find(
+    (element) => element.getAttribute("id") === request.toId,
+  );
+  if (!from || !to) throw new Error("Connector endpoint ID does not exist");
+  const start = connectorShapeCenter(from);
+  const end = connectorShapeCenter(to);
+  const axis =
+    request.axis === "auto"
+      ? Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
+        ? "horizontal-first"
+        : "vertical-first"
+      : request.axis;
+  const points = compactConnectorPoints(
+    axis === "horizontal-first"
+      ? [
+          [start.x, start.y],
+          [(start.x + end.x) / 2, start.y],
+          [(start.x + end.x) / 2, end.y],
+          [end.x, end.y],
+        ]
+      : [
+          [start.x, start.y],
+          [start.x, (start.y + end.y) / 2],
+          [end.x, (start.y + end.y) / 2],
+          [end.x, end.y],
+        ],
+  );
+  connector.setAttribute(
+    "d",
+    points
+      .map(
+        (point, index) => `${index === 0 ? "M" : "L"} ${point[0]} ${point[1]}`,
+      )
+      .join(" "),
+  );
+  connector.setAttribute("inkscape:connection-start", `#${request.fromId}`);
+  connector.setAttribute("inkscape:connection-end", `#${request.toId}`);
+  return { points, svg: new XMLSerializer().serializeToString(document) };
+}
+
+function connectorShapeCenter(element: XmlElement): { x: number; y: number } {
+  if (element.hasAttribute("transform"))
+    throw new Error("Connector routing requires endpoints without transforms");
+  const attr = (name: string, fallback = 0) => {
+    const value = element.getAttribute(name);
+    const parsed = value === null ? fallback : Number(value);
+    if (!Number.isFinite(parsed))
+      throw new Error("Connector endpoint geometry must be finite");
+    return parsed;
+  };
+  if (element.localName === "rect") {
+    const width = attr("width");
+    const height = attr("height");
+    if (width <= 0 || height <= 0)
+      throw new Error(
+        "Connector endpoint rectangle must have positive dimensions",
+      );
+    return { x: attr("x") + width / 2, y: attr("y") + height / 2 };
+  }
+  if (element.localName === "circle") {
+    if (attr("r") <= 0)
+      throw new Error("Connector endpoint circle must have a positive radius");
+    return { x: attr("cx"), y: attr("cy") };
+  }
+  if (element.localName === "ellipse") {
+    if (attr("rx") <= 0 || attr("ry") <= 0)
+      throw new Error("Connector endpoint ellipse must have positive radii");
+    return { x: attr("cx"), y: attr("cy") };
+  }
+  throw new Error(
+    "Connector routing supports rect, circle, and ellipse endpoints",
+  );
+}
+
+function compactConnectorPoints(
+  points: readonly [number, number][],
+): [number, number][] {
+  return points.filter(
+    (point, index) =>
+      index === 0 ||
+      point[0] !== points[index - 1]![0] ||
+      point[1] !== points[index - 1]![1],
+  );
+}
 const SAFE_CLASS = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/u;
 
 export function createSvgShapes(

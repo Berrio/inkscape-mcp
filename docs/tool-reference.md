@@ -119,7 +119,7 @@ exportación: inspección → `document_export_preset_plan` →
 | `images_crop`              | Imagen, clip ID y rectángulo numérico.                 | Recortar sin alterar el raster original.                          |
 | `images_inspect_dpi`       | Documento y selección opcional de imágenes.            | Comprobar DPI X/Y efectivo antes de imprenta.                     |
 | `resources_inspect_remote` | Documento; sólo inspección.                            | Localizar URLs sin descargarlas.                                  |
-| `accessibility_inspect`    | Documento y límites de análisis.                       | Revisar orden y contraste heurístico, no auditoría WCAG completa. |
+| `accessibility_inspect`    | Documento, fondo opaco conocido y límites de análisis. | Revisar orden y contraste heurístico, no auditoría WCAG completa. |
 
 ## Importación y empaquetado
 

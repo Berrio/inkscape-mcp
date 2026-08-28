@@ -3827,12 +3827,16 @@ export function buildServer(
     "accessibility_inspect",
     {
       description:
-        "Provides explicitly heuristic SVG text contrast and document reading-order diagnostics; contrast assumes a white background and direct hex fill only.",
+        "Provides explicitly heuristic SVG text contrast and document reading-order diagnostics; contrast uses an opaque Inkscape page background when available, otherwise white, and only direct hex fill.",
       inputSchema: z.object({
         path: z.string().min(1).max(1024),
         workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
       }),
       outputSchema: z.object({
+        background: z.object({
+          color: z.string().regex(/^#[a-f0-9]{6}$/u),
+          source: z.enum(["opaque-page", "white-fallback"]),
+        }),
         lowContrastText: z.array(
           z.object({
             id: shapeIdSchema.optional(),

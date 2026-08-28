@@ -921,6 +921,26 @@ try {
       "accessibility_inspect did not report contrast and document order",
     );
   await writeFile(
+    join(workspaceRoot, "accessibility-dark-page.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><sodipodi:namedview pagecolor="#000000" inkscape:pageopacity="1"/><text id="page_contrast" fill="#777777">Page contrast</text></svg>',
+  );
+  const darkPageAccessibility = await workspaceClient.callTool({
+    arguments: {
+      path: "accessibility-dark-page.svg",
+      workspaceId: workspace.id,
+    },
+    name: "accessibility_inspect",
+  });
+  if (
+    darkPageAccessibility.isError ||
+    darkPageAccessibility.structuredContent?.background?.source !==
+      "opaque-page" ||
+    darkPageAccessibility.structuredContent?.lowContrastText?.length !== 0
+  )
+    throw new Error(
+      "accessibility_inspect did not use an opaque page background",
+    );
+  await writeFile(
     join(workspaceRoot, "clips.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><rect id="clipped_target" width="10" height="8"/></svg>',
   );

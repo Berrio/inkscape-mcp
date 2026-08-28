@@ -1,8 +1,13 @@
 import { DOMParser, type Element as XmlElement } from "@xmldom/xmldom";
 
 import { sanitizeSvg } from "../svg/index.js";
+import { inspectDocumentDisplaySettings } from "./settings.js";
 
 export type SvgAccessibilityInspection = {
+  background: {
+    color: string;
+    source: "opaque-page" | "white-fallback";
+  };
   lowContrastText: readonly { id?: string; ratio: number }[];
   readingOrder: readonly string[];
   warnings: readonly string[];
@@ -21,6 +26,12 @@ export function inspectSvgAccessibility(
     "image/svg+xml",
   ).documentElement;
   if (!root || root.localName !== "svg") throw new Error("SVG root is missing");
+  const display = inspectDocumentDisplaySettings(source);
+  const background =
+    display.pageOpacity === 1
+      ? { color: display.pageColor, source: "opaque-page" as const }
+      : { color: "#ffffff", source: "white-fallback" as const };
+  const backgroundColor = hexColor(background.color);
   const order: string[] = [];
   const lowContrastText: { id?: string; ratio: number }[] = [];
   for (const element of walk(root)) {
@@ -29,7 +40,7 @@ export function inspectSvgAccessibility(
     if (element.localName !== "text") continue;
     const color = paintColor(element);
     if (color === undefined) continue;
-    const ratio = contrastRatio(color, [255, 255, 255]);
+    const ratio = contrastRatio(color, backgroundColor);
     if (ratio < 4.5)
       lowContrastText.push({
         ...(element.getAttribute("id") === null
@@ -39,10 +50,13 @@ export function inspectSvgAccessibility(
       });
   }
   return {
+    background,
     lowContrastText,
     readingOrder: order,
     warnings: [
-      "CONTRAST_ASSUMES_WHITE_BACKGROUND_AND_DIRECT_FILL_ONLY",
+      background.source === "opaque-page"
+        ? "CONTRAST_USES_OPAQUE_PAGE_BACKGROUND_AND_DIRECT_FILL_ONLY"
+        : "CONTRAST_ASSUMES_WHITE_BACKGROUND_AND_DIRECT_FILL_ONLY",
       "READING_ORDER_IS_DOCUMENT_ORDER_HEURISTIC",
     ],
   };
@@ -56,7 +70,11 @@ function paintColor(element: XmlElement): [number, number, number] | undefined {
   const match =
     value === undefined ? undefined : /^#([0-9a-f]{6})$/iu.exec(value);
   if (!match) return undefined;
-  const hex = match[1]!;
+  return hexColor(`#${match[1]!}`);
+}
+
+function hexColor(value: string): [number, number, number] {
+  const hex = value.slice(1);
   return [
     Number.parseInt(hex.slice(0, 2), 16),
     Number.parseInt(hex.slice(2, 4), 16),

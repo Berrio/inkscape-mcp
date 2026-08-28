@@ -795,6 +795,35 @@ try {
   )
     throw new Error("text_path_manage did not detach text from a path");
   await writeFile(
+    join(workspaceRoot, "connector-route.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><rect id="from" x="0" y="0" width="10" height="10"/><rect id="barrier" x="18" y="0" width="8" height="10"/><rect id="to" x="40" y="0" width="10" height="10"/><path id="connector" d="M 0 0 L 1 1" inkscape:connector-type="polyline"/></svg>',
+  );
+  const connectorRouteRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "connector-route.svg")))
+    .digest("hex");
+  const connectorRoute = await workspaceClient.callTool({
+    arguments: {
+      axis: "horizontal-first",
+      clearance: 2,
+      expectedRevision: connectorRouteRevision,
+      fromId: "from",
+      id: "connector",
+      obstacleIds: ["barrier"],
+      path: "connector-route.svg",
+      toId: "to",
+      workspaceId: workspace.id,
+    },
+    name: "connector_route",
+  });
+  if (
+    connectorRoute.isError ||
+    connectorRoute.structuredContent?.avoidedObstacleIds?.[0] !== "barrier" ||
+    !connectorRoute.structuredContent?.points?.some(
+      (point) => point[1] === -2 || point[1] === 12,
+    )
+  )
+    throw new Error("connector_route did not avoid its explicit obstacle");
+  await writeFile(
     join(workspaceRoot, "image-crop.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><image id="photo" href="data:image/png;base64,AA==" width="10" height="8"/></svg>',
   );

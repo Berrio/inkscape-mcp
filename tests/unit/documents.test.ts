@@ -96,6 +96,27 @@ describe("basic SVG documents", () => {
       }),
     ).toThrow("endpoint ID");
   });
+
+  it("routes a connector around explicit simple obstacles", () => {
+    const result = routeSvgConnector(
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><rect id="from" x="0" y="0" width="10" height="10"/><rect id="barrier" x="18" y="0" width="8" height="10"/><rect id="to" x="40" y="0" width="10" height="10"/><path id="connector" d="M 0 0 L 1 1" inkscape:connector-type="polyline"/></svg>',
+      {
+        axis: "horizontal-first",
+        clearance: 2,
+        fromId: "from",
+        id: "connector",
+        obstacleIds: ["barrier"],
+        toId: "to",
+      },
+    );
+    expect(result.avoidedObstacleIds).toEqual(["barrier"]);
+    expect(result.points[0]).toEqual([5, 5]);
+    expect(result.points.at(-1)).toEqual([45, 5]);
+    expect(
+      result.points.some((point) => point[1] === -2 || point[1] === 12),
+    ).toBe(true);
+    expect(result.svg).toContain('inkscape:connection-start="#from"');
+  });
   it("provides immutable, versioned named page sizes", () => {
     const a4 = pageSizeFromPreset("a4-portrait");
     a4.width.value = 1;

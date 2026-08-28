@@ -304,11 +304,17 @@ export function routeSvgConnector(
   source: string,
   request: {
     axis: "auto" | "horizontal-first" | "vertical-first";
+    clearance?: number | undefined;
     fromId: string;
     id: string;
+    obstacleIds?: readonly string[] | undefined;
     toId: string;
   },
-): { points: readonly [number, number][]; svg: string } {
+): {
+  avoidedObstacleIds: readonly string[];
+  points: readonly [number, number][];
+  svg: string;
+} {
   if (
     !SAFE_ID.test(request.id) ||
     !SAFE_ID.test(request.fromId) ||
@@ -336,27 +342,54 @@ export function routeSvgConnector(
   if (!from || !to) throw new Error("Connector endpoint ID does not exist");
   const start = connectorShapeCenter(from);
   const end = connectorShapeCenter(to);
+  const obstacleIds = request.obstacleIds ?? [];
+  if (
+    obstacleIds.length > 20 ||
+    new Set(obstacleIds).size !== obstacleIds.length ||
+    obstacleIds.some(
+      (obstacleId) =>
+        !SAFE_ID.test(obstacleId) ||
+        obstacleId === request.id ||
+        obstacleId === request.fromId ||
+        obstacleId === request.toId,
+    )
+  )
+    throw new Error("Connector obstacle IDs are invalid");
+  const clearance = request.clearance ?? 4;
+  if (!Number.isFinite(clearance) || clearance < 0 || clearance > 100_000)
+    throw new Error("Connector obstacle clearance is invalid");
   const axis =
     request.axis === "auto"
       ? Math.abs(end.x - start.x) >= Math.abs(end.y - start.y)
         ? "horizontal-first"
         : "vertical-first"
       : request.axis;
-  const points = compactConnectorPoints(
-    axis === "horizontal-first"
-      ? [
-          [start.x, start.y],
-          [(start.x + end.x) / 2, start.y],
-          [(start.x + end.x) / 2, end.y],
-          [end.x, end.y],
-        ]
-      : [
-          [start.x, start.y],
-          [start.x, (start.y + end.y) / 2],
-          [end.x, (start.y + end.y) / 2],
-          [end.x, end.y],
-        ],
-  );
+  const obstacles = obstacleIds.map((obstacleId) => {
+    const obstacle = elements.find(
+      (element) => element.getAttribute("id") === obstacleId,
+    );
+    if (!obstacle)
+      throw new Error(`Connector obstacle ID does not exist: ${obstacleId}`);
+    return connectorShapeBounds(obstacle, clearance);
+  });
+  const points =
+    obstacles.length === 0
+      ? compactConnectorPoints(
+          axis === "horizontal-first"
+            ? [
+                [start.x, start.y],
+                [(start.x + end.x) / 2, start.y],
+                [(start.x + end.x) / 2, end.y],
+                [end.x, end.y],
+              ]
+            : [
+                [start.x, start.y],
+                [start.x, (start.y + end.y) / 2],
+                [end.x, (start.y + end.y) / 2],
+                [end.x, end.y],
+              ],
+        )
+      : routeAroundConnectorObstacles(start, end, obstacles, axis);
   connector.setAttribute(
     "d",
     points
@@ -367,7 +400,11 @@ export function routeSvgConnector(
   );
   connector.setAttribute("inkscape:connection-start", `#${request.fromId}`);
   connector.setAttribute("inkscape:connection-end", `#${request.toId}`);
-  return { points, svg: new XMLSerializer().serializeToString(document) };
+  return {
+    avoidedObstacleIds: obstacleIds,
+    points,
+    svg: new XMLSerializer().serializeToString(document),
+  };
 }
 
 function connectorShapeCenter(element: XmlElement): { x: number; y: number } {
@@ -416,14 +453,273 @@ function connectorShapeCenter(element: XmlElement): { x: number; y: number } {
   };
 }
 
+type ConnectorObstacle = {
+  bottom: number;
+  left: number;
+  right: number;
+  top: number;
+};
+
+function connectorShapeBounds(
+  element: XmlElement,
+  clearance: number,
+): ConnectorObstacle {
+  const attr = (name: string, fallback = 0) => {
+    const value = element.getAttribute(name);
+    const parsed = value === null ? fallback : Number(value);
+    if (!Number.isFinite(parsed))
+      throw new Error("Connector obstacle geometry must be finite");
+    return parsed;
+  };
+  let bounds: ConnectorObstacle;
+  if (element.localName === "rect") {
+    const width = attr("width");
+    const height = attr("height");
+    if (width <= 0 || height <= 0)
+      throw new Error(
+        "Connector obstacle rectangle must have positive dimensions",
+      );
+    bounds = {
+      bottom: attr("y") + height,
+      left: attr("x"),
+      right: attr("x") + width,
+      top: attr("y"),
+    };
+  } else if (element.localName === "circle") {
+    const radius = attr("r");
+    if (radius <= 0)
+      throw new Error("Connector obstacle circle must have a positive radius");
+    bounds = {
+      bottom: attr("cy") + radius,
+      left: attr("cx") - radius,
+      right: attr("cx") + radius,
+      top: attr("cy") - radius,
+    };
+  } else if (element.localName === "ellipse") {
+    const rx = attr("rx");
+    const ry = attr("ry");
+    if (rx <= 0 || ry <= 0)
+      throw new Error("Connector obstacle ellipse must have positive radii");
+    bounds = {
+      bottom: attr("cy") + ry,
+      left: attr("cx") - rx,
+      right: attr("cx") + rx,
+      top: attr("cy") - ry,
+    };
+  } else {
+    throw new Error(
+      "Connector routing obstacles support only rect, circle, and ellipse",
+    );
+  }
+  const transform = element.getAttribute("transform");
+  const matrix =
+    transform === null ? undefined : parseAxisAlignedTransform(transform);
+  const transformed =
+    matrix === undefined
+      ? bounds
+      : {
+          bottom: Math.max(
+            matrix.d * bounds.top + matrix.f,
+            matrix.d * bounds.bottom + matrix.f,
+          ),
+          left: Math.min(
+            matrix.a * bounds.left + matrix.e,
+            matrix.a * bounds.right + matrix.e,
+          ),
+          right: Math.max(
+            matrix.a * bounds.left + matrix.e,
+            matrix.a * bounds.right + matrix.e,
+          ),
+          top: Math.min(
+            matrix.d * bounds.top + matrix.f,
+            matrix.d * bounds.bottom + matrix.f,
+          ),
+        };
+  return {
+    bottom: transformed.bottom + clearance,
+    left: transformed.left - clearance,
+    right: transformed.right + clearance,
+    top: transformed.top - clearance,
+  };
+}
+
+function routeAroundConnectorObstacles(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  obstacles: readonly ConnectorObstacle[],
+  preferredAxis: "horizontal-first" | "vertical-first",
+): [number, number][] {
+  const xs = [
+    ...new Set([
+      start.x,
+      end.x,
+      ...obstacles.flatMap((item) => [item.left, item.right]),
+    ]),
+  ].sort((left, right) => left - right);
+  const ys = [
+    ...new Set([
+      start.y,
+      end.y,
+      ...obstacles.flatMap((item) => [item.top, item.bottom]),
+    ]),
+  ].sort((top, bottom) => top - bottom);
+  const points = xs.flatMap((x) =>
+    ys
+      .filter(
+        (y) =>
+          (x === start.x && y === start.y) ||
+          (x === end.x && y === end.y) ||
+          !obstacles.some(
+            (obstacle) =>
+              x > obstacle.left &&
+              x < obstacle.right &&
+              y > obstacle.top &&
+              y < obstacle.bottom,
+          ),
+      )
+      .map((y) => ({ x, y })),
+  );
+  const pointIndex = new Map(
+    points.map((point, index) => [`${point.x},${point.y}`, index]),
+  );
+  const startIndex = pointIndex.get(`${start.x},${start.y}`);
+  const endIndex = pointIndex.get(`${end.x},${end.y}`);
+  if (startIndex === undefined || endIndex === undefined)
+    throw new Error(
+      "Connector endpoints cannot be routed around selected obstacles",
+    );
+  const links = points.map(
+    () =>
+      [] as { axis: "horizontal" | "vertical"; distance: number; to: number }[],
+  );
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index]!;
+    for (let next = index + 1; next < points.length; next += 1) {
+      const candidate = points[next]!;
+      const horizontal = current.y === candidate.y;
+      const vertical = current.x === candidate.x;
+      if (!horizontal && !vertical) continue;
+      const axis = horizontal ? "horizontal" : "vertical";
+      if (
+        obstacles.some((obstacle) =>
+          segmentCrossesObstacle(current, candidate, obstacle),
+        )
+      )
+        continue;
+      const distance = horizontal
+        ? Math.abs(candidate.x - current.x)
+        : Math.abs(candidate.y - current.y);
+      if (distance === 0) continue;
+      links[index]!.push({ axis, distance, to: next });
+      links[next]!.push({ axis, distance, to: index });
+    }
+  }
+  return shortestConnectorPath(
+    points,
+    links,
+    startIndex,
+    endIndex,
+    preferredAxis,
+  );
+}
+
+function segmentCrossesObstacle(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  obstacle: ConnectorObstacle,
+): boolean {
+  if (start.y === end.y)
+    return (
+      start.y > obstacle.top &&
+      start.y < obstacle.bottom &&
+      Math.max(start.x, end.x) > obstacle.left &&
+      Math.min(start.x, end.x) < obstacle.right
+    );
+  return (
+    start.x > obstacle.left &&
+    start.x < obstacle.right &&
+    Math.max(start.y, end.y) > obstacle.top &&
+    Math.min(start.y, end.y) < obstacle.bottom
+  );
+}
+
+function shortestConnectorPath(
+  points: readonly { x: number; y: number }[],
+  links: readonly (readonly {
+    axis: "horizontal" | "vertical";
+    distance: number;
+    to: number;
+  }[])[],
+  start: number,
+  end: number,
+  preferredAxis: "horizontal-first" | "vertical-first",
+): [number, number][] {
+  type State = { axis?: "horizontal" | "vertical"; point: number };
+  const key = (state: State) => `${state.point}:${state.axis ?? "start"}`;
+  const initial: State = { point: start };
+  const cost = new Map([[key(initial), 0]]);
+  const predecessor = new Map<string, State>();
+  const pending = [initial];
+  let target: State | undefined;
+  while (pending.length > 0) {
+    pending.sort((left, right) => cost.get(key(left))! - cost.get(key(right))!);
+    const current = pending.shift()!;
+    const currentCost = cost.get(key(current))!;
+    if (current.point === end) {
+      target = current;
+      break;
+    }
+    for (const link of links[current.point]!) {
+      const next: State = { axis: link.axis, point: link.to };
+      const preferred =
+        current.axis === undefined &&
+        link.axis !==
+          (preferredAxis === "horizontal-first" ? "horizontal" : "vertical");
+      const turn = current.axis !== undefined && current.axis !== link.axis;
+      const nextCost =
+        currentCost + link.distance + (preferred || turn ? 0.001 : 0);
+      if (nextCost >= (cost.get(key(next)) ?? Number.POSITIVE_INFINITY))
+        continue;
+      cost.set(key(next), nextCost);
+      predecessor.set(key(next), current);
+      pending.push(next);
+    }
+  }
+  if (target === undefined)
+    throw new Error(
+      "No orthogonal route avoids the selected connector obstacles",
+    );
+  const path: [number, number][] = [];
+  for (
+    let current: State | undefined = target;
+    current !== undefined;
+    current = predecessor.get(key(current))
+  ) {
+    const point = points[current.point]!;
+    path.push([point.x, point.y]);
+  }
+  return compactConnectorPoints(path.reverse());
+}
+
 function compactConnectorPoints(
   points: readonly [number, number][],
 ): [number, number][] {
-  return points.filter(
+  const deduplicated = points.filter(
     (point, index) =>
       index === 0 ||
       point[0] !== points[index - 1]![0] ||
       point[1] !== points[index - 1]![1],
+  );
+  return deduplicated.filter(
+    (point, index) =>
+      index === 0 ||
+      index === deduplicated.length - 1 ||
+      !(
+        (deduplicated[index - 1]![0] === point[0] &&
+          point[0] === deduplicated[index + 1]![0]) ||
+        (deduplicated[index - 1]![1] === point[1] &&
+          point[1] === deduplicated[index + 1]![1])
+      ),
   );
 }
 const SAFE_CLASS = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/u;

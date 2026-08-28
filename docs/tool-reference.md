@@ -53,24 +53,24 @@ exportación: inspección → `document_export_preset_plan` →
 
 ## Elementos, capas y composición
 
-| Tool                         | Schema/operación                                                                      | Ejemplo de uso                                     |
-| ---------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `elements_query`             | IDs, tipo, layer o selector compuesto seguro; paginación.                             | Buscar `rect.card` sin XPath/CSS arbitrario.       |
-| `elements_create`            | Batch de shapes tipadas, estilos allowlisted y layer/grupo.                           | Añadir un rectángulo y texto sin enviar XML.       |
-| `connector_create`           | Dos endpoints existentes y polilínea de puntos finitos.                               | Conectar dos bloques de un diagrama.               |
-| `connector_retarget`         | Conector existente y dos endpoints locales explícitos.                                | Reconectar un conector sin cambiar su ruta.        |
-| `connector_route`            | Conector y endpoints simples con transformación axial; ruta ortogonal sin obstáculos. | Recalcular la ruta entre dos nodos de diagrama.    |
-| `elements_update`            | Patch discriminado de geometría, estilo, texto o layer.                               | Cambiar fill/stroke o etiqueta de capa.            |
-| `elements_delete`            | IDs explícitos y revisión.                                                            | Eliminar objetos sólo si no rompe referencias.     |
-| `elements_duplicate`         | Copia independiente o clone `use`.                                                    | Repetir un sello o crear instancia reutilizable.   |
-| `elements_reparent`          | IDs y destino group/layer existente.                                                  | Mover objetos a una capa conservando orden.        |
-| `elements_group`             | Acción group/ungroup y selección válida.                                              | Agrupar elementos hermanos.                        |
-| `elements_arrange`           | Acción front/back/step/index/before/after.                                            | Llevar un objeto al frente.                        |
-| `elements_transform`         | Transform numérica allowlisted, nunca string `transform`.                             | Mover, escalar, rotar o reflejar selección.        |
-| `elements_flatten_transform` | IDs de primitivas compatibles.                                                        | Hornear translate/scale seguro en geometría.       |
-| `elements_align`             | IDs, referencia y eje/alineación.                                                     | Centrar elementos con bounds visuales de Inkscape. |
-| `elements_distribute`        | IDs, eje y distribución.                                                              | Repartir objetos por huecos o centros.             |
-| `document_apply_operations`  | Lista acotada de operaciones tipadas y revisión.                                      | Ejecutar varias ediciones como una transacción.    |
+| Tool                         | Schema/operación                                                          | Ejemplo de uso                                      |
+| ---------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------- |
+| `elements_query`             | IDs, tipo, layer o selector compuesto seguro; paginación.                 | Buscar `rect.card` sin XPath/CSS arbitrario.        |
+| `elements_create`            | Batch de shapes tipadas, estilos allowlisted y layer/grupo.               | Añadir un rectángulo y texto sin enviar XML.        |
+| `connector_create`           | Dos endpoints existentes y polilínea de puntos finitos.                   | Conectar dos bloques de un diagrama.                |
+| `connector_retarget`         | Conector existente y dos endpoints locales explícitos.                    | Reconectar un conector sin cambiar su ruta.         |
+| `connector_route`            | Conector, endpoints/obstáculos simples, clearance y transformación axial. | Recalcular la ruta de un diagrama evitando bloques. |
+| `elements_update`            | Patch discriminado de geometría, estilo, texto o layer.                   | Cambiar fill/stroke o etiqueta de capa.             |
+| `elements_delete`            | IDs explícitos y revisión.                                                | Eliminar objetos sólo si no rompe referencias.      |
+| `elements_duplicate`         | Copia independiente o clone `use`.                                        | Repetir un sello o crear instancia reutilizable.    |
+| `elements_reparent`          | IDs y destino group/layer existente.                                      | Mover objetos a una capa conservando orden.         |
+| `elements_group`             | Acción group/ungroup y selección válida.                                  | Agrupar elementos hermanos.                         |
+| `elements_arrange`           | Acción front/back/step/index/before/after.                                | Llevar un objeto al frente.                         |
+| `elements_transform`         | Transform numérica allowlisted, nunca string `transform`.                 | Mover, escalar, rotar o reflejar selección.         |
+| `elements_flatten_transform` | IDs de primitivas compatibles.                                            | Hornear translate/scale seguro en geometría.        |
+| `elements_align`             | IDs, referencia y eje/alineación.                                         | Centrar elementos con bounds visuales de Inkscape.  |
+| `elements_distribute`        | IDs, eje y distribución.                                                  | Repartir objetos por huecos o centros.              |
+| `document_apply_operations`  | Lista acotada de operaciones tipadas y revisión.                          | Ejecutar varias ediciones como una transacción.     |
 
 ## Texto y paths
 

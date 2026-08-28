@@ -2787,21 +2787,24 @@ export function buildServer(
     "connector_route",
     {
       description:
-        "Routes a semantic Inkscape connector orthogonally between centers of explicit rect, circle, or ellipse endpoints, including axis-aligned transforms. It does not claim obstacle avoidance.",
+        "Routes a semantic Inkscape connector orthogonally between explicit rect, circle, or ellipse endpoints. Optional explicit obstacles use bounded Manhattan routing with axis-aligned transforms and a typed clearance.",
       inputSchema: z
         .object({
           axis: z
             .enum(["auto", "horizontal-first", "vertical-first"])
             .default("auto"),
+          clearance: z.number().finite().min(0).max(100_000).default(4),
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
           fromId: shapeIdSchema,
           id: shapeIdSchema,
+          obstacleIds: z.array(shapeIdSchema).max(20).default([]),
           path: z.string().min(1).max(1024),
           toId: shapeIdSchema,
           workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
         })
         .strict(),
       outputSchema: z.object({
+        avoidedObstacleIds: z.array(shapeIdSchema),
         backupCreated: z.boolean(),
         id: shapeIdSchema,
         points: z.array(z.tuple([z.number().finite(), z.number().finite()])),
@@ -2809,14 +2812,24 @@ export function buildServer(
       }),
       annotations: { destructiveHint: true },
     },
-    async ({ axis, expectedRevision, fromId, id, path, toId, workspaceId }) => {
+    async ({
+      axis,
+      clearance,
+      expectedRevision,
+      fromId,
+      id,
+      obstacleIds,
+      path,
+      toId,
+      workspaceId,
+    }) => {
       assertDocumentWorkspace(config);
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const changed = routeSvgConnector(
         await readFile(document.absolutePath, "utf8"),
-        { axis, fromId, id, toId },
+        { axis, clearance, fromId, id, obstacleIds, toId },
       );
       const committed = await fileStore.commit({
         contents: Buffer.from(changed.svg),
@@ -2826,6 +2839,7 @@ export function buildServer(
         targetPath: document.absolutePath,
       });
       const output = {
+        avoidedObstacleIds: changed.avoidedObstacleIds,
         backupCreated: committed.backupPath !== undefined,
         id,
         points: changed.points,

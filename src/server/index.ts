@@ -1781,6 +1781,7 @@ export function buildServer(
         manifest: z.object({
           format: z.enum(["svg", "svgz"]),
           inputBytes: z.number().int().nonnegative(),
+          losses: z.array(z.string()),
           outputPath: z.string(),
           outputSha256: z.string().regex(/^[a-f0-9]{64}$/u),
           removed: z.array(z.string()),
@@ -1834,6 +1835,7 @@ export function buildServer(
       const manifest = {
         format,
         inputBytes: imported.inputBytes,
+        losses: imported.removed.map((removed) => `SANITIZED:${removed}`),
         outputPath: output.relativePath,
         outputSha256: createHash("sha256").update(contents).digest("hex"),
         removed: [...imported.removed],
@@ -1896,6 +1898,7 @@ export function buildServer(
           format: z.literal("raster"),
           height: z.number().int().positive(),
           inputBytes: z.number().int().positive(),
+          losses: z.array(z.string()).min(1),
           mime: z.enum([
             "image/bmp",
             "image/gif",
@@ -1984,6 +1987,7 @@ export function buildServer(
         format: "raster" as const,
         height: raster.height,
         inputBytes: sourceBytes.length,
+        losses: ["RASTER_WRAPPED_AS_SVG"],
         mime: raster.mime,
         outputPath: output.relativePath,
         outputSha256: createHash("sha256").update(contents).digest("hex"),
@@ -2120,6 +2124,7 @@ export function buildServer(
             .optional(),
           format: z.literal("pdf"),
           inputBytes: z.number().int().nonnegative(),
+          losses: z.array(z.string()).min(1),
           mode: z.enum(["internal", "poppler"]),
           outputPath: z.string(),
           outputSha256: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -2245,12 +2250,17 @@ export function buildServer(
         },
       );
       const contents = Buffer.from(imported.svg, "utf8");
+      const warnings =
+        input.mode === "poppler"
+          ? ["PDF_POPPLER_GLYPH_EDITABILITY_LIMITED"]
+          : ["PDF_INTERNAL_IMPORT_FIDELITY_NOT_GUARANTEED"];
       const manifest = {
         ...(input.fontStrategy === undefined
           ? {}
           : { fontStrategy: input.fontStrategy }),
         format: "pdf" as const,
         inputBytes: sourceBytes.length,
+        losses: warnings,
         mode: input.mode,
         outputPath: output.relativePath,
         outputSha256: createHash("sha256").update(contents).digest("hex"),
@@ -2259,10 +2269,7 @@ export function buildServer(
         schema: "inkscape-mcp-document-import/v1" as const,
         sourcePath: source.relativePath,
         sourceSha256: createHash("sha256").update(sourceBytes).digest("hex"),
-        warnings:
-          input.mode === "poppler"
-            ? ["PDF_POPPLER_GLYPH_EDITABILITY_LIMITED"]
-            : ["PDF_INTERNAL_IMPORT_FIDELITY_NOT_GUARANTEED"],
+        warnings,
       };
       const committed = await fileStore.commitBatch({
         expectedRevision: input.expectedRevision,

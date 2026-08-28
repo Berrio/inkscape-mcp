@@ -1901,7 +1901,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [~] `F08-T07` Gatear AI/EPS/PS/EMF/WMF/XAML/DXF y otros según sonda real. — `document_import_capabilities` devuelve el tipo observado y deja cada formato detectado como `detected-but-blocked` hasta que exista un adaptador y fixture headless real; ninguno se expone por extensión. Faltan esos adaptadores y fixtures.
 - [ ] `F08-T08` Detectar importadores que abren diálogo/requieren GUI y marcarlos no-headless.
 - [~] `F08-T09` Probar archivo corrupto, password/encrypted, huge pages, zip bomb y dependencia ausente. — SVGZ limita expansión, raster rechaza cabeceras truncadas/corruptas y `document_import_pdf` rechaza `/Encrypt`, páginas ausentes y páginas por encima de 200in/50.000.000pt² antes de invocar Inkscape o publicar outputs. Quedan las dependencias de fuentes/perfiles.
-- [~] `F08-T10` Implementar `document_import` con manifest de conversión/pérdidas. — Disponible para SVG/SVGZ: publica SVG y sidecar JSON con formato, hashes, bytes y eliminaciones mediante `commitBatch`; los adaptadores raster/PDF todavía no alimentan ese contrato.
+- [x] `F08-T10` Implementar `document_import` con manifest de conversión/pérdidas. — SVG/SVGZ, raster y PDF publican sidecar atómico con schema/hash/bytes, `removed`, warnings cuando corresponden y una lista uniforme `losses`: saneamiento SVG, wrapper raster o fidelidad/edición PDF.
 
 #### Exportaciones adicionales
 

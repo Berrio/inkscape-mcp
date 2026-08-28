@@ -1126,6 +1126,7 @@ try {
     importedSvgz.isError ||
     svgzManifest?.format !== "svgz" ||
     svgzManifest?.removed?.includes("element:script") !== true ||
+    svgzManifest?.losses?.includes("SANITIZED:element:script") !== true ||
     !(
       await readFile(join(workspaceRoot, "safe-import-svgz.svg"), "utf8")
     ).includes('id="compressed_safe"') ||
@@ -1170,6 +1171,8 @@ try {
     importedRaster.structuredContent?.manifest?.mime !== "image/png" ||
     importedRaster.structuredContent?.manifest?.width !== 1 ||
     importedRaster.structuredContent?.manifest?.height !== 1 ||
+    importedRaster.structuredContent?.manifest?.losses?.[0] !==
+      "RASTER_WRAPPED_AS_SVG" ||
     !importedRasterText.includes("data:image/png;base64,")
   )
     throw new Error(
@@ -2994,6 +2997,8 @@ try {
     importedPdf.structuredContent?.manifest?.format !== "pdf" ||
     importedPdf.structuredContent.manifest?.warnings?.[0] !==
       "PDF_INTERNAL_IMPORT_FIDELITY_NOT_GUARANTEED" ||
+    importedPdf.structuredContent.manifest?.losses?.[0] !==
+      "PDF_INTERNAL_IMPORT_FIDELITY_NOT_GUARANTEED" ||
     !(await readFile(join(workspaceRoot, "a4-imported.svg"), "utf8")).includes(
       "<svg",
     )
@@ -3015,6 +3020,8 @@ try {
   if (
     importedPdfPoppler.isError ||
     importedPdfPoppler.structuredContent?.manifest?.warnings?.[0] !==
+      "PDF_POPPLER_GLYPH_EDITABILITY_LIMITED" ||
+    importedPdfPoppler.structuredContent?.manifest?.losses?.[0] !==
       "PDF_POPPLER_GLYPH_EDITABILITY_LIMITED" ||
     !(
       await readFile(join(workspaceRoot, "a4-imported-poppler.svg"), "utf8")

@@ -1844,7 +1844,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [x] `F07-T18` Editar contenido/tspans conservando estructura o reemplazándola según modo explícito. — `text_manage` exige `preserve_structure` con número exacto de segmentos o `replace_structure` con líneas/tspans tipados; no recibe markup.
 - [x] `F07-T19` Soportar multiline, baseline, letter/word spacing, direction y writing mode cuando SVG/Inkscape lo permitan. — El modo de reemplazo crea líneas SVG mediante tspans y el patch admite baseline, text-anchor, spacing, direction y writing-mode; pruebas unitarias y MCP verifican ambos modos.
-- [~] `F07-T20` Crear/quitar text-on-path y mantener refs. — `text_path_manage` adjunta o libera un `<textPath href="#id">`, preservando contenido y tspans; IDs de texto/path son estrictos. Falta smoke MCP y cobertura de referencias complejas.
+- [x] `F07-T20` Crear/quitar text-on-path y mantener refs. — `text_path_manage` adjunta o libera un `<textPath href="#id">`, preservando contenido y tspans; IDs de texto/path son estrictos. Las pruebas unitarias y el smoke MCP cubren attach/detach; referencias complejas continúan explícitamente fuera del contrato.
 - [~] `F07-T21` Inspeccionar flowed text y ofrecer conversión gateada. — `flowed_text_inspect` inventaría roots y párrafos; `flowed_text_convert` convierte sólo un flowRoot simple de una región a `<text>/<tspan>` con revisión, backup, confirmación y `FLOWED_TEXT_LAYOUT_LOST`. Flows complejos, wrapping y fidelidad tipográfica se rechazan hasta contar con rendering/fixtures nativos.
 - [x] `F07-T22` Descubrir fuentes del sistema de forma acotada y cacheada. — `fonts_list` usa la colección de fuentes instalada en Windows o fontconfig en Unix, no expone rutas y mantiene una caché de cinco minutos.
 - [x] `F07-T23` Preflight de fuente ausente/sustitución y limitaciones de incrustación. — `fonts_preflight` compara familias declaradas con la caché, distingue genéricas y advierte explícitamente que cobertura de glifos, sustitución de métricas y permisos de incrustación no se verifican.
@@ -1919,7 +1919,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F08-T19` Resolver herencia sin ciclos y overrides estrictos.
 - [x] `F08-T20` Preset icon pack multi-size. — `icon-pack` expande PNG de 16, 24, 32, 48, 64, 128, 256 y 512 px con nombres deterministas; pruebas unitarias y smoke MCP real verifican las ocho variantes en un lote `all_or_nothing`.
 - [x] `F08-T21` Preset web asset (SVG plano + PNG 1x/2x/3x). — `web-asset-pack` expande a SVG plano y PNG transparentes de 1200, 2400 y 3600 px mediante el mismo lote verificado que las exportaciones explícitas.
-- [~] `F08-T22` Preset print PDF con filtro 300 dpi, texto configurable y preflight. — `print-pdf-300dpi` fija PDF con `filterRasterDpi: 300` y texto preservado; quedan texto configurable y preflight integrado como plan bloqueado previo a ejecución.
+- [~] `F08-T22` Preset print PDF con filtro 300 dpi, texto configurable y preflight. — `print-pdf-300dpi` fija PDF con `filterRasterDpi: 300` y texto preservado; `document_export_preset_plan` ejecuta preflight `print`, devuelve sus warnings y bloquea errores antes de emitir token. Falta texto configurable.
 - [ ] `F08-T23` Presets sociales con metadata de fecha/fuente y custom override.
 - [x] `F08-T24` Implementar protocolo de dos pasos para presets: `document_export_preset_plan` hace preflight, devuelve `planToken`/digest ligado a sourceRevision, spec normalizado, capabilities observadas y TTL; `document_export_batch` exige y consume el token una sola vez.
 

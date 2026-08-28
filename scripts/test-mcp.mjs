@@ -3078,6 +3078,28 @@ try {
   ) {
     throw new Error("document_export_batch did not expand the web PNG preset");
   }
+  const printPresetPlan = await workspaceClient.callTool({
+    arguments: {
+      preset: {
+        name: "print-a4-pdf",
+        outputDirectory: "preset-print",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export_preset_plan",
+  });
+  if (
+    printPresetPlan.isError ||
+    printPresetPlan.structuredContent?.preflight?.profile !== "print" ||
+    printPresetPlan.structuredContent?.preflight?.valid !== true ||
+    !printPresetPlan.structuredContent?.preflight?.issues.some(
+      (issue) => issue.code === "PRINT_BLEED_SPEC_REQUIRED",
+    )
+  )
+    throw new Error(
+      "document_export_preset_plan did not publish print preflight warnings",
+    );
   const webAssetPresetPlan = await workspaceClient.callTool({
     arguments: {
       preset: {

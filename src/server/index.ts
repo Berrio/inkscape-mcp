@@ -7072,6 +7072,18 @@ export function buildServer(
         outputDirectory: z.string().min(1).max(1024),
         outputPaths: z.array(z.string().min(1).max(1024)).min(1).max(50),
         planToken: z.string().regex(/^plan_[a-f0-9]{32}$/u),
+        preflight: z.object({
+          issues: z.array(
+            z.object({
+              code: z.string(),
+              message: z.string(),
+              remediation: z.string(),
+              severity: z.enum(["error", "warning"]),
+            }),
+          ),
+          profile: z.enum(["basic", "interchange", "print", "web"]),
+          valid: z.boolean(),
+        }),
         variantCount: z.number().int().positive().max(50),
       }),
       annotations: { readOnlyHint: true },
@@ -7094,6 +7106,33 @@ export function buildServer(
         preset.source.expectedRevision
       )
         throw new Error("Preset source revision no longer matches");
+      const preflightProfile =
+        preset.name === "print-a4-pdf" || preset.name === "print-pdf-300dpi"
+          ? "print"
+          : preset.name === "web-png" || preset.name === "web-asset-pack"
+            ? "web"
+            : preset.name === "plain-svg"
+              ? "interchange"
+              : "basic";
+      const preflightResult = preflightSvg(
+        await readFile(source.absolutePath, "utf8"),
+        preflightProfile,
+        { rasterMegapixelThreshold: config.maxRasterMegapixels },
+      );
+      const preflight = {
+        issues: preflightResult.issues,
+        profile: preflightResult.profile,
+        valid: !preflightResult.issues.some(
+          (issue) => issue.severity === "error",
+        ),
+      };
+      if (!preflight.valid)
+        throw new Error(
+          `Preset preflight blocked export: ${preflight.issues
+            .filter((issue) => issue.severity === "error")
+            .map((issue) => issue.code)
+            .join(", ")}`,
+        );
       for (const variant of variants)
         assertSafeRelativePath(variant.outputPath);
       const discovery = await locateInkscape({
@@ -7138,6 +7177,7 @@ export function buildServer(
         outputDirectory: plan.outputDirectory,
         outputPaths: plan.outputPaths,
         planToken: plan.token,
+        preflight,
         variantCount: plan.specs.length,
       };
       return {

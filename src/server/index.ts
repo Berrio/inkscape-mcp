@@ -4972,7 +4972,7 @@ export function buildServer(
     "palette_apply",
     {
       description:
-        "Replaces explicitly mapped direct local hex paints and local CSS variable values without reading global Inkscape palettes.",
+        "Replaces explicitly mapped local hex paints in attributes, typed inline fill/stroke/stop-color styles, and local CSS variable values without reading global Inkscape palettes.",
       inputSchema: z
         .object({
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -5030,7 +5030,7 @@ export function buildServer(
     "palette_inspect",
     {
       description:
-        "Lists direct local hex colors and local CSS variable values without reading global Inkscape palettes.",
+        "Lists direct local hex colors in attributes or typed inline paint styles, plus local CSS variable values, without reading global Inkscape palettes.",
       inputSchema: z
         .object({
           limit: z.number().int().min(1).max(1_000).default(128),

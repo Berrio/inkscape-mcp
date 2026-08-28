@@ -50,21 +50,39 @@ describe("document palette", () => {
     expect(result.svg).toContain("var(--brand)");
   });
 
-  it("applies only an explicit local direct-paint mapping", () => {
+  it("applies an explicit local mapping to attributes and inline paint styles", () => {
     const result = applySvgPalette(
       '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="#FF0000" stroke="#00ff00" style="fill:#ff0000"/><stop stop-color="#ff0000"/></svg>',
       [{ from: "#ff0000", to: "#112233" }],
     );
-    expect(result.replacements).toBe(2);
+    expect(result.replacements).toBe(3);
     expect(result.svg).toContain('fill="#112233"');
     expect(result.svg).toContain('stop-color="#112233"');
     expect(result.svg).toContain('stroke="#00ff00"');
-    expect(result.svg).toContain('style="fill:#ff0000"');
+    expect(result.svg).toContain('style="fill:#112233"');
     expect(() =>
       applySvgPalette("<svg/>", [
         { from: "#000000", to: "#111111" },
         { from: "#000000", to: "#222222" },
       ]),
     ).toThrow("duplicate");
+  });
+
+  it("counts and recolors every explicit stop in a multistop gradient", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="sky"><stop offset="0" stop-color="#112233"/><stop offset="0.5" style="stop-color:#445566;stop-opacity:1"/><stop offset="1" stop-color="#112233"/></linearGradient></defs><rect style="fill:#445566;stroke:#778899" fill="url(#sky)"/></svg>';
+    expect(inspectSvgPalette(source).colors).toEqual([
+      { color: "#112233", uses: 2 },
+      { color: "#445566", uses: 2 },
+      { color: "#778899", uses: 1 },
+    ]);
+    const result = applySvgPalette(source, [
+      { from: "#112233", to: "#abcdef" },
+      { from: "#445566", to: "#010203" },
+    ]);
+    expect(result.replacements).toBe(4);
+    expect(result.svg).toContain('stop-color="#abcdef"');
+    expect(result.svg).toContain("stop-color:#010203");
+    expect(result.svg).toContain("fill:#010203");
   });
 });

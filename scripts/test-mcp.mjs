@@ -247,6 +247,39 @@ try {
       "color_management_inspect did not report local CMYK-like ICC references",
     );
   await writeFile(
+    join(workspaceRoot, "palette.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="sky"><stop stop-color="#112233"/><stop style="stop-color:#445566"/></linearGradient></defs><rect id="sample" fill="url(#sky)" style="fill:#445566;stroke:#112233"/></svg>',
+  );
+  const paletteRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "palette.svg")))
+    .digest("hex");
+  const paletteApplied = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: paletteRevision,
+      path: "palette.svg",
+      replacements: [
+        { from: "#112233", to: "#abcdef" },
+        { from: "#445566", to: "#010203" },
+      ],
+      workspaceId: workspace.id,
+    },
+    name: "palette_apply",
+  });
+  const paletteText = await readFile(
+    join(workspaceRoot, "palette.svg"),
+    "utf8",
+  );
+  if (
+    paletteApplied.isError ||
+    paletteApplied.structuredContent?.replacements !== 4 ||
+    !paletteText.includes('stop-color="#abcdef"') ||
+    !paletteText.includes("stop-color:#010203") ||
+    !paletteText.includes("fill:#010203")
+  )
+    throw new Error(
+      "palette_apply did not recolor inline and multistop paints",
+    );
+  await writeFile(
     join(workspaceRoot, "symbols.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><rect id="badge" width="10" height="5"/></svg>',
   );

@@ -6,7 +6,8 @@ const COLOR = /^#[0-9a-f]{6}$/iu;
 const PAINT_ATTRIBUTES = ["fill", "stroke", "stop-color"] as const;
 const CSS_VARIABLE_DECLARATION =
   /(--[A-Za-z_][A-Za-z0-9_-]{0,63})\s*:\s*(#[0-9a-f]{6})\b/giu;
-const STYLE_STOP_COLOR = /(stop-color\s*:\s*)(#[0-9a-f]{6})\b/giu;
+const STYLE_PAINT_COLOR =
+  /((?:^|;)\s*(?:fill|stroke|stop-color)\s*:\s*)(#[0-9a-f]{6})\b/giu;
 
 export function inspectSvgPalette(
   source: string,
@@ -35,6 +36,9 @@ export function inspectSvgPalette(
       const color = value.toLowerCase();
       counts.set(color, (counts.get(color) ?? 0) + 1);
     }
+  for (const element of Array.from(document.getElementsByTagName("*")))
+    for (const color of inlineStyleColors(element.getAttribute("style") ?? ""))
+      counts.set(color, (counts.get(color) ?? 0) + 1);
   const colors = [...counts.entries()]
     .sort(
       ([leftColor, leftUses], [rightColor, rightUses]) =>
@@ -101,11 +105,11 @@ export function applySvgPalette(
     );
     if (rewritten !== css) style.textContent = rewritten;
   }
-  for (const stop of Array.from(document.getElementsByTagName("stop"))) {
-    const style = stop.getAttribute("style");
+  for (const element of Array.from(document.getElementsByTagName("*"))) {
+    const style = element.getAttribute("style");
     if (style === null) continue;
     const rewritten = style.replace(
-      STYLE_STOP_COLOR,
+      STYLE_PAINT_COLOR,
       (whole, prefix: string, color: string) => {
         const replacement = normalized.get(color.toLowerCase());
         if (replacement === undefined) return whole;
@@ -113,7 +117,7 @@ export function applySvgPalette(
         return `${prefix}${replacement}`;
       },
     );
-    if (rewritten !== style) stop.setAttribute("style", rewritten);
+    if (rewritten !== style) element.setAttribute("style", rewritten);
   }
   return { replacements: count, svg: document.toString() };
 }
@@ -145,9 +149,13 @@ function readStopColor(stop: XmlElement): string | undefined {
   const direct = stop.getAttribute("stop-color")?.trim().toLowerCase();
   if (direct !== undefined && COLOR.test(direct)) return direct;
   const style = stop.getAttribute("style") ?? "";
-  const match = STYLE_STOP_COLOR.exec(style);
-  STYLE_STOP_COLOR.lastIndex = 0;
-  return match?.[2]?.toLowerCase();
+  return inlineStyleColors(style)[0];
+}
+
+function inlineStyleColors(style: string): string[] {
+  return [...style.matchAll(STYLE_PAINT_COLOR)].map((match) =>
+    match[2]!.toLowerCase(),
+  );
 }
 
 function inspectCssVariables(

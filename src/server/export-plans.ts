@@ -1,6 +1,7 @@
 import type { ExportSpec } from "../export/index.js";
 
 export type ExportPresetPlan = {
+  capabilitiesFingerprint: string;
   digest: string;
   expiresAt: number;
   outputDirectory: string;
@@ -18,6 +19,7 @@ export class ExportPlanStore {
   public create(
     owner: string,
     request: {
+      capabilitiesFingerprint: string;
       digest: string;
       outputDirectory: string;
       specs: readonly ExportSpec[];
@@ -29,6 +31,7 @@ export class ExportPlanStore {
       throw new Error("Export plan TTL is invalid");
     const token = `plan_${crypto.randomUUID().replaceAll("-", "")}`;
     const plan: PlanRecord = {
+      capabilitiesFingerprint: request.capabilitiesFingerprint,
       digest: request.digest,
       expiresAt: Date.now() + request.ttlMs,
       outputDirectory: request.outputDirectory,
@@ -63,6 +66,7 @@ export class ExportPlanStore {
 
 function publicPlan(plan: PlanRecord): ExportPresetPlan {
   return {
+    capabilitiesFingerprint: plan.capabilitiesFingerprint,
     digest: plan.digest,
     expiresAt: plan.expiresAt,
     outputDirectory: plan.outputDirectory,

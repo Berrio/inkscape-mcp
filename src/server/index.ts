@@ -7166,6 +7166,7 @@ export function buildServer(
         )
         .digest("hex");
       const plan = exportPlans.create(workspaceId, {
+        capabilitiesFingerprint: observed.fingerprint,
         digest,
         outputDirectory: preset.outputDirectory,
         specs,
@@ -7313,6 +7314,35 @@ export function buildServer(
           );
         const workspace = await workspaces();
         const input = await workspace.resolveExisting(workspaceId, source.path);
+        if (
+          savedPlan !== undefined &&
+          (await sha256File(input.absolutePath)) !== source.expectedRevision
+        )
+          throw new Error("Preset plan source revision no longer matches");
+        if (savedPlan !== undefined) {
+          const discovery = await locateInkscape({
+            config,
+            cwd: process.cwd(),
+            runner,
+          });
+          const candidate = discovery.candidates[0];
+          if (!candidate) throw new Error("Inkscape executable is unavailable");
+          const probe = await probeInkscapeCandidate(
+            runner,
+            candidate,
+            process.cwd(),
+          );
+          if (!("version" in probe))
+            throw new Error("Inkscape executable could not be validated");
+          const observed = await capabilities.inspect(
+            runner,
+            candidate,
+            probe.version,
+            process.cwd(),
+          );
+          if (observed.fingerprint !== savedPlan.capabilitiesFingerprint)
+            throw new Error("Preset plan capabilities no longer match");
+        }
         const outputs = await Promise.all(
           variants.map((variant) =>
             workspace.resolveNewOutput(workspaceId, variant.outputPath),

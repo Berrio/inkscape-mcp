@@ -15,6 +15,7 @@ describe("export preset plans", () => {
   it("binds a one-use plan to its owner", () => {
     const store = new ExportPlanStore();
     const plan = store.create("ws_1234567890abcdef", {
+      capabilitiesFingerprint: "a".repeat(64),
       digest: "b".repeat(64),
       outputDirectory: "deliverables",
       specs: [spec],
@@ -32,6 +33,7 @@ describe("export preset plans", () => {
   it("does not expose an owner plan to another workspace", () => {
     const store = new ExportPlanStore();
     const plan = store.create("ws_1234567890abcdef", {
+      capabilitiesFingerprint: "a".repeat(64),
       digest: "b".repeat(64),
       outputDirectory: "deliverables",
       specs: [spec],

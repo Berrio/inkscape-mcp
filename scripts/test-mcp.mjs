@@ -3100,6 +3100,55 @@ try {
     throw new Error(
       "document_export_preset_plan did not publish print preflight warnings",
     );
+  await writeFile(
+    join(workspaceRoot, "stale-preset.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>',
+  );
+  const stalePresetRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "stale-preset.svg")))
+    .digest("hex");
+  const stalePresetPlan = await workspaceClient.callTool({
+    arguments: {
+      preset: {
+        name: "plain-svg",
+        outputDirectory: "stale-preset-output",
+        source: {
+          expectedRevision: stalePresetRevision,
+          path: "stale-preset.svg",
+        },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export_preset_plan",
+  });
+  const stalePlanToken = stalePresetPlan.structuredContent?.planToken;
+  if (stalePresetPlan.isError || typeof stalePlanToken !== "string")
+    throw new Error(
+      "document_export_preset_plan did not create a stale fixture",
+    );
+  await writeFile(
+    join(workspaceRoot, "stale-preset.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><circle r="5" cx="5" cy="5"/></svg>',
+  );
+  const stalePresetBatch = await workspaceClient.callTool({
+    arguments: {
+      mode: "all_or_nothing",
+      planToken: stalePlanToken,
+      workspaceId: workspace.id,
+    },
+    name: "document_export_batch",
+  });
+  if (
+    !stalePresetBatch.isError ||
+    !stalePresetBatch.content.some(
+      (item) =>
+        item.type === "text" &&
+        item.text.includes("source revision no longer matches"),
+    )
+  )
+    throw new Error(
+      "document_export_batch did not reject a stale preset before rendering",
+    );
   const webAssetPresetPlan = await workspaceClient.callTool({
     arguments: {
       preset: {

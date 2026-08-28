@@ -1921,7 +1921,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F08-T21` Preset web asset (SVG plano + PNG 1x/2x/3x). — `web-asset-pack` expande a SVG plano y PNG transparentes de 1200, 2400 y 3600 px mediante el mismo lote verificado que las exportaciones explícitas.
 - [~] `F08-T22` Preset print PDF con filtro 300 dpi, texto configurable y preflight. — `print-pdf-300dpi` fija PDF con `filterRasterDpi: 300` y texto preservado; `document_export_preset_plan` ejecuta preflight `print`, devuelve sus warnings y bloquea errores antes de emitir token. Falta texto configurable.
 - [ ] `F08-T23` Presets sociales con metadata de fecha/fuente y custom override.
-- [x] `F08-T24` Implementar protocolo de dos pasos para presets: `document_export_preset_plan` hace preflight, devuelve `planToken`/digest ligado a sourceRevision, spec normalizado, capabilities observadas y TTL; `document_export_batch` exige y consume el token una sola vez.
+- [x] `F08-T24` Implementar protocolo de dos pasos para presets: `document_export_preset_plan` hace preflight, devuelve `planToken`/digest ligado a sourceRevision, spec normalizado, capabilities observadas y TTL; `document_export_batch` exige y consume el token una sola vez, y vuelve a comprobar revisión fuente y huella de capabilities antes de renderizar.
 
 #### Packaging de assets
 
@@ -1946,7 +1946,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F08-G03` Los tres presets principales generan artefactos/manifests correctos.
 - [x] `F08-G04` Package reabre sin referencias rotas dentro de entorno limpio. — `test:mcp` renderiza el SVG empaquetado por Inkscape con un PNG local copiado.
 - [x] `F08-G05` Evidencia en `docs/progress/F08.md`.
-- [ ] `F08-G06` Preset execution rechaza planToken expirado, de otro workspace o ligado a sourceRevision/capabilities distintos.
+- [~] `F08-G06` Preset execution rechaza planToken expirado, de otro workspace o ligado a sourceRevision/capabilities distintos. — El store comprueba TTL/owner/uso único y el batch vuelve a comprobar sourceRevision y fingerprint antes de renderizar; tests unitarios y MCP cubren owner y sourceRevision. Falta fixture que simule una huella de capabilities distinta.
 
 ---
 

@@ -115,6 +115,7 @@ export type CommitFileBatchResult = {
   files: readonly CommitBatchFileResult[];
 };
 type TemporaryWriter = (path: string, contents: Uint8Array) => Promise<void>;
+type TemporaryMover = (from: string, to: string) => Promise<void>;
 export type AtomicFileStoreOptions = {
   /**
    * Workspace identities are captured at startup. Publication rechecks the
@@ -130,6 +131,7 @@ export class AtomicFileStore {
     private readonly locks = new CanonicalPathLocks(),
     private readonly writeTemporary: TemporaryWriter = writeDurableTemporary,
     options: AtomicFileStoreOptions = {},
+    private readonly moveTemporary: TemporaryMover = rename,
   ) {
     this.canonicalWorkspaceRoots = Promise.all(
       (options.workspaceRoots ?? []).map(async (root) => realpath(root)),
@@ -172,7 +174,7 @@ export class AtomicFileStore {
             backupPath = uniqueBackupPath(target);
             await copyFile(target, backupPath, 0);
           }
-          await rename(temporary, target);
+          await this.moveTemporary(temporary, target);
           return {
             ...(backupPath === undefined ? {} : { backupPath }),
             revision: await sha256File(target),
@@ -265,7 +267,10 @@ export class AtomicFileStore {
             backups[index] = backup;
           }
           for (let index = 0; index < staged.length; index += 1) {
-            await rename(temporaries[index]!, staged[index]!.targetPath);
+            await this.moveTemporary(
+              temporaries[index]!,
+              staged[index]!.targetPath,
+            );
             published.push(index);
           }
           return {

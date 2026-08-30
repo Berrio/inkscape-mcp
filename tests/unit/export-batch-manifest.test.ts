@@ -17,7 +17,7 @@ it("creates a portable batch manifest without retaining mutable input", () => {
     failures: [],
     inkscapeVersion: "1.4.4",
     mode: "all_or_nothing",
-    publication: "file_commit_batch",
+    publication: "manifest_commit",
     source,
     variants,
   });
@@ -25,7 +25,7 @@ it("creates a portable batch manifest without retaining mutable input", () => {
   variants[0]!.outputPath = "changed.png";
   expect(manifest).toMatchObject({
     inkscapeVersion: "1.4.4",
-    publication: "file_commit_batch",
+    publication: "manifest_commit",
     source: { path: "labels.svg" },
     variants: [{ outputPath: "out/label.png" }],
   });

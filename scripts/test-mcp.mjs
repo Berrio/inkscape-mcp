@@ -3139,7 +3139,8 @@ try {
     genericBatch.structuredContent?.successes?.length !== 2 ||
     genericBatch.structuredContent?.failures?.length !== 0 ||
     genericBatch.structuredContent?.manifest?.publication !==
-      "file_commit_batch" ||
+      "manifest_commit" ||
+    typeof genericBatch.structuredContent.manifest.commitMarker !== "string" ||
     genericBatch.structuredContent.manifest.variants.length !== 2 ||
     typeof genericBatch.structuredContent.manifest.inkscapeVersion !== "string"
   ) {
@@ -3147,6 +3148,15 @@ try {
       "document_export_batch did not publish both PNG variants and its manifest",
     );
   }
+  const genericBatchMarker = await readFile(
+    join(workspaceRoot, genericBatch.structuredContent.manifest.commitMarker),
+    "utf8",
+  );
+  if (
+    JSON.parse(genericBatchMarker).publication !== "manifest_commit" ||
+    !genericBatchMarker.includes("batch-one.png")
+  )
+    throw new Error("document_export_batch did not publish its commit marker");
   const presetBatch = await workspaceClient.callTool({
     arguments: {
       mode: "all_or_nothing",

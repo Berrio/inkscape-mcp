@@ -1719,7 +1719,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [x] `F05-T26` Implementar `document_export`. — Tool unificado de un archivo para PNG, PDF base, SVG y SVG plano, con `ExportSpec`, bundle nativo inmutable, verificación y artefacto MCP; las opciones especializadas conservan sus tools hasta ser incorporadas de forma equivalente.
 - [x] `F05-T27` Implementar `document_export_batch` con `best_effort` y `all_or_nothing`. — Hasta cincuenta variantes base de una misma revisión se planifican sin colisiones; pruebas MCP reales cubren publicación conjunta y rollback manejado de `all_or_nothing`, además de fallo aislado/publicación válida de `best_effort`.
-- [ ] `F05-T28` Implementar colisiones, límites, progreso, cancelación y commit lógico `directory_rename|manifest_commit`, con limpieza/rollback best-effort documentados.
+- [x] `F05-T28` Implementar colisiones, límites, progreso, cancelación y commit lógico `directory_rename|manifest_commit`, con limpieza/rollback best-effort documentados. — Los lotes `all_or_nothing` publican un receipt final `manifest_commit` bajo `.inkscape-mcp-commits/`; sus variantes y el marker entran al mismo `commitBatch`, y una falla manejada al mover el marker revierte todo output ya publicado. Scratch se limpia en `finally`; un crash de proceso puede dejar archivos físicos sin marker, que no se anuncian como lote publicado.
 - [x] `F05-T29` Añadir presets A4 print, web PNG, plain SVG e icon pack mínimo. — `document_export_batch` acepta exactamente un `preset` o `specs`, expande print A4 PDF, web PNG de 1200 px, SVG plano e iconos 16–512 px a variantes normales y crea su directorio de salida dentro del workspace mediante validación por segmento.
 
 #### Puerta MVP F05

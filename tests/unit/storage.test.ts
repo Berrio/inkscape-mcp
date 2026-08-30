@@ -3,6 +3,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  rename,
   rm,
   symlink,
   utimes,
@@ -301,6 +302,40 @@ describe("file revisions and atomic store", () => {
     expect(
       (await readdir(root)).filter((name) => name.includes("inkscape-mcp")),
     ).toEqual([]);
+  });
+  it("rolls back published outputs when the final commit marker cannot be moved", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const first = join(root, "first.png");
+    const second = join(root, "second.png");
+    const marker = join(root, "batch-marker.json");
+    await writeFile(source, "source");
+    let moves = 0;
+    const store = new AtomicFileStore(
+      new CanonicalPathLocks(),
+      async (temporaryPath, contents) => writeFile(temporaryPath, contents),
+      {},
+      async (temporaryPath, targetPath) => {
+        moves += 1;
+        if (moves === 3)
+          throw new Error("commit marker publication interrupted");
+        await rename(temporaryPath, targetPath);
+      },
+    );
+    await expect(
+      store.commitBatch({
+        expectedRevision: await sha256File(source),
+        files: [
+          { contents: Buffer.from("first"), targetPath: first },
+          { contents: Buffer.from("second"), targetPath: second },
+          { contents: Buffer.from("marker"), targetPath: marker },
+        ],
+        sourcePath: source,
+      }),
+    ).rejects.toThrow("commit marker publication interrupted");
+    await expect(readFile(first)).rejects.toBeDefined();
+    await expect(readFile(second)).rejects.toBeDefined();
+    await expect(readFile(marker)).rejects.toBeDefined();
   });
   it("rejects a batch before publication when an existing sidecar lacks its revision", async () => {
     const root = await temporaryDirectory();

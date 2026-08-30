@@ -2,11 +2,12 @@ import type { ExportBatchMode } from "./batch.js";
 import type { ExportSpec } from "./spec.js";
 
 export type ExportBatchManifest = {
+  commitMarker?: string;
   durationMs: number;
   failures: readonly { index: number; message: string }[];
   inkscapeVersion?: string;
   mode: ExportBatchMode;
-  publication: "file_commit_batch" | "file_commit_each";
+  publication: "file_commit_batch" | "file_commit_each" | "manifest_commit";
   source: ExportSpec["source"];
   variants: readonly {
     format: ExportSpec["format"];
@@ -28,6 +29,9 @@ export function createExportBatchManifest(
   )
     throw new Error("Export batch manifest Inkscape version is invalid");
   return {
+    ...(request.commitMarker === undefined
+      ? {}
+      : { commitMarker: request.commitMarker }),
     durationMs: request.durationMs,
     failures: request.failures.map((failure) => ({ ...failure })),
     ...(request.inkscapeVersion === undefined

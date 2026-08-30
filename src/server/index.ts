@@ -7256,13 +7256,18 @@ export function buildServer(
             z.object({ index: z.number().int(), message: z.string() }),
           ),
           manifest: z.object({
+            commitMarker: z.string().optional(),
             durationMs: z.number().int().nonnegative(),
             failures: z.array(
               z.object({ index: z.number().int(), message: z.string() }),
             ),
             inkscapeVersion: z.string().optional(),
             mode: z.enum(["all_or_nothing", "best_effort"]),
-            publication: z.enum(["file_commit_batch", "file_commit_each"]),
+            publication: z.enum([
+              "file_commit_batch",
+              "file_commit_each",
+              "manifest_commit",
+            ]),
             source: z.object({
               expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
               path: z.string(),
@@ -7411,19 +7416,58 @@ export function buildServer(
         if (execution?.signal.aborted)
           throw new Error("Export batch was cancelled");
         execution?.onProgress({ stage: "publishing" });
+        let manifest;
         if (mode === "all_or_nothing") {
+          const commitDirectory = ".inkscape-mcp-commits";
+          await workspace.ensureOutputDirectory(workspaceId, commitDirectory);
+          const marker = await workspace.resolveNewOutput(
+            workspaceId,
+            `${commitDirectory}/batch-${crypto.randomUUID()}.json`,
+          );
+          const anticipatedSuccesses = staged.successes.map(
+            (stagedVariant) => ({
+              format: stagedVariant.value.variant.format,
+              index: stagedVariant.index,
+              outputPath: outputs[stagedVariant.index]!.relativePath,
+              revision: createHash("sha256")
+                .update(stagedVariant.value.bytes)
+                .digest("hex"),
+            }),
+          );
+          manifest = createExportBatchManifest({
+            commitMarker: marker.relativePath,
+            durationMs: Date.now() - startedAt,
+            failures: staged.failures,
+            ...(staged.successes[0] === undefined
+              ? {}
+              : { inkscapeVersion: staged.successes[0].value.inkscapeVersion }),
+            mode,
+            publication: "manifest_commit",
+            source,
+            variants: anticipatedSuccesses,
+          });
           const committed = await fileStore.commitBatch({
             expectedRevision: source.expectedRevision,
-            files: staged.successes.map((stagedVariant) => {
-              const target = fileExportTarget(stagedVariant.value.variant.spec);
-              return {
-                contents: stagedVariant.value.bytes,
-                ...(target.expectedOutputRevision === undefined
-                  ? {}
-                  : { expectedOutputRevision: target.expectedOutputRevision }),
-                targetPath: outputs[stagedVariant.index]!.absolutePath,
-              };
-            }),
+            files: [
+              ...staged.successes.map((stagedVariant) => {
+                const target = fileExportTarget(
+                  stagedVariant.value.variant.spec,
+                );
+                return {
+                  contents: stagedVariant.value.bytes,
+                  ...(target.expectedOutputRevision === undefined
+                    ? {}
+                    : {
+                        expectedOutputRevision: target.expectedOutputRevision,
+                      }),
+                  targetPath: outputs[stagedVariant.index]!.absolutePath,
+                };
+              }),
+              {
+                contents: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`),
+                targetPath: marker.absolutePath,
+              },
+            ],
             sourcePath: input.absolutePath,
           });
           for (let index = 0; index < staged.successes.length; index += 1)
@@ -7451,25 +7495,23 @@ export function buildServer(
               revision: committed.revision,
             });
           }
-        const manifest = createExportBatchManifest({
-          durationMs: Date.now() - startedAt,
-          failures: staged.failures,
-          ...(staged.successes[0] === undefined
-            ? {}
-            : { inkscapeVersion: staged.successes[0].value.inkscapeVersion }),
-          mode,
-          publication:
-            mode === "all_or_nothing"
-              ? "file_commit_batch"
-              : "file_commit_each",
-          source,
-          variants: successes.map((success) => ({
-            format: variants[success.index]!.format,
-            index: success.index,
-            outputPath: success.outputPath,
-            revision: success.revision,
-          })),
-        });
+        if (manifest === undefined)
+          manifest = createExportBatchManifest({
+            durationMs: Date.now() - startedAt,
+            failures: staged.failures,
+            ...(staged.successes[0] === undefined
+              ? {}
+              : { inkscapeVersion: staged.successes[0].value.inkscapeVersion }),
+            mode,
+            publication: "file_commit_each",
+            source,
+            variants: successes.map((success) => ({
+              format: variants[success.index]!.format,
+              index: success.index,
+              outputPath: success.outputPath,
+              revision: success.revision,
+            })),
+          });
         const result = { failures: staged.failures, manifest, mode, successes };
         return {
           content: [{ type: "text" as const, text: JSON.stringify(result) }],

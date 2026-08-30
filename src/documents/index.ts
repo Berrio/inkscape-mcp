@@ -36,6 +36,8 @@ export {
 export {
   querySvgElements,
   querySvgElementTargets,
+  createComputedStyleResolver,
+  type ComputedStyleResolver,
   type ElementQuery,
   type ElementQueryTarget,
   type ElementSummary,

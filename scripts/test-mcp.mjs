@@ -3556,6 +3556,47 @@ try {
   ) {
     throw new Error("export_svg did not preserve selection stylesheet closure");
   }
+  await writeFile(
+    join(workspaceRoot, "computed-css-selection.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><style>g { fill: url(#paint); font-family: Design; } .chosen { stroke: #123456; }</style><defs><linearGradient id="paint"><stop offset="0" stop-color="#ff0000"/><stop offset="1" stop-color="#0000ff"/></linearGradient></defs><g transform="translate(1)"><rect id="computed-selected" class="chosen" width="8" height="8"/></g></svg>',
+  );
+  const computedCssInspection = await workspaceClient.callTool({
+    arguments: {
+      level: "summary",
+      path: "computed-css-selection.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_inspect",
+  });
+  const computedCssRevision = computedCssInspection.structuredContent?.revision;
+  if (computedCssInspection.isError || typeof computedCssRevision !== "string")
+    throw new Error("document_inspect did not prepare supported CSS selection");
+  const computedCssSelection = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: computedCssRevision,
+      flavor: "plain",
+      outputPath: "computed-css-selection-output.svg",
+      path: "computed-css-selection.svg",
+      selectionIds: ["computed-selected"],
+      workspaceId: workspace.id,
+    },
+    name: "export_svg",
+  });
+  const computedCssOutput = await readFile(
+    join(workspaceRoot, "computed-css-selection-output.svg"),
+    "utf8",
+  );
+  if (
+    computedCssSelection.isError ||
+    !computedCssSelection.structuredContent?.warnings?.includes(
+      "SELECTION_CSS_FLATTENED_SUPPORTED",
+    ) ||
+    computedCssOutput.includes("<style") ||
+    !computedCssOutput.includes("linearGradient") ||
+    !computedCssOutput.includes("font-family:Design")
+  ) {
+    throw new Error("export_svg did not flatten supported selection CSS");
+  }
   const sourceSelectionPng = await workspaceClient.callTool({
     arguments: {
       expectedRevision: cssRevision,

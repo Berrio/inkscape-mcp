@@ -16,7 +16,7 @@ describe("selection SVG export", () => {
     expect(result.svg).not.toContain('id="other"');
     expect(result.svg).not.toContain('id="unused"');
   });
-  it("rejects missing references and preserves stylesheet dependencies", () => {
+  it("rejects missing references and flattens supported stylesheet dependencies", () => {
     expect(() =>
       extractSvgSelection(
         '<svg viewBox="0 0 1 1"><rect id="one" fill="url(#missing)"/></svg>',
@@ -27,9 +27,9 @@ describe("selection SVG export", () => {
       '<svg viewBox="0 0 1 1"><style>.x { fill: url(#paint); }</style><defs><linearGradient id="paint"><stop/></linearGradient></defs><rect id="one" class="x"/></svg>',
       ["one"],
     );
-    expect(styled.svg).toContain(".x { fill: url(#paint); }");
+    expect(styled.svg).toContain('style="fill:url(#paint) !important"');
     expect(styled.svg).toContain('id="paint"');
-    expect(styled.warnings).toEqual(["SELECTION_STYLESHEET_PRESERVED_PARTIAL"]);
+    expect(styled.warnings).toEqual(["SELECTION_CSS_FLATTENED_SUPPORTED"]);
   });
   it("preserves ancestor transforms and fails closed on reference cycles", () => {
     const result = extractSvgSelection(
@@ -55,6 +55,20 @@ describe("selection SVG export", () => {
     expect(result.svg).toContain('id="card"');
     expect(result.svg).toContain("#card .title");
     expect(result.warnings).toEqual(["SELECTION_STYLESHEET_PRESERVED_PARTIAL"]);
+  });
+
+  it("flattens the supported computed CSS cascade and retains its paint closure", () => {
+    const result = extractSvgSelection(
+      '<svg viewBox="0 0 1 1"><style>g { fill: url(#paint); font-family: Design; } .chosen { stroke: #123456; }</style><defs><linearGradient id="paint"><stop/></linearGradient><filter id="unused"/></defs><g transform="translate(2)"><rect id="one" class="chosen" width="1" height="1"/></g><circle id="other"/></svg>',
+      ["one"],
+    );
+    expect(result.svg).not.toContain("<style");
+    expect(result.svg).toContain(
+      'style="fill:url(#paint) !important;font-family:Design !important;stroke:#123456 !important"',
+    );
+    expect(result.svg).toContain('id="paint"');
+    expect(result.svg).not.toContain('id="unused"');
+    expect(result.warnings).toEqual(["SELECTION_CSS_FLATTENED_SUPPORTED"]);
   });
 });
 

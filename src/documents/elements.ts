@@ -305,14 +305,14 @@ type StyleRule = {
   selector: CompiledSelector;
   specificity: number;
 };
-type ComputedStyleResolver = (
+export type ComputedStyleResolver = (
   element: XmlElement,
 ) => NonNullable<ElementSummary["computedStyle"]>;
 
 /** Resolves the intentionally small, auditable CSS subset exposed by the API.
  * Unsupported selector programs and custom-property expressions are retained in
  * the source SVG but flagged instead of being represented as computed truth. */
-function createComputedStyleResolver(
+export function createComputedStyleResolver(
   document: XmlDocument,
 ): ComputedStyleResolver {
   const parsed = parseSupportedStyles(document);

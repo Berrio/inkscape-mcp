@@ -6,6 +6,10 @@ import {
 } from "@xmldom/xmldom";
 
 import { normalizeSvgIds, sanitizeSvg } from "../svg/index.js";
+import {
+  createComputedStyleResolver,
+  type ComputedStyleResolver,
+} from "./elements.js";
 
 const SVG = "http://www.w3.org/2000/svg";
 const SAFE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u;
@@ -50,6 +54,13 @@ export function extractSvgSelection(
         (other) => other !== element && isDescendantOf(element, other),
       ),
   );
+  const computedStyles =
+    styles.length === 0 ? undefined : createComputedStyleResolver(input);
+  const canFlattenStyles =
+    computedStyles !== undefined &&
+    selectedRoots.every(
+      (element) => computedStyles(element).fidelity === "exact-supported",
+    );
   const output = new DOMParser().parseFromString(
     `<svg xmlns="${SVG}"/>`,
     "image/svg+xml",
@@ -77,6 +88,10 @@ export function extractSvgSelection(
       if (current.localName === "style")
         for (const match of (current.textContent ?? "").matchAll(URL_REFERENCE))
           found.add(match[1]!);
+      if (canFlattenStyles && computedStyles !== undefined)
+        for (const value of Object.values(computedStyles(current).properties))
+          for (const match of value.matchAll(URL_REFERENCE))
+            found.add(match[1]!);
       for (let index = 0; index < current.childNodes.length; index += 1) {
         const child = current.childNodes.item(index);
         if (child && child.nodeType === child.ELEMENT_NODE)
@@ -122,8 +137,9 @@ export function extractSvgSelection(
         includeDependency(reference);
     });
   }
-  for (const style of styles)
-    for (const reference of references(style)) includeDependency(reference);
+  if (!canFlattenStyles)
+    for (const style of styles)
+      for (const reference of references(style)) includeDependency(reference);
   const defs = output.createElementNS(SVG, "defs");
   const dependencyRoots = [...dependencyIds]
     .map((id) => byId.get(id)!)
@@ -138,7 +154,8 @@ export function extractSvgSelection(
   for (const dependency of dependencyRoots) {
     defs.appendChild(dependency.cloneNode(true));
   }
-  for (const style of styles) target.appendChild(style.cloneNode(true));
+  if (!canFlattenStyles)
+    for (const style of styles) target.appendChild(style.cloneNode(true));
   if (defs.childNodes.length > 0) target.appendChild(defs);
   const ancestorCounts = new Map<string, number>();
   for (const element of selectedRoots)
@@ -155,7 +172,14 @@ export function extractSvgSelection(
           ),
         );
   for (const element of selectedRoots)
-    target.appendChild(cloneWithAncestors(element, root, preservedAncestorIds));
+    target.appendChild(
+      cloneWithAncestors(
+        element,
+        root,
+        preservedAncestorIds,
+        canFlattenStyles ? computedStyles : undefined,
+      ),
+    );
   const normalized = normalizeSvgIds(
     new XMLSerializer().serializeToString(output),
     {
@@ -168,12 +192,14 @@ export function extractSvgSelection(
     warnings:
       styles.length === 0
         ? []
-        : [
-            "SELECTION_STYLESHEET_PRESERVED_PARTIAL",
-            ...(ancestorCounts.size > preservedAncestorIds.size
-              ? ["SELECTION_STYLESHEET_CONTEXT_PARTIAL"]
-              : []),
-          ],
+        : canFlattenStyles
+          ? ["SELECTION_CSS_FLATTENED_SUPPORTED"]
+          : [
+              "SELECTION_STYLESHEET_PRESERVED_PARTIAL",
+              ...(ancestorCounts.size > preservedAncestorIds.size
+                ? ["SELECTION_STYLESHEET_CONTEXT_PARTIAL"]
+                : []),
+            ],
   };
 }
 
@@ -202,17 +228,49 @@ function cloneWithAncestors(
   element: XmlElement,
   root: XmlElement,
   preservedAncestorIds: ReadonlySet<string>,
+  computedStyles: ComputedStyleResolver | undefined,
 ): XmlNode {
   const ancestors: XmlElement[] = [];
   forEachAncestor(element, root, (ancestor) => ancestors.push(ancestor));
-  let cloned = element.cloneNode(true);
+  let cloned = cloneWithComputedStyles(element, computedStyles);
   for (const ancestor of ancestors.reverse()) {
     const wrapper = ancestor.cloneNode(false) as XmlElement;
     const id = wrapper.getAttribute("id");
     if (id !== null && !preservedAncestorIds.has(id))
       wrapper.removeAttribute("id");
+    applyComputedStyle(ancestor, wrapper, computedStyles);
     wrapper.appendChild(cloned);
     cloned = wrapper;
   }
   return cloned;
+}
+
+function cloneWithComputedStyles(
+  element: XmlElement,
+  computedStyles: ComputedStyleResolver | undefined,
+): XmlNode {
+  const cloned = element.cloneNode(true) as XmlElement;
+  const originals = [element, ...Array.from(element.getElementsByTagName("*"))];
+  const copies = [cloned, ...Array.from(cloned.getElementsByTagName("*"))];
+  for (let index = 0; index < originals.length; index += 1)
+    applyComputedStyle(originals[index]!, copies[index]!, computedStyles);
+  return cloned;
+}
+
+function applyComputedStyle(
+  original: XmlElement,
+  copy: XmlElement,
+  computedStyles: ComputedStyleResolver | undefined,
+): void {
+  if (computedStyles === undefined) return;
+  const properties = computedStyles(original).properties;
+  if (Object.keys(properties).length === 0) return;
+  const declarations = Object.entries(properties)
+    .map(([property, value]) => `${property}:${value} !important`)
+    .join(";");
+  const existing = copy.getAttribute("style");
+  copy.setAttribute(
+    "style",
+    `${existing === null || existing.trim() === "" ? "" : `${existing.trim()};`}${declarations}`,
+  );
 }

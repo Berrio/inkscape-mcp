@@ -168,6 +168,37 @@ describe("file revisions and atomic store", () => {
       }),
     ).rejects.toBeInstanceOf(RevisionConflictError);
   });
+  it("rejects a concurrent source or asset writer instead of returning a mixed native bundle", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const asset = join(root, "asset.png");
+    const staging = join(root, "staging");
+    await mkdir(staging);
+    await writeFile(asset, "asset-first");
+    await writeFile(source, '<svg><image href="asset.png"/></svg>');
+    const expectedRevision = await sha256File(source);
+
+    await expect(
+      createNativeInputBundle(source, expectedRevision, staging, {
+        allowedRoot: root,
+        beforeFinalVerification: async () => {
+          await Promise.all([
+            writeFile(asset, "asset-second"),
+            writeFile(
+              source,
+              '<svg><image href="asset.png" data-revision="second"/></svg>',
+            ),
+          ]);
+        },
+      }),
+    ).rejects.toBeInstanceOf(RevisionConflictError);
+    await expect(
+      readFile(join(staging, "assets", "0000-asset.png"), "utf8"),
+    ).resolves.toBe("asset-first");
+    await expect(
+      readFile(join(staging, "input.svg"), "utf8"),
+    ).resolves.toContain("assets/0000-asset.png");
+  });
   it("rehashes a staged bundle before publication", async () => {
     const root = await temporaryDirectory();
     const source = join(root, "source.svg");

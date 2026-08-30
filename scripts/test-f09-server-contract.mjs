@@ -1,7 +1,12 @@
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
+import { setTimeout as delay } from "node:timers/promises";
 import packageMetadata from "../package.json" with { type: "json" };
 
 const server = {
@@ -165,10 +170,100 @@ async function assertInvalidProtocolReturnsJsonRpcError() {
   }
 }
 
+function revision(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+async function assertJobProgressIsObservable() {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "inkscape-mcp-f09-job-"));
+  const client = new Client(
+    { name: "inkscape-mcp-f09-job-progress", version: packageMetadata.version },
+    { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+  );
+  const transport = new StdioClientTransport({
+    ...server,
+    args: ["dist/cli.js", "--workspace-root", workspaceRoot],
+  });
+  try {
+    await client.connect(transport);
+    const listed = await client.callTool({
+      arguments: {},
+      name: "workspace_list",
+    });
+    const workspace = listed.structuredContent?.workspaces?.[0];
+    if (listed.isError || typeof workspace?.id !== "string")
+      throw new Error("job progress test could not resolve its workspace");
+    const path = "job-progress.svg";
+    await writeFile(
+      join(workspaceRoot, path),
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1000px" height="1000px" viewBox="0 0 1000 1000"><rect width="1000" height="1000" fill="#123456"/></svg>',
+      "utf8",
+    );
+    const expectedRevision = revision(
+      await readFile(join(workspaceRoot, path)),
+    );
+    const submitted = await client.callTool({
+      arguments: {
+        delivery: "job",
+        mode: "all_or_nothing",
+        specs: [
+          {
+            area: { kind: "page" },
+            background: { mode: "transparent" },
+            format: "png",
+            size: { dpi: 300, mode: "dpi" },
+            source: { expectedRevision, path },
+            target: {
+              kind: "file",
+              overwrite: false,
+              path: "job-progress.png",
+            },
+          },
+        ],
+        workspaceId: workspace.id,
+      },
+      name: "document_export_batch",
+    });
+    const jobId = submitted.structuredContent?.jobId;
+    if (submitted.isError || typeof jobId !== "string")
+      throw new Error("document_export_batch did not create a job");
+    const stageOrder = { publishing: 2, rendering: 1 };
+    let previous = 0;
+    let observed = false;
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const status = await client.callTool({
+        arguments: { jobId, workspaceId: workspace.id },
+        name: "job_get",
+      });
+      if (status.isError) throw new Error("job_get rejected its owner");
+      const stage = status.structuredContent?.progress?.stage;
+      if (stage !== undefined) {
+        const order = stageOrder[stage];
+        if (order === undefined || order < previous)
+          throw new Error("job_get reported non-monotonic progress");
+        previous = order;
+        observed = true;
+      }
+      if (
+        status.structuredContent?.status === "cancelled" ||
+        status.structuredContent?.status === "completed" ||
+        status.structuredContent?.status === "failed"
+      )
+        break;
+      await delay(25);
+    }
+    if (!observed) throw new Error("job_get never exposed job progress");
+  } finally {
+    await client.close();
+    await rm(workspaceRoot, { force: true, recursive: true });
+  }
+}
+
 const firstCatalog = await inspectCatalog("first");
 const secondCatalog = await inspectCatalog("second");
 if (firstCatalog !== secondCatalog)
   throw new Error("two fresh stdio servers emitted different tool catalogs");
 await assertInvalidProtocolReturnsJsonRpcError();
+await assertJobProgressIsObservable();
 
 process.stderr.write("F09 server catalog MCP checks passed.\n");

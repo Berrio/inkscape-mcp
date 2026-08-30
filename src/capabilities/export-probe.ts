@@ -184,11 +184,83 @@ export async function probeWebpExport(
     | "scratchRoot"
   >,
 ): Promise<ExportProbe> {
+  return await probeRasterExtensionExport({
+    config,
+    executable,
+    expectedMime: "image/webp",
+    format: "webp",
+    runner,
+    title: "WebP",
+  });
+}
+
+/** Probes only Inkscape's fixed JPEG extension with a known small SVG. */
+export async function probeJpegExport(
+  runner: Pick<ProcessExecutor, "run">,
+  executable: string,
+  config: Pick<
+    ServerConfig,
+    | "maxRasterMegapixels"
+    | "maxStderrBytes"
+    | "maxStdoutBytes"
+    | "processTimeoutMs"
+    | "scratchRoot"
+  >,
+): Promise<ExportProbe> {
+  return await probeRasterExtensionExport({
+    config,
+    executable,
+    expectedMime: "image/jpeg",
+    format: "jpg",
+    runner,
+    title: "JPEG",
+  });
+}
+
+/** Probes only Inkscape's fixed TIFF extension with a known small SVG. */
+export async function probeTiffExport(
+  runner: Pick<ProcessExecutor, "run">,
+  executable: string,
+  config: Pick<
+    ServerConfig,
+    | "maxRasterMegapixels"
+    | "maxStderrBytes"
+    | "maxStdoutBytes"
+    | "processTimeoutMs"
+    | "scratchRoot"
+  >,
+): Promise<ExportProbe> {
+  return await probeRasterExtensionExport({
+    config,
+    executable,
+    expectedMime: "image/tiff",
+    format: "tiff",
+    runner,
+    title: "TIFF",
+  });
+}
+
+async function probeRasterExtensionExport(request: {
+  config: Pick<
+    ServerConfig,
+    | "maxRasterMegapixels"
+    | "maxStderrBytes"
+    | "maxStdoutBytes"
+    | "processTimeoutMs"
+    | "scratchRoot"
+  >;
+  executable: string;
+  expectedMime: "image/jpeg" | "image/tiff" | "image/webp";
+  format: "jpg" | "tiff" | "webp";
+  runner: Pick<ProcessExecutor, "run">;
+  title: "JPEG" | "TIFF" | "WebP";
+}): Promise<ExportProbe> {
+  const { config, executable, expectedMime, format, runner, title } = request;
   const root =
     config.scratchRoot === "auto" ? tmpdir() : resolve(config.scratchRoot);
   const scratch = await mkdtemp(join(root, "inkscape-mcp-probe-"));
   const input = join(scratch, "probe.svg");
-  const output = join(scratch, "probe.webp");
+  const output = join(scratch, `probe.${format}`);
   try {
     await writeFile(
       input,
@@ -196,28 +268,31 @@ export async function probeWebpExport(
       "utf8",
     );
     const result = await runner.run(executable, {
-      args: [input, "--export-type=webp", `--export-filename=${output}`],
+      args: [input, `--export-type=${format}`, `--export-filename=${output}`],
       cwd: scratch,
       maxStderrBytes: config.maxStderrBytes,
       maxStdoutBytes: config.maxStdoutBytes,
       timeoutMs: config.processTimeoutMs,
     });
     if (result.exitCode !== 0 || result.terminationReason !== "completed") {
-      return { available: false, reason: "WebP export did not complete" };
+      return { available: false, reason: `${title} export did not complete` };
     }
     const raster = inspectRasterImport(
       await readFile(output),
       config.maxRasterMegapixels,
     );
-    return raster.mime === "image/webp" &&
+    return raster.mime === expectedMime &&
       raster.width === 4 &&
       raster.height === 3
       ? { available: true }
-      : { available: false, reason: "output is not the expected WebP image" };
+      : {
+          available: false,
+          reason: `output is not the expected ${title} image`,
+        };
   } catch {
     return {
       available: false,
-      reason: "WebP output is missing or unreadable",
+      reason: `${title} output is missing or unreadable`,
     };
   } finally {
     await rm(scratch, { force: true, recursive: true });

@@ -209,6 +209,9 @@ import {
  */
 const z = { ...baseZ, object: baseZ.strictObject };
 
+const SERVER_INSTRUCTIONS =
+  "Use workspace_list before selecting a document, then inspect or preflight it before mutating or exporting. Every document operation requires an explicit workspaceId and relative path; mutations also require expectedRevision. New outputs never overwrite existing files, and overwrite requires expectedOutputRevision. Check inkscape_status and capability tools before relying on version- or extension-gated features. Keep artifact URIs opaque and use only the typed tools; paths, shell commands, Inkscape flags, actions, and raw SVG/XML are not accepted as tool inputs.";
+
 const statusSchema = z.object({
   actionCount: z.number().int().nonnegative(),
   capabilitiesReady: z.boolean(),
@@ -1215,10 +1218,15 @@ export function buildServer(
   config: ServerConfig,
   runtime: ServerRuntime = createServerRuntime(config),
 ): McpServer {
-  const server = new McpServer({
-    name: "inkscape-mcp",
-    version: packageMetadata.version,
-  });
+  const server = new McpServer(
+    {
+      name: "inkscape-mcp",
+      version: packageMetadata.version,
+    },
+    {
+      instructions: SERVER_INSTRUCTIONS,
+    },
+  );
   const {
     artifacts,
     capabilities,

@@ -1958,11 +1958,11 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 #### Servidor y stdio
 
-- [ ] `F09-T01` Consolidar/endurecer el `buildServer()` incremental como catálogo completo, determinista y sin estado implícito de documento activo.
-- [ ] `F09-T02` Registrar instructions compactas: inspección, límites, overwrite, revisiones y capabilities.
-- [ ] `F09-T03` Validar/endurecer el transporte stdio introducido en F01 con la API v2 oficial y todo el catálogo.
-- [ ] `F09-T04` Repetir como regresión que stdout contiene únicamente framing MCP con el catálogo completo, errores y progreso activos.
-- [ ] `F09-T05` Traducir errores de dominio a `isError` y protocolo mal formado a error MCP.
+- [x] `F09-T01` Consolidar/endurecer el `buildServer()` incremental como catálogo completo, determinista y sin estado implícito de documento activo. — Dos servidores stdio nuevos emiten el mismo catálogo de más de 80 tools, sin duplicados, y una inspección sin workspace falla de forma recuperable en lugar de seleccionar un documento implícito.
+- [x] `F09-T02` Registrar instructions compactas: inspección, límites, overwrite, revisiones y capabilities. — La respuesta de inicialización declara instrucciones sobre workspace, rutas relativas, revisiones, overwrite y capabilities.
+- [x] `F09-T03` Validar/endurecer el transporte stdio introducido en F01 con la API v2 oficial y todo el catálogo. — El smoke `test:f09-wp01` usa `StdioClientTransport` y negociación fijada a `2026-07-28` para listar el catálogo completo en procesos independientes.
+- [~] `F09-T04` Framing stdio y errores comprobados; falta el caso de progreso de F09-WP03. — La regresión conecta/lista/invoca dos veces sin interferencia de diagnósticos e inicia un cliente raw para enviar parámetros MCP inválidos, que reciben una respuesta JSON-RPC de error; los logs continúan exclusivamente por stderr. La notificación de progreso se cierra con F09-T12/T13, sin anticipar ese contrato.
+- [x] `F09-T05` Traducir errores de dominio a `isError` y protocolo mal formado a error MCP. — Una inspección fuera de workspace y un argumento extra estricto devuelven `isError` compatible, preservando la validación MCP del SDK para requests mal formados.
 - [ ] `F09-T06` Verificar tool annotations y output schemas.
 
 #### Resources y prompts

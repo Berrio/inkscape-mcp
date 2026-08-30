@@ -4,6 +4,26 @@ Usamos 96 CSS px/in y mantenemos separadas unidades físicas del viewport y unid
 
 Contain y cover producen una matriz explícita con fidelidad exacta para geometría simple; el escalado DOM completo y CSS avanzan solo tras declarar fidelidad. Los vectores normativos de §10 están cubiertos por tests con tolerancia de punto flotante.
 
+## Tolerancias de los vectores normativos
+
+Los cinco vectores de la sección 10.2 son contratos del modelo geométrico puro.
+Cada componente numérico (rectángulo, escala, offset y dimensión) se compara
+con `toBeCloseTo(..., 12)`: una tolerancia absoluta estrictamente menor que
+`5e-13` en la unidad del vector. Los warnings se comparan exactamente, sin
+tolerancia.
+
+| Vector                   | Resultado normativo                                                           |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| A4 `preserve_user_scale` | `viewBox=(0,0,148,210)` y ningún warning                                      |
+| A4 `preserve_viewbox`    | `viewBox=(0,0,210,297)`, factor físico `2` por eje y `DOCUMENT_SCALE_CHANGED` |
+| contain centrado         | matriz `(1.35,0,0,1.35,0,135)`                                                |
+| cover centrado           | matriz `(1.8,0,0,1.8,-180,0)` y `CONTENT_MAY_BE_CROPPED`                      |
+| fit con bounds negativos | rectángulo `(-13,17,106,56)` y `FIT_USED_VISUAL_BOUNDS`                       |
+
+Esta tolerancia no se aplica a medidas observadas por Inkscape. Esas siguen
+siendo evidencia nativa de fidelidad parcial y usan la tolerancia de `0.01`
+unidades fijada para F03-G03.
+
 ## Contrato de bounds
 
 Los bounds no son intercambiables:

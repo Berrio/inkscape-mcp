@@ -288,7 +288,7 @@ describe("basic SVG documents", () => {
     expect(fitted.svg).toContain('id="keep" x="10" y="5" width="30"');
     expect(fitted.warnings).toContain("FIT_USED_VISUAL_BOUNDS");
   });
-  it("fits negative visual bounds with the normative four-sided margin", () => {
+  it("F03-G07 fits negative visual bounds with the normative four-sided margin", () => {
     const source =
       '<svg width="200mm" height="100mm" viewBox="0 0 200 100"><rect id="keep" x="-10" y="20" width="100" height="50"/></svg>';
     const fitted = fitPageToBoundsSvg(
@@ -302,7 +302,12 @@ describe("basic SVG documents", () => {
     expect(fitted.page.width.value).toBeCloseTo(106, 12);
     expect(fitted.page.height.unit).toBe("mm");
     expect(fitted.page.height.value).toBeCloseTo(56, 12);
-    expect(inspectSvgSettings(fitted.svg).viewBox).toEqual({
+    const fittedViewBox = inspectSvgSettings(fitted.svg).viewBox;
+    expect(fittedViewBox.x).toBeCloseTo(-13, 12);
+    expect(fittedViewBox.y).toBeCloseTo(17, 12);
+    expect(fittedViewBox.width).toBeCloseTo(106, 12);
+    expect(fittedViewBox.height).toBeCloseTo(56, 12);
+    expect(fittedViewBox).toEqual({
       x: -13,
       y: 17,
       width: 106,

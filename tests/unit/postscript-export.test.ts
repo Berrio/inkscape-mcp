@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  inspectEmf,
   parseExportSpec,
+  preflightEmfExport,
   preflightPostscriptExport,
   verifyExportArtifact,
 } from "../../src/export/index.js";
@@ -80,5 +82,33 @@ describe("PostScript export policy and verification", () => {
     await expect(verifyExportArtifact("eps", eps)).rejects.toThrow(
       "concrete BoundingBox",
     );
+  });
+
+  it("gates EMF flattening and validates its fixed binary header", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect style="fill-opacity:0.4"/></svg>';
+    expect(() => preflightEmfExport(source, "reject")).toThrow(
+      "requires flatten-with-warning",
+    );
+    expect(preflightEmfExport(source, "flatten-with-warning").warnings).toEqual(
+      ["EMF_TRANSPARENCY_FLATTENING_REQUIRED"],
+    );
+    const emf = Buffer.alloc(88);
+    emf.writeUInt32LE(1, 0);
+    emf.writeUInt32LE(88, 4);
+    emf.writeInt32LE(0, 24);
+    emf.writeInt32LE(0, 28);
+    emf.writeInt32LE(100, 32);
+    emf.writeInt32LE(50, 36);
+    emf.write(" EMF", 40, "ascii");
+    emf.writeUInt32LE(88, 48);
+    emf.writeUInt32LE(2, 52);
+    expect(inspectEmf(emf)).toMatchObject({
+      byteLength: 88,
+      frame: [0, 0, 100, 50],
+      recordCount: 2,
+    });
+    emf.writeUInt32LE(87, 48);
+    expect(() => inspectEmf(emf)).toThrow("declared size or record count");
   });
 });

@@ -134,6 +134,7 @@ exportación: inspección → `document_export_preset_plan` →
 | `document_import_raster`       | Raster local aprobado, link/embed, límite de megapíxeles y pérdidas normalizadas. | Crear SVG desde un raster aprobado.                       |
 | `document_import_pdf`          | PDF local, página, política de fuentes/perfiles, importador gateado y manifest.   | Importar una página y rechazar dependencias no resueltas. |
 | `document_import_postscript`   | EPS/PS local, sonda headless, política de dependencias y SVG saneado.             | Importar un EPS sin argumentos nativos libres.            |
+| `document_import_emf`          | EMF local validado, sonda headless, política de dependencias y SVG saneado.       | Reimportar un EMF producido de forma confiable.           |
 | `assets_package`               | Documento/revisión y directorio nuevo.                                            | Publicar SVG, assets locales y manifest juntos.           |
 
 ## Exportación, presets y jobs
@@ -142,7 +143,7 @@ exportación: inspección → `document_export_preset_plan` →
 | ----------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `document_export_preset_plan` | Documento/revisión, preset y directorio; devuelve preflight tipado. | Revisar preflight de `print-pdf-300dpi` y conservar su token. |
 | `document_export_batch`       | `planToken` o specs tipados, modo `all_or_nothing`/`best_effort`.   | Ejecutar el plan y leer manifest/artefactos publicados.       |
-| `document_export`             | Un `ExportSpec` discriminado de PNG/PDF/SVG/plain SVG/PS/EPS.       | Exportar PS/EPS con preflight explícito de transparencia.     |
+| `document_export`             | Un `ExportSpec` discriminado de PNG/PDF/SVG/plain SVG/PS/EPS/EMF.   | Exportar EMF con flatten explícito de efectos.                |
 | `export_png`                  | Documento/revisión, área, DPI/píxeles, fondo y output.              | Generar PNG transparente a DPI físico o dimensiones exactas.  |
 | `export_pdf`                  | Documento/revisión, PDF 1.4/1.5, texto/filtros/márgenes permitidos. | Exportar PDF multipágina completo o subset controlado.        |
 | `export_pdf_pages`            | Documento/revisión, IDs de páginas y directorio.                    | Crear `page-NNN.pdf` por página seleccionada.                 |

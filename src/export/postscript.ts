@@ -9,6 +9,10 @@ export type PostscriptPreflight = {
   transparencyReferenceCount: number;
   warnings: readonly string[];
 };
+export type LegacyVectorEffectInspection = Omit<
+  PostscriptPreflight,
+  "warnings"
+>;
 
 /**
  * Detects SVG effects that PostScript cannot retain as native vector content.
@@ -19,6 +23,27 @@ export function preflightPostscriptExport(
   source: string,
   rasterizationPolicy: PostscriptRasterizationPolicy,
 ): PostscriptPreflight {
+  const inspection = inspectLegacyVectorEffects(source);
+  const warnings = [
+    ...(inspection.filterReferenceCount > 0
+      ? ["POSTSCRIPT_FILTER_RASTERIZATION_REQUIRED"]
+      : []),
+    ...(inspection.maskReferenceCount > 0 ||
+    inspection.transparencyReferenceCount > 0
+      ? ["POSTSCRIPT_TRANSPARENCY_RASTERIZATION_REQUIRED"]
+      : []),
+  ];
+  if (warnings.length > 0 && rasterizationPolicy === "reject")
+    throw new Error(
+      "PostScript export requires rasterize-with-warning for filters, masks, or transparency",
+    );
+  return { ...inspection, warnings };
+}
+
+/** Inspects effects that legacy vector targets cannot preserve portably. */
+export function inspectLegacyVectorEffects(
+  source: string,
+): LegacyVectorEffectInspection {
   const sanitized = sanitizeSvg(source, {
     maxElements: 100_000,
     maxInputBytes: 50 * 1024 * 1024,
@@ -45,23 +70,10 @@ export function preflightPostscriptExport(
     )
       transparencyReferenceCount += 1;
   }
-  const warnings = [
-    ...(filterReferenceCount > 0
-      ? ["POSTSCRIPT_FILTER_RASTERIZATION_REQUIRED"]
-      : []),
-    ...(maskReferenceCount > 0 || transparencyReferenceCount > 0
-      ? ["POSTSCRIPT_TRANSPARENCY_RASTERIZATION_REQUIRED"]
-      : []),
-  ];
-  if (warnings.length > 0 && rasterizationPolicy === "reject")
-    throw new Error(
-      "PostScript export requires rasterize-with-warning for filters, masks, or transparency",
-    );
   return {
     filterReferenceCount,
     maskReferenceCount,
     transparencyReferenceCount,
-    warnings,
   };
 }
 

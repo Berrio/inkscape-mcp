@@ -154,12 +154,14 @@ import {
   createExportBatchManifest,
   executeExportBatch,
   expandExportPreset,
+  inspectEmf,
   type ExportSpec,
   exportPresetSchema,
   exportSpecSchema,
   normalizeExportArea,
   parseExportSpec,
   planExportBatch,
+  preflightEmfExport,
   preflightPostscriptExport,
   pruneSvgPagesForPdf,
   requiredPdfCapabilityFlags,
@@ -2094,12 +2096,20 @@ export function buildServer(
     async () => {
       const report = await runDoctor(config, process.cwd());
       const inputTypes = [...(report.capabilities?.inputTypes ?? [])];
-      const headlessStatuses = await probePostscriptHeadlessImports({
-        config,
-        inputTypes,
-        runner,
-        scratch,
-      });
+      const headlessStatuses = {
+        ...(await probePostscriptHeadlessImports({
+          config,
+          inputTypes,
+          runner,
+          scratch,
+        })),
+        ...(await probeEmfHeadlessImport({
+          config,
+          inputTypes,
+          runner,
+          scratch,
+        })),
+      };
       const output = {
         inputTypes,
         nativeImportGates: inspectNativeImportGates(
@@ -2307,6 +2317,190 @@ export function buildServer(
       return {
         content: [{ type: "text", text: JSON.stringify(outputResult) }],
         structuredContent: outputResult,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_import_emf",
+    {
+      description:
+        "Imports one trusted workspace-local EMF file through the observed local Inkscape capability into a sanitized SVG and conversion manifest. It never accepts arbitrary native formats or arguments.",
+      inputSchema: z
+        .object({
+          dependencyPolicy: importDependencyPolicySchema,
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          manifestPath: z.string().min(1).max(1024),
+          outputPath: z.string().min(1).max(1024),
+          path: z.string().min(1).max(1024),
+          sanitizeMode: z
+            .enum(["strict", "preserve-local", "trusted"])
+            .default("preserve-local"),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        manifest: z.object({
+          dependencies: importedDependenciesSchema,
+          format: z.literal("emf"),
+          inputBytes: z.number().int().positive(),
+          losses: z.tuple([
+            z.literal("EMF_NATIVE_IMPORT_FIDELITY_NOT_GUARANTEED"),
+          ]),
+          outputPath: z.string(),
+          outputSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+          removed: z.array(z.string()),
+          schema: z.literal("inkscape-mcp-document-import/v1"),
+          sourcePath: z.string(),
+          sourceSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+          warnings: z.tuple([
+            z.literal("EMF_NATIVE_IMPORT_FIDELITY_NOT_GUARANTEED"),
+          ]),
+        }),
+        manifestPath: z.string(),
+        manifestRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        outputPath: z.string(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const source = await workspace.resolveExisting(
+        input.workspaceId,
+        input.path,
+      );
+      const output = await workspace.resolveNewOutput(
+        input.workspaceId,
+        input.outputPath,
+      );
+      const manifestOutput = await workspace.resolveNewOutput(
+        input.workspaceId,
+        input.manifestPath,
+      );
+      if (!/\.emf$/iu.test(source.relativePath))
+        throw new Error("document_import_emf requires an .emf source path");
+      if (!/\.svg$/iu.test(output.relativePath))
+        throw new Error("document_import_emf requires a .svg output path");
+      if (!/\.json$/iu.test(manifestOutput.relativePath))
+        throw new Error("document_import_emf requires a .json manifest path");
+      const sourceBytes = await readBoundedNativeImportSource(
+        source.absolutePath,
+        config.maxInputBytes,
+        "EMF",
+      );
+      inspectEmf(sourceBytes);
+      const discovery = await locateInkscape({
+        config,
+        cwd: process.cwd(),
+        runner,
+      });
+      const candidate = discovery.candidates[0];
+      if (!candidate)
+        throw new Error("Inkscape executable could not be located");
+      const probe = await probeInkscapeCandidate(
+        runner,
+        candidate,
+        process.cwd(),
+      );
+      if (!("version" in probe))
+        throw new Error("Inkscape executable could not be validated");
+      const observed = await capabilities.inspect(
+        runner,
+        candidate,
+        probe.version,
+        process.cwd(),
+      );
+      if (!observed.inputTypes.includes("emf"))
+        throw new Error(
+          "This Inkscape installation does not advertise EMF import",
+        );
+      const imported = await scratch.withDirectory(
+        "staging",
+        async (directory) => {
+          const stagedSource = join(directory, "input.emf");
+          const temporaryOutput = join(directory, "imported.svg");
+          await copyFile(source.absolutePath, stagedSource);
+          if (
+            (await sha256File(source.absolutePath)) !== input.expectedRevision
+          )
+            throw new Error(
+              "EMF import source revision changed before staging",
+            );
+          const result = await runner.run(candidate.executablePath, {
+            args: [
+              stagedSource,
+              "--export-type=svg",
+              `--export-filename=${temporaryOutput}`,
+            ],
+            cwd: directory,
+            maxStderrBytes: config.maxStderrBytes,
+            maxStdoutBytes: config.maxStdoutBytes,
+            timeoutMs: config.processTimeoutMs,
+          });
+          if (result.exitCode !== 0 || result.terminationReason !== "completed")
+            throw new Error(
+              "EMF import is not headless on this Inkscape installation",
+            );
+          const sanitized = importSanitizedSvg(
+            await readFile(temporaryOutput),
+            {
+              format: "svg",
+              maxInputBytes: config.maxInputBytes,
+              maximumMode: config.maximumSanitizeMode,
+              mode: input.sanitizeMode,
+            },
+          );
+          if (
+            (await sha256File(source.absolutePath)) !== input.expectedRevision
+          )
+            throw new Error(
+              "EMF import source revision changed during conversion",
+            );
+          return sanitized;
+        },
+      );
+      const contents = Buffer.from(imported.svg, "utf8");
+      const fonts = await systemFonts(false);
+      const dependencies = inspectImportedSvgDependencies(
+        imported.svg,
+        fonts.families,
+        input.dependencyPolicy,
+      );
+      const warning = "EMF_NATIVE_IMPORT_FIDELITY_NOT_GUARANTEED" as const;
+      const manifest = {
+        dependencies,
+        format: "emf" as const,
+        inputBytes: sourceBytes.length,
+        losses: [warning] as const,
+        outputPath: output.relativePath,
+        outputSha256: createHash("sha256").update(contents).digest("hex"),
+        removed: [...imported.removed],
+        schema: "inkscape-mcp-document-import/v1" as const,
+        sourcePath: source.relativePath,
+        sourceSha256: createHash("sha256").update(sourceBytes).digest("hex"),
+        warnings: [warning] as const,
+      };
+      const publication = await publishImportedSvg({
+        contents,
+        expectedRevision: input.expectedRevision,
+        fileStore,
+        manifest,
+        manifestTargetPath: manifestOutput.absolutePath,
+        outputTargetPath: output.absolutePath,
+        sourcePath: source.absolutePath,
+      });
+      const result = {
+        manifest: publication.manifest,
+        manifestPath: manifestOutput.relativePath,
+        manifestRevision: publication.manifestRevision,
+        outputPath: output.relativePath,
+        revision: publication.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
       };
     },
   );
@@ -8125,7 +8319,7 @@ export function buildServer(
     "document_export",
     {
       description:
-        "Exports one PNG, PDF, SVG, plain SVG, PS, or EPS from a validated ExportSpec through the bounded Inkscape pipeline. PS/EPS require an explicit rasterization policy for effects that cannot remain vector-native.",
+        "Exports one PNG, PDF, SVG, plain SVG, PS, EPS, or EMF from a validated ExportSpec through the bounded Inkscape pipeline. Legacy vector formats require an explicit fidelity policy for effects that cannot remain vector-native.",
       inputSchema: z
         .object({
           spec: exportSpecSchema,
@@ -8134,7 +8328,7 @@ export function buildServer(
         .strict(),
       outputSchema: z.object({
         artifact: artifactSchema,
-        format: z.enum(["eps", "pdf", "png", "plain-svg", "ps", "svg"]),
+        format: z.enum(["emf", "eps", "pdf", "png", "plain-svg", "ps", "svg"]),
         outputPath: z.string().min(1).max(1024),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
         warnings: z.array(z.string()),
@@ -8153,7 +8347,8 @@ export function buildServer(
         spec.format !== "svg" &&
         spec.format !== "plain-svg" &&
         spec.format !== "ps" &&
-        spec.format !== "eps"
+        spec.format !== "eps" &&
+        spec.format !== "emf"
       )
         throw new Error("Use the specialized export tool for this format");
       if (spec.format === "png" && spec.margin !== undefined)
@@ -8201,7 +8396,9 @@ export function buildServer(
               ? /\.ps$/iu
               : spec.format === "eps"
                 ? /\.eps$/iu
-                : /\.svg$/iu;
+                : spec.format === "emf"
+                  ? /\.emf$/iu
+                  : /\.svg$/iu;
       if (!expectedExtension.test(output.relativePath))
         throw new Error(
           "Output extension does not match the requested export format",
@@ -8259,7 +8456,9 @@ export function buildServer(
                   ? "export.ps"
                   : spec.format === "eps"
                     ? "export.eps"
-                    : "export.svg",
+                    : spec.format === "emf"
+                      ? "export.emf"
+                      : "export.svg",
           );
           const background =
             spec.format === "png" && spec.background.mode === "document"
@@ -8272,6 +8471,13 @@ export function buildServer(
               ? preflightPostscriptExport(
                   await readFile(nativeInput.path, "utf8"),
                   spec.rasterizationPolicy,
+                )
+              : undefined;
+          const emfPreflight =
+            spec.format === "emf"
+              ? preflightEmfExport(
+                  await readFile(nativeInput.path, "utf8"),
+                  spec.flattenPolicy,
                 )
               : undefined;
           const run = await runner.run(candidate.executablePath, {
@@ -8300,7 +8506,10 @@ export function buildServer(
           await nativeInput.assertCurrent();
           return {
             bytes: await readFile(temporaryOutput),
-            warnings: postscriptPreflight?.warnings ?? [],
+            warnings: [
+              ...(postscriptPreflight?.warnings ?? []),
+              ...(emfPreflight?.warnings ?? []),
+            ],
           };
         },
       );
@@ -9883,6 +10092,70 @@ async function probePostscriptHeadlessImports(request: {
       statuses[format] = converted ? "validated" : "not-headless";
     }
     return statuses;
+  });
+}
+
+/** Exercises a fixed SVG -> EMF -> SVG round trip entirely in server scratch. */
+async function probeEmfHeadlessImport(request: {
+  config: ServerConfig;
+  inputTypes: readonly string[];
+  runner: ProcessRunner;
+  scratch: ScratchManager;
+}): Promise<NativeImportHeadlessStatuses> {
+  if (!request.inputTypes.some((type) => type.toLowerCase() === "emf"))
+    return {};
+  const discovery = await locateInkscape({
+    config: request.config,
+    cwd: process.cwd(),
+    runner: request.runner,
+  });
+  const candidate = discovery.candidates[0];
+  if (!candidate) return {};
+  const probe = await probeInkscapeCandidate(
+    request.runner,
+    candidate,
+    process.cwd(),
+  );
+  if (!("version" in probe)) return {};
+  return request.scratch.withDirectory("probe", async (directory) => {
+    const svg = join(directory, "source.svg");
+    const emf = join(directory, "probe.emf");
+    const output = join(directory, "output.svg");
+    await writeFile(
+      svg,
+      '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>',
+      "utf8",
+    );
+    const exported = await request.runner.run(candidate.executablePath, {
+      args: [svg, "--export-type=emf", `--export-filename=${emf}`],
+      cwd: directory,
+      maxStderrBytes: request.config.maxStderrBytes,
+      maxStdoutBytes: request.config.maxStdoutBytes,
+      timeoutMs: request.config.processTimeoutMs,
+    });
+    if (exported.exitCode !== 0 || exported.terminationReason !== "completed")
+      return { emf: "not-headless" };
+    try {
+      inspectEmf(await readFile(emf));
+    } catch {
+      return { emf: "not-headless" };
+    }
+    const imported = await request.runner.run(candidate.executablePath, {
+      args: [emf, "--export-type=svg", `--export-filename=${output}`],
+      cwd: directory,
+      maxStderrBytes: request.config.maxStderrBytes,
+      maxStdoutBytes: request.config.maxStdoutBytes,
+      timeoutMs: request.config.processTimeoutMs,
+    });
+    const result = await readFile(output).catch(() => Buffer.alloc(0));
+    return {
+      emf:
+        imported.exitCode === 0 &&
+        imported.terminationReason === "completed" &&
+        result.includes(Buffer.from("<svg"))
+          ? "validated"
+          : "not-headless",
+    };
   });
 }
 

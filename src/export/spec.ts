@@ -284,6 +284,7 @@ const metafileExportSchema = commonExportSchema
       selectionAreaSchema,
     ]),
     format: z.enum(["emf", "wmf", "xaml"]),
+    flattenPolicy: z.enum(["reject", "flatten-with-warning"]).default("reject"),
   })
   .strict();
 

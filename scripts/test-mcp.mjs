@@ -1665,6 +1665,12 @@ try {
     importCapabilities.structuredContent?.nativeImportGates?.find(
       (gate) => gate.format === "ps",
     )?.headless !== "validated" ||
+    importCapabilities.structuredContent?.nativeImportGates?.find(
+      (gate) => gate.format === "emf",
+    )?.headless !== "validated" ||
+    importCapabilities.structuredContent?.nativeImportGates?.find(
+      (gate) => gate.format === "emf",
+    )?.status !== "available" ||
     typeof importCapabilities.structuredContent?.nativeProbeAvailable !==
       "boolean"
   )
@@ -3780,6 +3786,52 @@ try {
     )
   )
     throw new Error("document_export did not publish verified EPS");
+  const emfExport = await workspaceClient.callTool({
+    arguments: {
+      spec: {
+        area: { kind: "drawing" },
+        flattenPolicy: "reject",
+        format: "emf",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+        target: { kind: "file", overwrite: false, path: "a4-drawing.emf" },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export",
+  });
+  const emfExportBytes = await readFile(join(workspaceRoot, "a4-drawing.emf"));
+  if (
+    emfExport.isError ||
+    emfExport.structuredContent?.format !== "emf" ||
+    emfExportBytes.length < 88 ||
+    emfExportBytes.subarray(40, 44).toString("ascii") !== " EMF"
+  )
+    throw new Error("document_export did not publish verified EMF");
+  const reimportedEmf = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: createHash("sha256")
+        .update(emfExportBytes)
+        .digest("hex"),
+      manifestPath: "a4-drawing.emf.import.json",
+      outputPath: "a4-drawing-reimported.emf.svg",
+      path: "a4-drawing.emf",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_emf",
+  });
+  if (
+    reimportedEmf.isError ||
+    reimportedEmf.structuredContent?.manifest?.format !== "emf" ||
+    !(
+      await readFile(
+        join(workspaceRoot, "a4-drawing-reimported.emf.svg"),
+        "utf8",
+      )
+    ).includes("<svg")
+  )
+    throw new Error(
+      "exported EMF did not round-trip through the safe importer",
+    );
   const epsExportBytes = await readFile(join(workspaceRoot, "a4-drawing.eps"));
   const reimportedEps = await workspaceClient.callTool({
     arguments: {

@@ -1547,6 +1547,49 @@ try {
   )
     throw new Error("masks_manage did not release a mask");
   await writeFile(
+    join(workspaceRoot, "advanced-defs.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="gradient"><stop stop-color="#ff0000"/><stop offset="1" stop-color="#0000ff"/></linearGradient><pattern id="pattern" width="2" height="2" patternUnits="userSpaceOnUse"><rect width="1" height="1" fill="#00ff00"/></pattern><marker id="marker" viewBox="0 0 4 4" refX="4" refY="2" markerWidth="4" markerHeight="4"><path d="M 0 0 L 4 2 L 0 4 Z"/></marker><clipPath id="clip"><rect x="0" y="0" width="10" height="10"/></clipPath><mask id="mask"><rect width="100%" height="100%" fill="#ffffff"/></mask></defs><rect width="10" height="10" fill="url(#gradient)" clip-path="url(#clip)"/><rect x="12" width="10" height="10" fill="url(#pattern)" mask="url(#mask)"/><path d="M 0 14 L 20 14" stroke="#000000" marker-end="url(#marker)"/></svg>',
+  );
+  const advancedDefsRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "advanced-defs.svg")))
+    .digest("hex");
+  const exportedAdvancedDefs = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: advancedDefsRevision,
+      flavor: "inkscape",
+      outputPath: "advanced-defs-export.svg",
+      path: "advanced-defs.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_svg",
+  });
+  const exportedAdvancedDefsRevision =
+    exportedAdvancedDefs.structuredContent?.revision;
+  const exportedAdvancedDefsText = await readFile(
+    join(workspaceRoot, "advanced-defs-export.svg"),
+    "utf8",
+  ).catch(() => "");
+  if (
+    exportedAdvancedDefs.isError ||
+    typeof exportedAdvancedDefsRevision !== "string" ||
+    !["clipPath", "linearGradient", "marker", "mask", "pattern"].every((name) =>
+      exportedAdvancedDefsText.includes(name),
+    )
+  )
+    throw new Error("export_svg did not preserve advanced local definitions");
+  const reopenedAdvancedDefs = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: exportedAdvancedDefsRevision,
+      outputPath: "advanced-defs-preview.png",
+      path: "advanced-defs-export.svg",
+      width: 160,
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  if (reopenedAdvancedDefs.isError)
+    throw new Error("Inkscape could not reopen exported advanced definitions");
+  await writeFile(
     join(workspaceRoot, "percentage.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="50%" viewBox="0 0 20 10"/>',
   );

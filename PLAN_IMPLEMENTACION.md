@@ -1877,12 +1877,12 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Puerta F07
 
-- [ ] `F07-G01` Union/difference/intersection/exclusion pasan sus fixtures geométricos/visuales; division/cut/split/fracture pasan si se anuncian, o quedan `[-]`.
-- [ ] `F07-G02` Gradients/patterns/markers/clip/mask sobreviven save/reopen/export.
-- [ ] `F07-G03` Texto conserva o convierte editabilidad según request y reporta fuentes.
-- [ ] `F07-G04` Linked/embed/crop de imágenes respeta roots y dimensiones.
-- [ ] `F07-G05` Ninguna operación destructiva avanzada ocurre sin snapshot/revisión/warning.
-- [ ] `F07-G06` Evidencia en `docs/progress/F07.md`.
+- [x] `F07-G01` Union/difference/intersection/exclusion pasan sus fixtures geométricos/visuales; division/cut pasan al estar anunciados y split/fracture no se anuncian. — El smoke MCP renderiza y compara los cuatro booleanos con fixtures PNG; también ejecuta division/cut reales gateados por la capability del baseline.
+- [x] `F07-G02` Gradients/patterns/markers/clip/mask sobreviven save/reopen/export. — El smoke MCP exporta un SVG combinado con los cinco recursos locales, verifica que conserva sus definitions y lo reabre/renderiza mediante Inkscape.
+- [x] `F07-G03` Texto conserva o convierte editabilidad según request y reporta fuentes. — Las pruebas MCP cubren estructura de text/tspan, text-on-path, flowed text con warning de pérdida, fuentes/preflight y conversión nativa irreversible a paths.
+- [x] `F07-G04` Linked/embed/crop de imágenes respeta roots y dimensiones. — Las pruebas MCP cubren asset local, embed/extract atómico, crop por clip, DPI y bitmap trace con límite de costo; los resolvers rechazan URLs y rutas fuera del workspace.
+- [x] `F07-G05` Ninguna operación destructiva avanzada ocurre sin snapshot/revisión/warning. — Las herramientas destructivas de paths, texto, defs, imágenes y LPE exigen revisión, commit atómico/backup y confirmación o warning cuando aplica; los negativos MCP comprueban revisión, confirmación y preset inválido.
+- [x] `F07-G06` Evidencia en `docs/progress/F07.md`. — WPs F07-WP01–WP07 y esta puerta registran contratos, límites, pruebas unitarias, smoke MCP y deuda explícitamente no anunciada.
 
 ---
 

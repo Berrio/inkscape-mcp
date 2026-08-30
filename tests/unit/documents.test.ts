@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DOMParser } from "@xmldom/xmldom";
 import {
   createSvgConnector,
   retargetSvgConnector,
@@ -38,6 +39,25 @@ import {
 } from "../../src/documents/index.js";
 import { preflightSvg } from "../../src/documents/index.js";
 const mm = (value: number) => ({ unit: "mm" as const, value });
+
+function childElementAttributes(svg: string): Array<{
+  attributes: readonly [string, string][];
+  localName: string;
+}> {
+  const root = new DOMParser().parseFromString(
+    svg,
+    "image/svg+xml",
+  ).documentElement;
+  if (!root) throw new Error("SVG root is missing");
+  return Array.from(root.getElementsByTagName("*")).map((element) => ({
+    attributes: Array.from(element.attributes).map((attribute) => [
+      attribute.name,
+      attribute.value,
+    ]),
+    localName: element.localName,
+  }));
+}
+
 describe("basic SVG documents", () => {
   it("creates a typed Inkscape connector with explicit endpoints", () => {
     const result = createSvgConnector(
@@ -221,15 +241,19 @@ describe("basic SVG documents", () => {
     ).toThrow("percentages require explicit normalization");
   });
   it("changes page/viewBox without transforming document elements", () => {
-    const source = `${createSvgDocument({ page: { width: mm(210), height: mm(297) } }).replace("</svg>", '<rect id="keep" x="10" y="20" width="30" height="40"/></svg>')}`;
+    const source = `${createSvgDocument({
+      page: { width: mm(210), height: mm(297) },
+    }).replace(
+      "</svg>",
+      '<g id="nested" transform="translate(-8 5) scale(1.25)"><rect id="keep" x="10" y="20" width="30" height="40" rx="3" transform="rotate(15 25 40)"/><path id="curve" d="M 0 0 C 12 8 18 -4 30 10" transform="matrix(1 0.2 -0.1 1 4 -2)"/></g>',
+    )}</svg>`;
+    const before = childElementAttributes(source);
     const result = resizePageOnlySvg(
       source,
       { width: mm(210), height: mm(297) },
       { width: mm(148), height: mm(210) },
     );
-    expect(result.svg).toContain(
-      'id="keep" x="10" y="20" width="30" height="40"',
-    );
+    expect(childElementAttributes(result.svg)).toEqual(before);
     expect(inspectSvgSettings(result.svg).viewBox).toEqual({
       x: 0,
       y: 0,

@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { DOMParser } from "@xmldom/xmldom";
 import { comparePngVisual, decodePngRgba } from "../dist/export/index.js";
 import packageMetadata from "../package.json" with { type: "json" };
 import { Buffer } from "node:buffer";
@@ -43,6 +44,20 @@ const toMillimeters = (viewportLength) => {
     q: 0.25,
   };
   return value * millimetersPerUnit[unit];
+};
+const childElementAttributes = (svg) => {
+  const root = new DOMParser().parseFromString(
+    svg,
+    "image/svg+xml",
+  ).documentElement;
+  if (!root) throw new Error("SVG root is missing");
+  return Array.from(root.getElementsByTagName("*")).map((element) => ({
+    attributes: Array.from(element.attributes).map((attribute) => [
+      attribute.name,
+      attribute.value,
+    ]),
+    localName: element.localName,
+  }));
 };
 
 for (const { label, versionNegotiation } of [
@@ -2699,6 +2714,35 @@ try {
   ) {
     throw new Error(
       `A4 SVG round-trip did not preserve 210 × 297 mm within ${A4_ROUND_TRIP_TOLERANCE_MM} mm`,
+    );
+  }
+  const pageOnlyFixture =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297"><g id="nested" transform="translate(-8 5) scale(1.25)"><rect id="keep" x="10" y="20" width="30" height="40" rx="3" transform="rotate(15 25 40)"/><path id="curve" d="M 0 0 C 12 8 18 -4 30 10" transform="matrix(1 0.2 -0.1 1 4 -2)"/></g></svg>';
+  await writeFile(join(workspaceRoot, "page-only.svg"), pageOnlyFixture);
+  const pageOnlyBefore = childElementAttributes(pageOnlyFixture);
+  const pageOnlyRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "page-only.svg")))
+    .digest("hex");
+  const pageOnlyResize = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: pageOnlyRevision,
+      height: 210,
+      path: "page-only.svg",
+      unit: "mm",
+      width: 148,
+      workspaceId: workspace.id,
+    },
+    name: "document_resize",
+  });
+  const pageOnlyAfter = childElementAttributes(
+    await readFile(join(workspaceRoot, "page-only.svg"), "utf8"),
+  );
+  if (
+    pageOnlyResize.isError ||
+    JSON.stringify(pageOnlyAfter) !== JSON.stringify(pageOnlyBefore)
+  ) {
+    throw new Error(
+      "document_resize page_only changed element geometry or transforms",
     );
   }
   const snapshot = await workspaceClient.callTool({

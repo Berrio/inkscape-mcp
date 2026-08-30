@@ -31,6 +31,7 @@ export {
 export {
   planAlignment,
   planDistribution,
+  planRemoveOverlaps,
   unionLayoutBounds,
   type Alignment,
   type DistributionAxis,

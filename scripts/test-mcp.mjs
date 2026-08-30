@@ -81,6 +81,49 @@ try {
     throw new Error("workspace_list did not return an opaque workspace ID");
   }
   await writeFile(
+    join(workspaceRoot, "remove-overlaps.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20"><rect id="left" x="0" y="0" width="10" height="10"/><rect id="right" x="5" y="0" width="10" height="10"/><rect id="separate" x="6" y="15" width="10" height="4"/></svg>',
+  );
+  const overlapsRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "remove-overlaps.svg")))
+    .digest("hex");
+  const overlapsRemoved = await workspaceClient.callTool({
+    arguments: {
+      axis: "horizontal",
+      expectedRevision: overlapsRevision,
+      ids: ["left", "right", "separate"],
+      path: "remove-overlaps.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_remove_overlaps",
+  });
+  const overlapsRemovedRevision = overlapsRemoved.structuredContent?.revision;
+  if (
+    overlapsRemoved.isError ||
+    overlapsRemoved.structuredContent?.moves?.find(
+      (move) => move.id === "right",
+    )?.x !== 5 ||
+    overlapsRemoved.structuredContent?.moves?.find(
+      (move) => move.id === "separate",
+    )?.x !== 0 ||
+    typeof overlapsRemovedRevision !== "string"
+  )
+    throw new Error(
+      "elements_remove_overlaps did not translate only intersecting visual bounds",
+    );
+  const repeatedOverlapId = await workspaceClient.callTool({
+    arguments: {
+      axis: "horizontal",
+      expectedRevision: overlapsRemovedRevision,
+      ids: ["left", "left"],
+      path: "remove-overlaps.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_remove_overlaps",
+  });
+  if (!repeatedOverlapId.isError)
+    throw new Error("elements_remove_overlaps accepted duplicate IDs");
+  await writeFile(
     join(workspaceRoot, "object-conversion.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><rect id="outline" x="1" y="2" width="8" height="4" fill="none" stroke="#000000" stroke-width="1"/></svg>',
   );

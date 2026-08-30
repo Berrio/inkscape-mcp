@@ -70,6 +70,7 @@ exportación: inspección → `document_export_preset_plan` →
 | `elements_flatten_transform` | IDs de primitivas compatibles.                                            | Hornear translate/scale seguro en geometría.        |
 | `elements_align`             | IDs, referencia y eje/alineación.                                         | Centrar elementos con bounds visuales de Inkscape.  |
 | `elements_distribute`        | IDs, eje y distribución.                                                  | Repartir objetos por huecos o centros.              |
+| `elements_remove_overlaps`   | IDs, eje y gap no negativo; sólo traslación de bounds que se cruzan.      | Separar objetos sin unir ni modificar sus paths.    |
 | `document_apply_operations`  | Lista acotada de operaciones tipadas y revisión.                          | Ejecutar varias ediciones como una transacción.     |
 
 ## Texto y paths

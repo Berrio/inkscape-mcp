@@ -12,6 +12,54 @@ export type Alignment =
 export type DistributionAxis = "horizontal" | "vertical";
 export type DistributionMode = "centers" | "edges" | "gaps";
 
+/**
+ * Plans a stable, forward-only separation of intersecting visual bounds.
+ * Objects are ordered by their leading edge (then ID); an object moves only
+ * when it overlaps an already placed object on the perpendicular axis.
+ */
+export function planRemoveOverlaps(
+  bounds: readonly LayoutBounds[],
+  axis: DistributionAxis,
+  gap = 0,
+): readonly LayoutMove[] {
+  if (bounds.length < 2 || bounds.length > 100)
+    throw new Error("Removing overlaps requires between two and 100 elements");
+  if (axis !== "horizontal" && axis !== "vertical")
+    throw new Error("Remove-overlaps axis is invalid");
+  if (!Number.isFinite(gap) || gap < 0 || gap > 10_000)
+    throw new Error(
+      "Remove-overlaps gap must be finite and between zero and 10000",
+    );
+  assertBounds(bounds);
+  const horizontal = axis === "horizontal";
+  const ordered = [...bounds].sort((left, right) => {
+    const difference =
+      coordinate(left, horizontal) - coordinate(right, horizontal);
+    return difference === 0 ? left.id.localeCompare(right.id) : difference;
+  });
+  const placed: LayoutBounds[] = [];
+  const moves: LayoutMove[] = [];
+  for (const item of ordered) {
+    const start = coordinate(item, horizontal);
+    const requiredStart = placed.reduce((required, previous) => {
+      if (!overlapsOnPerpendicularAxis(item, previous, horizontal))
+        return required;
+      return Math.max(required, edge(previous, horizontal) + gap);
+    }, start);
+    const delta = requiredStart - start;
+    const positioned = horizontal
+      ? { ...item, x: item.x + delta }
+      : { ...item, y: item.y + delta };
+    placed.push(positioned);
+    moves.push(
+      horizontal
+        ? { id: item.id, x: delta, y: 0 }
+        : { id: item.id, x: 0, y: delta },
+    );
+  }
+  return moves;
+}
+
 /** Plans translation-only alignment against a native visual reference box. */
 export function planAlignment(
   bounds: readonly LayoutBounds[],
@@ -163,4 +211,16 @@ function centre(bounds: LayoutBounds, horizontal: boolean): number {
 
 function size(bounds: LayoutBounds, horizontal: boolean): number {
   return horizontal ? bounds.width : bounds.height;
+}
+
+function overlapsOnPerpendicularAxis(
+  first: LayoutBounds,
+  second: LayoutBounds,
+  horizontal: boolean,
+): boolean {
+  const firstStart = horizontal ? first.y : first.x;
+  const firstEnd = firstStart + (horizontal ? first.height : first.width);
+  const secondStart = horizontal ? second.y : second.x;
+  const secondEnd = secondStart + (horizontal ? second.height : second.width);
+  return firstStart < secondEnd && secondStart < firstEnd;
 }

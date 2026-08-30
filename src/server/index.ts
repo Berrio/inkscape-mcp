@@ -122,6 +122,7 @@ import {
   nativeVisualBoundsDescriptor,
   planAlignment,
   planDistribution,
+  planRemoveOverlaps,
   unionLayoutBounds,
   type LayoutBounds,
   type LayoutMove,
@@ -5994,6 +5995,84 @@ export function buildServer(
         axis,
         backupCreated: committed.backupPath !== undefined,
         mode,
+        moves,
+        revision: committed.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "elements_remove_overlaps",
+    {
+      description:
+        "Separates overlapping SVG elements by deterministic translation on one axis, using Inkscape visual bounds. It does not union, trim, delete, or otherwise alter path geometry.",
+      inputSchema: z
+        .object({
+          axis: z.enum(["horizontal", "vertical"]),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          gap: z.number().finite().min(0).max(10_000).default(0),
+          ids: z.array(shapeIdSchema).min(2).max(100),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        axis: z.enum(["horizontal", "vertical"]),
+        backupCreated: z.boolean(),
+        gap: z.number().nonnegative(),
+        moves: z.array(layoutMoveSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ axis, expectedRevision, gap, ids, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      assertNoNestedLayoutSelection(source, ids);
+      const nativeBounds = await queryNativeBounds({
+        config,
+        documentPath: document.absolutePath,
+        expectedRevision,
+        runner,
+        scratch,
+        workspaceRoot: document.workspaceRoot,
+      });
+      const moves = planRemoveOverlaps(
+        requireLayoutBounds(ids, nativeBounds),
+        axis,
+        gap,
+      );
+      if (moves.every((move) => move.x === 0 && move.y === 0)) {
+        const output = {
+          axis,
+          backupCreated: false,
+          gap,
+          moves,
+          revision: expectedRevision,
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(output) }],
+          structuredContent: output,
+        };
+      }
+      const committed = await fileStore.commit({
+        contents: Buffer.from(applyLayoutMoves(source, moves)),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        axis,
+        backupCreated: committed.backupPath !== undefined,
+        gap,
         moves,
         revision: committed.revision,
       };

@@ -1782,7 +1782,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F06-T25` Preservar o aplanar transforms solo según opción explícita. — `elements_transform` conserva transforms; `elements_flatten_transform` es la operación explícita que incorpora transformaciones axis-aligned en geometría de primitivas. Rechaza rotación/skew, paths, transforms heredados, CSS stroke y stroke no uniforme antes de alterar el documento.
 - [x] `F06-T26` Implementar align left/center/right/top/middle/bottom. — `elements_align` calcula traslaciones individuales desde bounds visuales nativos, conserva los transforms existentes y rechaza selecciones con ancestro y descendiente.
 - [x] `F06-T27` Implementar distribute edges/centers/gaps. — `elements_distribute` ordena de forma estable por el eje, conserva los extremos y distribuye bordes, centros o gaps de manera determinista.
-- [ ] `F06-T28` Implementar remove overlaps como capability separada.
+- [x] `F06-T28` Implementar remove overlaps como capability separada. — `elements_remove_overlaps` usa bounds visuales nativos, orden estable por eje/ID y traslaciones forward-only; mueve sólo pares que se solapan en el eje perpendicular, admite gap 0–10.000 y no une, recorta ni altera paths. Una selección sin solapes devuelve la revisión original sin backup.
 - [x] `F06-T29` Probar nested transforms, negative scale, text/image y stroke scaling. — Pruebas unitarias cubren composición translate+scale con espejo, texto trasladado, imagen reflejada, escalado de stroke uniforme y rechazos seguros para stroke no uniforme, rotación y transforms anidados/heredados.
 
 #### Estilo básico

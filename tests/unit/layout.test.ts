@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   planAlignment,
   planDistribution,
+  planRemoveOverlaps,
   unionLayoutBounds,
 } from "../../src/geometry/index.js";
 
@@ -58,5 +59,35 @@ describe("layout plans", () => {
     expect(() =>
       planDistribution(bounds.slice(0, 2), "vertical", "gaps"),
     ).toThrow("between three and 100");
+  });
+
+  it("removes only real visual overlaps in a stable forward direction", () => {
+    const overlapping = [
+      { height: 10, id: "a", width: 10, x: 0, y: 0 },
+      { height: 10, id: "b", width: 10, x: 5, y: 0 },
+      { height: 10, id: "c", width: 10, x: 6, y: 20 },
+      { height: 3, id: "d", width: 4, x: 7, y: 2 },
+    ];
+    expect(planRemoveOverlaps(overlapping, "horizontal")).toEqual([
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 5, y: 0 },
+      { id: "c", x: 0, y: 0 },
+      { id: "d", x: 13, y: 0 },
+    ]);
+    expect(
+      planRemoveOverlaps(overlapping.slice(0, 2), "horizontal", 2),
+    ).toEqual([
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 7, y: 0 },
+    ]);
+  });
+
+  it("bounds remove-overlaps input and rejects invalid gaps", () => {
+    expect(() => planRemoveOverlaps(bounds.slice(0, 1), "horizontal")).toThrow(
+      "between two and 100",
+    );
+    expect(() =>
+      planRemoveOverlaps(bounds.slice(0, 2), "horizontal", -1),
+    ).toThrow("gap");
   });
 });

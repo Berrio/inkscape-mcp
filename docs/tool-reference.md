@@ -126,15 +126,15 @@ exportación: inspección → `document_export_preset_plan` →
 
 ## Importación y empaquetado
 
-| Tool                           | Schema/operación                                                                  | Ejemplo de uso                                          |
-| ------------------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `document_import_capabilities` | Tipos observados y puertas bloqueadas de importación nativa.                      | Confirmar qué formatos faltan validar headlessly.       |
-| `document_import`              | SVG/SVGZ local, output, sanitización y pérdidas normalizadas.                     | Convertir SVGZ a SVG saneado con manifest.              |
-| `document_import_svg`          | SVG local, output y política.                                                     | Importar un SVG como documento editable nuevo.          |
-| `document_import_raster`       | Raster local aprobado, link/embed, límite de megapíxeles y pérdidas normalizadas. | Crear SVG desde un raster aprobado.                     |
-| `document_import_pdf`          | PDF local, página dentro de política, importador gateado y pérdidas normalizadas. | Importar una página declarando pérdida de editabilidad. |
-| `document_import_postscript`   | EPS/PS local, sonda headless, SVG saneado y manifest de fidelidad.                | Importar un EPS local sin argumentos nativos libres.    |
-| `assets_package`               | Documento/revisión y directorio nuevo.                                            | Publicar SVG, assets locales y manifest juntos.         |
+| Tool                           | Schema/operación                                                                  | Ejemplo de uso                                            |
+| ------------------------------ | --------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `document_import_capabilities` | Tipos observados y puertas bloqueadas de importación nativa.                      | Confirmar qué formatos faltan validar headlessly.         |
+| `document_import`              | SVG/SVGZ local, output, sanitización y pérdidas normalizadas.                     | Convertir SVGZ a SVG saneado con manifest.                |
+| `document_import_svg`          | SVG local, output y política.                                                     | Importar un SVG como documento editable nuevo.            |
+| `document_import_raster`       | Raster local aprobado, link/embed, límite de megapíxeles y pérdidas normalizadas. | Crear SVG desde un raster aprobado.                       |
+| `document_import_pdf`          | PDF local, página, política de fuentes/perfiles, importador gateado y manifest.   | Importar una página y rechazar dependencias no resueltas. |
+| `document_import_postscript`   | EPS/PS local, sonda headless, política de dependencias y SVG saneado.             | Importar un EPS sin argumentos nativos libres.            |
+| `assets_package`               | Documento/revisión y directorio nuevo.                                            | Publicar SVG, assets locales y manifest juntos.           |
 
 ## Exportación, presets y jobs
 

@@ -3784,6 +3784,13 @@ try {
   if (
     importedEps.isError ||
     importedEps.structuredContent?.manifest?.format !== "eps" ||
+    importedEps.structuredContent?.manifest?.dependencies?.policy?.fonts !==
+      "record" ||
+    importedEps.structuredContent?.manifest?.dependencies?.policy?.profiles !==
+      "record" ||
+    !importedEps.structuredContent?.manifest?.dependencies?.fontPreflight?.warnings?.includes(
+      "FONT_EMBEDDING_AND_GLYPH_COVERAGE_UNVERIFIED",
+    ) ||
     importedEps.structuredContent?.manifest?.warnings?.[0] !==
       "POSTSCRIPT_NATIVE_IMPORT_FIDELITY_NOT_GUARANTEED" ||
     !(await readFile(join(workspaceRoot, "minimal-eps.svg"), "utf8")).includes(
@@ -3907,6 +3914,8 @@ try {
   if (
     importedPdf.isError ||
     importedPdf.structuredContent?.manifest?.format !== "pdf" ||
+    importedPdf.structuredContent?.manifest?.dependencies?.colorManagement
+      ?.limitations?.[0] !== "NO_CMYK_CONVERSION" ||
     importedPdf.structuredContent.manifest?.warnings?.[0] !==
       "PDF_INTERNAL_IMPORT_FIDELITY_NOT_GUARANTEED" ||
     importedPdf.structuredContent.manifest?.losses?.[0] !==

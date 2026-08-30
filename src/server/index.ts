@@ -24,6 +24,7 @@ import {
   inspectNativeImportGates,
   type NativeImportHeadlessStatuses,
 } from "../import/native-import-gates.js";
+import { inspectImportedSvgDependencies } from "../import/dependencies.js";
 import { inspectPdfImportPage } from "../import/pdf-import.js";
 import { publishImportedSvg } from "../import/publication.js";
 import { importSanitizedSvg } from "../import/svg-import.js";
@@ -1082,6 +1083,42 @@ const EXPORT_PRESET_PLAN_TTL_MS = 5 * 60 * 1_000;
 const EXPORT_PRESET_PLAN_MAX_TTL_MS = 15 * 60 * 1_000;
 const PREVIEW_MAX_AXIS = 2_048;
 const TRACE_MAX_MEGAPIXELS = 4;
+const importDependencyPolicySchema = z
+  .object({
+    fonts: z.enum(["record", "reject-missing"]).default("record"),
+    profiles: z.enum(["record", "reject-unresolved"]).default("record"),
+  })
+  .strict()
+  .default({ fonts: "record", profiles: "record" });
+const importedDependenciesSchema = z.object({
+  colorManagement: z.object({
+    cmykLikeReferenceCount: z.number().int().nonnegative(),
+    iccReferenceCount: z.number().int().nonnegative(),
+    limitations: z.tuple([
+      z.literal("NO_CMYK_CONVERSION"),
+      z.literal("NO_OUTPUT_INTENT_VALIDATION"),
+    ]),
+    profiles: z.array(
+      z.object({
+        id: z.string().optional(),
+        name: z.string().optional(),
+        renderingIntent: z.string().optional(),
+      }),
+    ),
+    unresolvedProfileNames: z.array(z.string()),
+  }),
+  fontPreflight: z.object({
+    declaredFamilies: z.array(z.string()),
+    genericFamilies: z.array(z.string()),
+    missingFamilies: z.array(z.string()),
+    presentFamilies: z.array(z.string()),
+    warnings: z.array(z.string()),
+  }),
+  policy: z.object({
+    fonts: z.enum(["record", "reject-missing"]),
+    profiles: z.enum(["record", "reject-unresolved"]),
+  }),
+});
 
 function pngCapabilityLabel(flag: string): string {
   const labels: Readonly<Record<string, string>> = {
@@ -2088,6 +2125,7 @@ export function buildServer(
       inputSchema: z
         .object({
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          dependencyPolicy: importDependencyPolicySchema,
           format: z.enum(["eps", "ps"]),
           manifestPath: z.string().min(1).max(1024),
           outputPath: z.string().min(1).max(1024),
@@ -2100,6 +2138,7 @@ export function buildServer(
         .strict(),
       outputSchema: z.object({
         manifest: z.object({
+          dependencies: importedDependenciesSchema,
           format: z.enum(["eps", "ps"]),
           inputBytes: z.number().int().positive(),
           losses: z.tuple([
@@ -2227,9 +2266,16 @@ export function buildServer(
         },
       );
       const contents = Buffer.from(imported.svg, "utf8");
+      const fonts = await systemFonts(false);
+      const dependencies = inspectImportedSvgDependencies(
+        imported.svg,
+        fonts.families,
+        input.dependencyPolicy,
+      );
       const warning =
         "POSTSCRIPT_NATIVE_IMPORT_FIDELITY_NOT_GUARANTEED" as const;
       const manifest = {
+        dependencies,
         format: input.format,
         inputBytes: sourceBytes.length,
         losses: [warning] as const,
@@ -2272,6 +2318,7 @@ export function buildServer(
       inputSchema: z
         .object({
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          dependencyPolicy: importDependencyPolicySchema,
           fontStrategy: z
             .enum([
               "draw-missing",
@@ -2304,6 +2351,7 @@ export function buildServer(
         }),
       outputSchema: z.object({
         manifest: z.object({
+          dependencies: importedDependenciesSchema,
           fontStrategy: z
             .enum([
               "draw-missing",
@@ -2452,11 +2500,18 @@ export function buildServer(
         },
       );
       const contents = Buffer.from(imported.svg, "utf8");
+      const fonts = await systemFonts(false);
+      const dependencies = inspectImportedSvgDependencies(
+        imported.svg,
+        fonts.families,
+        input.dependencyPolicy,
+      );
       const warnings =
         input.mode === "poppler"
           ? ["PDF_POPPLER_GLYPH_EDITABILITY_LIMITED"]
           : ["PDF_INTERNAL_IMPORT_FIDELITY_NOT_GUARANTEED"];
       const manifest = {
+        dependencies,
         ...(input.fontStrategy === undefined
           ? {}
           : { fontStrategy: input.fontStrategy }),

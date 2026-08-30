@@ -7,6 +7,9 @@ import {
 import { sanitizeSvg } from "../svg/index.js";
 
 const INKSCAPE_NAMESPACE = "http://www.inkscape.org/namespaces/inkscape";
+const MAX_EFFECTS = 1_000;
+const MAX_EFFECT_USERS = 1_000;
+const MAX_EFFECT_TYPE_LENGTH = 128;
 
 export function inspectSvgPathEffects(source: string): {
   effects: readonly { id: string; type: string; usedBy: readonly string[] }[];
@@ -20,29 +23,30 @@ export function inspectSvgPathEffects(source: string): {
     throw new Error("SVG must be sanitized before inspecting path effects");
   const document = new DOMParser().parseFromString(source, "image/svg+xml");
   const all = Array.from(document.getElementsByTagName("*"));
-  return {
-    effects: all
-      .filter((element) => element.localName === "path-effect")
-      .flatMap((effect) => {
-        const id = effect.getAttribute("id");
-        if (!id) return [];
-        const usedBy = all
-          .filter((element) =>
-            (
-              element.getAttributeNS(INKSCAPE_NAMESPACE, "path-effect") ??
-              element.getAttribute("inkscape:path-effect") ??
-              ""
-            )
-              .split(/[;,\s]+/u)
-              .includes(`#${id}`),
-          )
-          .map((element) => element.getAttribute("id"))
-          .filter((candidate): candidate is string => candidate !== null);
-        return [
-          { id, type: effect.getAttribute("effect") ?? "unknown", usedBy },
-        ];
-      }),
-  };
+  const effects: { id: string; type: string; usedBy: readonly string[] }[] = [];
+  for (const effect of all.filter(
+    (element) => element.localName === "path-effect",
+  )) {
+    const id = effect.getAttribute("id");
+    if (!id || !SAFE_ID.test(id)) continue;
+    if (effects.length >= MAX_EFFECTS)
+      throw new Error("Path effect inventory exceeds the supported limit");
+    const usedBy = all
+      .filter((element) => pathEffectReferences(element).includes(id))
+      .map((element) => element.getAttribute("id"))
+      .filter(
+        (candidate): candidate is string =>
+          candidate !== null && SAFE_ID.test(candidate),
+      );
+    if (usedBy.length > MAX_EFFECT_USERS)
+      throw new Error("Path effect user inventory exceeds the supported limit");
+    effects.push({
+      id,
+      type: safeEffectType(effect.getAttribute("effect")),
+      usedBy,
+    });
+  }
+  return { effects };
 }
 
 export function manageSvgPathEffect(
@@ -134,4 +138,15 @@ function pathEffectReferences(element: XmlElement): string[] {
       const id = reference.slice(1);
       return SAFE_ID.test(id) ? [id] : [];
     });
+}
+
+function safeEffectType(value: string | null): string {
+  if (
+    value === null ||
+    value.length < 1 ||
+    value.length > MAX_EFFECT_TYPE_LENGTH ||
+    !/^[A-Za-z0-9_.-]+$/u.test(value)
+  )
+    return "unknown";
+  return value;
 }

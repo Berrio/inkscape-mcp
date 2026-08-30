@@ -4219,8 +4219,18 @@ export function buildServer(
         z
           .object({
             action: z.literal("document"),
+            creator: z.string().min(1).max(2_000).optional(),
             description: z.string().min(1).max(2_000).optional(),
             expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+            keywords: z
+              .array(z.string().min(1).max(128))
+              .min(1)
+              .max(32)
+              .refine(
+                (keywords) => new Set(keywords).size === keywords.length,
+                "Metadata keywords must be unique",
+              )
+              .optional(),
             license: z.string().min(1).max(2_000).optional(),
             path: z.string().min(1).max(1024),
             title: z.string().min(1).max(2_000).optional(),
@@ -4230,6 +4240,8 @@ export function buildServer(
             (value) =>
               value.title !== undefined ||
               value.description !== undefined ||
+              value.creator !== undefined ||
+              value.keywords !== undefined ||
               value.license !== undefined,
             "Metadata requires at least one patch",
           ),
@@ -4936,13 +4948,15 @@ export function buildServer(
         })
         .strict(),
       outputSchema: z.object({
-        effects: z.array(
-          z.object({
-            id: shapeIdSchema,
-            type: z.string(),
-            usedBy: z.array(shapeIdSchema),
-          }),
-        ),
+        effects: z
+          .array(
+            z.object({
+              id: shapeIdSchema,
+              type: z.string().min(1).max(128),
+              usedBy: z.array(shapeIdSchema).max(1_000),
+            }),
+          )
+          .max(1_000),
       }),
       annotations: { readOnlyHint: true },
     },

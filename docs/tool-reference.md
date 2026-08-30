@@ -75,43 +75,43 @@ exportación: inspección → `document_export_preset_plan` →
 
 ## Texto y paths
 
-| Tool                   | Schema/operación                                                            | Ejemplo de uso                                           |
-| ---------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `text_manage`          | Acción de texto/tspans/multilínea con texto plano limitado.                 | Corregir nombre de una etiqueta.                         |
-| `text_path_manage`     | Adjuntar/desadjuntar texto a un path local.                                 | Curvar texto de un logotipo.                             |
-| `text_to_paths`        | IDs, confirmación destructiva y revisión.                                   | Preparar un PDF cuando no habrá fuentes disponibles.     |
-| `objects_to_paths`     | Shapes/paths vectoriales, modo object/stroke y confirmación.                | Convertir un trazo en contorno editable.                 |
-| `paths_combine`        | Paths hermanos compatibles.                                                 | Unir dos formas sin invocar actions libres.              |
-| `paths_boolean`        | Dos paths y operación union/difference/intersection/exclusion/division/cut. | Recortar o dividir una silueta mediante Inkscape nativo. |
-| `path_modify`          | Simplify verificado; inset/outset/offset quedan gateados.                   | Simplificar un path con warning y backup.                |
-| `paths_flatten`        | Dos a 100 paths y confirmación irreversible.                                | Aplanar objetos superpuestos con staging nativo.         |
-| `path_break_apart`     | Path compuesto y nuevos IDs explícitos.                                     | Separar subpaths preservando referencias seguras.        |
-| `path_reverse`         | Path SVG tipado, incluidas curvas, smooth commands y arcos.                 | Invertir dirección sin aproximar geometría.              |
-| `path_node_move`       | Path, índice de segmento y punto finito tipado.                             | Mover un endpoint sin enviar `d` libre.                  |
-| `path_node_edit`       | Nodos lineales, open/close, handles Q/C/A y expansión smooth tipada.        | Ajustar una geometría sin enviar `d` libre.              |
-| `path_effects_inspect` | Efectos LPE locales y paths que los referencian.                            | Auditar efectos sin editar sus parámetros.               |
-| `path_effects_manage`  | Desadjuntar paths o borrar LPE local sin referencias.                       | Retirar una asociación LPE sin editar sus parámetros.    |
-| `flowed_text_inspect`  | Flow roots y número de párrafos.                                            | Localizar texto heredado de Inkscape.                    |
-| `flowed_text_convert`  | Flow simple de una región y confirmación de pérdida.                        | Recuperar texto SVG editable con warning.                |
+| Tool                   | Schema/operación                                                            | Ejemplo de uso                                                          |
+| ---------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `text_manage`          | Acción de texto/tspans/multilínea con texto plano limitado.                 | Corregir nombre de una etiqueta.                                        |
+| `text_path_manage`     | Adjuntar/desadjuntar texto a un path local.                                 | Curvar texto de un logotipo.                                            |
+| `text_to_paths`        | IDs, confirmación destructiva y revisión.                                   | Preparar un PDF cuando no habrá fuentes disponibles.                    |
+| `objects_to_paths`     | Shapes/paths vectoriales, modo object/stroke y confirmación.                | Convertir un trazo en contorno editable.                                |
+| `paths_combine`        | Paths hermanos compatibles.                                                 | Unir dos formas sin invocar actions libres.                             |
+| `paths_boolean`        | Dos paths y operación union/difference/intersection/exclusion/division/cut. | Recortar o dividir una silueta mediante Inkscape nativo.                |
+| `path_modify`          | Simplify verificado; inset/outset/offset quedan gateados.                   | Simplificar un path con warning y backup.                               |
+| `paths_flatten`        | Dos a 100 paths y confirmación irreversible.                                | Aplanar objetos superpuestos con staging nativo.                        |
+| `path_break_apart`     | Path compuesto y nuevos IDs explícitos.                                     | Separar subpaths preservando referencias seguras.                       |
+| `path_reverse`         | Path SVG tipado, incluidas curvas, smooth commands y arcos.                 | Invertir dirección sin aproximar geometría.                             |
+| `path_node_move`       | Path, índice de segmento y punto finito tipado.                             | Mover un endpoint sin enviar `d` libre.                                 |
+| `path_node_edit`       | Nodos lineales, open/close, handles Q/C/A y expansión smooth tipada.        | Ajustar una geometría sin enviar `d` libre.                             |
+| `path_effects_inspect` | Efectos LPE locales y paths que los referencian.                            | Auditar efectos sin editar sus parámetros ni depender de GUI.           |
+| `path_effects_manage`  | Desadjuntar paths o borrar LPE local sin referencias.                       | Retirar una asociación LPE; no edita parámetros ni re-renderiza un LPE. |
+| `flowed_text_inspect`  | Flow roots y número de párrafos.                                            | Localizar texto heredado de Inkscape.                                   |
+| `flowed_text_convert`  | Flow simple de una región y confirmación de pérdida.                        | Recuperar texto SVG editable con warning.                               |
 
 ## Defs, estilos y reutilización
 
-| Tool                       | Schema/operación                                                        | Ejemplo de uso                                      |
-| -------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------- |
-| `gradients_manage`         | Crear/reemplazar/aplicar/eliminar gradientes lineales/radiales.         | Reutilizar un degradado en varios objetos.          |
-| `mesh_gradients_inspect`   | Lista mesh gradients preservados, filas, patches y referencias.         | Auditar un degradado de malla sin editarlo.         |
-| `palette_inspect`          | Colores hex, estilos inline, variables CSS locales y swatches Inkscape. | Inventariar colores de un documento.                |
-| `palette_apply`            | Mapa explícito `from`/`to` para atributos, estilos, variables y stops.  | Sustituir una paleta sin preferencias globales.     |
-| `color_management_inspect` | Perfiles SVG, ICC, CMYK y perfiles sin declarar.                        | Auditar CMYK sin conversión.                        |
-| `patterns_manage`          | Crear/reemplazar/aplicar/eliminar dots/stripes tipados.                 | Aplicar patrón sin CSS/XML libre.                   |
-| `markers_manage`           | Crear/reemplazar/aplicar/eliminar marcadores arrow/dot.                 | Añadir punta de flecha a una línea.                 |
-| `filters_manage`           | Blur, shadow, blend o color matrix tipados.                             | Aplicar sombra declarada; revisar fidelidad visual. |
-| `clips_manage`             | Crear/aplicar/liberar/eliminar clipPath rectangular.                    | Recortar vector sin destruirlo.                     |
-| `masks_manage`             | Crear/aplicar/liberar/eliminar máscara rectangular opaca.               | Ocultar una zona mediante máscara local.            |
-| `symbols_manage`           | Listar/crear/eliminar símbolos y crear clones `use`.                    | Crear instancias de un icono.                       |
-| `guides_grids_manage`      | Inspeccionar/editar guías y xygrids documentales.                       | Configurar una cuadrícula del archivo, no global.   |
-| `defs_vacuum`              | `dryRun` por defecto o eliminación conservadora.                        | Ver defs que se pueden retirar antes de optimizar.  |
-| `metadata_manage`          | Title, description, ARIA y metadatos tipados.                           | Añadir título y descripción accesibles.             |
+| Tool                       | Schema/operación                                                             | Ejemplo de uso                                      |
+| -------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------- |
+| `gradients_manage`         | Crear/reemplazar/aplicar/eliminar gradientes lineales/radiales.              | Reutilizar un degradado en varios objetos.          |
+| `mesh_gradients_inspect`   | Lista mesh gradients preservados, filas, patches y referencias.              | Auditar un degradado de malla sin editarlo.         |
+| `palette_inspect`          | Colores hex, estilos inline, variables CSS locales y swatches Inkscape.      | Inventariar colores de un documento.                |
+| `palette_apply`            | Mapa explícito `from`/`to` para atributos, estilos, variables y stops.       | Sustituir una paleta sin preferencias globales.     |
+| `color_management_inspect` | Perfiles SVG, ICC, CMYK y perfiles sin declarar.                             | Auditar CMYK sin conversión.                        |
+| `patterns_manage`          | Crear/reemplazar/aplicar/eliminar dots/stripes tipados.                      | Aplicar patrón sin CSS/XML libre.                   |
+| `markers_manage`           | Crear/reemplazar/aplicar/eliminar marcadores arrow/dot.                      | Añadir punta de flecha a una línea.                 |
+| `filters_manage`           | Blur, shadow, blend o color matrix tipados.                                  | Aplicar sombra declarada; revisar fidelidad visual. |
+| `clips_manage`             | Crear/aplicar/liberar/eliminar clipPath rectangular.                         | Recortar vector sin destruirlo.                     |
+| `masks_manage`             | Crear/aplicar/liberar/eliminar máscara rectangular opaca.                    | Ocultar una zona mediante máscara local.            |
+| `symbols_manage`           | Listar/crear/eliminar símbolos y crear clones `use`.                         | Crear instancias de un icono.                       |
+| `guides_grids_manage`      | Inspeccionar/editar guías y xygrids documentales.                            | Configurar una cuadrícula del archivo, no global.   |
+| `defs_vacuum`              | `dryRun` por defecto o eliminación conservadora.                             | Ver defs que se pueden retirar antes de optimizar.  |
+| `metadata_manage`          | Title, description, license, creator y keywords en RDF cerrado; ARIA tipado. | Añadir metadata accesible sin RDF/XML libre.        |
 
 ## Imágenes, recursos y accesibilidad
 

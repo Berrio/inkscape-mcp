@@ -8,10 +8,14 @@ import {
 import { sanitizeSvg } from "../svg/index.js";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+const RDF_NAMESPACE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+const DC_NAMESPACE = "http://purl.org/dc/elements/1.1/";
 const SAFE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u;
 
 export type DocumentMetadataPatch = {
+  creator?: string | undefined;
   description?: string | undefined;
+  keywords?: readonly string[] | undefined;
   license?: string | undefined;
   title?: string | undefined;
 };
@@ -30,19 +34,31 @@ export function updateSvgDocumentMetadata(
   if (
     patch.title === undefined &&
     patch.description === undefined &&
+    patch.creator === undefined &&
+    patch.keywords === undefined &&
     patch.license === undefined
   )
     throw new Error("Metadata requires at least one patch");
   const document = parseDocument(source);
   const root = document.documentElement!;
+  const rdf = ensureRdfDescription(document, root);
   if (patch.title !== undefined)
     setRootText(document, root, "title", patch.title);
+  if (patch.title !== undefined)
+    setRdfText(document, rdf, "title", patch.title);
   if (patch.description !== undefined)
     setRootText(document, root, "desc", patch.description);
+  if (patch.description !== undefined)
+    setRdfText(document, rdf, "description", patch.description);
   if (patch.license !== undefined) {
     const metadata = ensureChild(document, root, "metadata");
     setChildText(document, metadata, "license", patch.license);
+    setRdfText(document, rdf, "rights", patch.license);
   }
+  if (patch.creator !== undefined)
+    setRdfText(document, rdf, "creator", patch.creator);
+  if (patch.keywords !== undefined)
+    setRdfKeywords(document, rdf, patch.keywords);
   return serialize(document);
 }
 
@@ -129,6 +145,85 @@ function ensureChild(
   const child = document.createElementNS(SVG_NAMESPACE, name);
   parent.appendChild(child);
   return child;
+}
+
+function ensureRdfDescription(
+  document: XmlDocument,
+  root: XmlElement,
+): XmlElement {
+  root.setAttribute("xmlns:rdf", RDF_NAMESPACE);
+  root.setAttribute("xmlns:dc", DC_NAMESPACE);
+  const metadata = ensureChild(document, root, "metadata");
+  const rdf =
+    Array.from(metadata.childNodes).find(
+      (node): node is XmlElement =>
+        node.nodeType === 1 &&
+        (node as XmlElement).namespaceURI === RDF_NAMESPACE &&
+        (node as XmlElement).localName === "RDF",
+    ) ?? document.createElementNS(RDF_NAMESPACE, "rdf:RDF");
+  if (!rdf.parentNode) metadata.appendChild(rdf);
+  const description =
+    Array.from(rdf.childNodes).find(
+      (node): node is XmlElement =>
+        node.nodeType === 1 &&
+        (node as XmlElement).namespaceURI === RDF_NAMESPACE &&
+        (node as XmlElement).localName === "Description" &&
+        ((node as XmlElement).getAttributeNS(RDF_NAMESPACE, "about") === "" ||
+          !(node as XmlElement).hasAttributeNS(RDF_NAMESPACE, "about")),
+    ) ?? document.createElementNS(RDF_NAMESPACE, "rdf:Description");
+  if (!description.parentNode) {
+    description.setAttributeNS(RDF_NAMESPACE, "rdf:about", "");
+    rdf.appendChild(description);
+  }
+  return description;
+}
+
+function setRdfText(
+  document: XmlDocument,
+  description: XmlElement,
+  name: "creator" | "description" | "rights" | "title",
+  value: string,
+): void {
+  const element =
+    Array.from(description.childNodes).find(
+      (node): node is XmlElement =>
+        node.nodeType === 1 &&
+        (node as XmlElement).namespaceURI === DC_NAMESPACE &&
+        (node as XmlElement).localName === name,
+    ) ?? document.createElementNS(DC_NAMESPACE, `dc:${name}`);
+  if (!element.parentNode) description.appendChild(element);
+  setText(element, value, `RDF ${name}`);
+}
+
+function setRdfKeywords(
+  document: XmlDocument,
+  description: XmlElement,
+  keywords: readonly string[],
+): void {
+  if (keywords.length < 1 || keywords.length > 32)
+    throw new Error("RDF keywords are invalid");
+  if (new Set(keywords).size !== keywords.length)
+    throw new Error("RDF keywords must be unique");
+  for (const keyword of keywords) {
+    if (keyword.length > 128) throw new Error("RDF keyword is invalid");
+    validateText(keyword, "RDF keyword");
+  }
+  const subject =
+    Array.from(description.childNodes).find(
+      (node): node is XmlElement =>
+        node.nodeType === 1 &&
+        (node as XmlElement).namespaceURI === DC_NAMESPACE &&
+        (node as XmlElement).localName === "subject",
+    ) ?? document.createElementNS(DC_NAMESPACE, "dc:subject");
+  if (!subject.parentNode) description.appendChild(subject);
+  while (subject.firstChild) subject.removeChild(subject.firstChild);
+  const bag = document.createElementNS(RDF_NAMESPACE, "rdf:Bag");
+  for (const keyword of keywords) {
+    const item = document.createElementNS(RDF_NAMESPACE, "rdf:li");
+    item.textContent = keyword;
+    bag.appendChild(item);
+  }
+  subject.appendChild(bag);
 }
 
 function firstGraphicChild(root: XmlElement): XmlElement | null {

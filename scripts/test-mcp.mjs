@@ -423,6 +423,37 @@ try {
   const effectsRevision = createHash("sha256")
     .update(await readFile(join(workspaceRoot, "path-effects.svg")))
     .digest("hex");
+  const inspectedEffects = await workspaceClient.callTool({
+    arguments: {
+      path: "path-effects.svg",
+      workspaceId: workspace.id,
+    },
+    name: "path_effects_inspect",
+  });
+  if (
+    inspectedEffects.isError ||
+    inspectedEffects.structuredContent?.effects?.[0]?.id !== "round" ||
+    inspectedEffects.structuredContent?.effects?.[0]?.usedBy?.[0] !== "lpe_path"
+  )
+    throw new Error("path_effects_inspect did not report local LPE references");
+  const lpePreview = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: effectsRevision,
+      outputPath: "path-effects-preview.png",
+      path: "path-effects.svg",
+      width: 128,
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  if (
+    lpePreview.isError ||
+    lpePreview.structuredContent?.width !== 128 ||
+    !(await readFile(join(workspaceRoot, "path-effects-preview.png")))
+      .subarray(1, 4)
+      .equals(Buffer.from("PNG"))
+  )
+    throw new Error("Inkscape could not render the preserved local LPE smoke");
   const detachedEffect = await workspaceClient.callTool({
     arguments: {
       action: "detach",
@@ -898,8 +929,10 @@ try {
   const documentMetadata = await workspaceClient.callTool({
     arguments: {
       action: "document",
+      creator: "Inkscape MCP",
       description: "Accessible preview",
       expectedRevision: metadataRevision,
+      keywords: ["preview", "accessibility"],
       license: "MIT",
       path: "metadata.svg",
       title: "Preview",
@@ -910,6 +943,16 @@ try {
   const documentMetadataRevision = documentMetadata.structuredContent?.revision;
   if (documentMetadata.isError || typeof documentMetadataRevision !== "string")
     throw new Error("metadata_manage did not update document metadata");
+  const metadataText = await readFile(
+    join(workspaceRoot, "metadata.svg"),
+    "utf8",
+  );
+  if (
+    !metadataText.includes("<rdf:RDF") ||
+    !metadataText.includes(">Inkscape MCP</dc:creator>") ||
+    !metadataText.includes("<rdf:li>preview</rdf:li>")
+  )
+    throw new Error("metadata_manage did not publish bounded RDF metadata");
   const elementMetadata = await workspaceClient.callTool({
     arguments: {
       action: "elements",

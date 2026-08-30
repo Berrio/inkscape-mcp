@@ -28,6 +28,15 @@ describe("SVG live path effect inspection", () => {
     ).toThrow("sanitized");
   });
 
+  it("bounds untrusted LPE identifiers and types before returning an inventory", () => {
+    const result = inspectSvgPathEffects(
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><defs><inkscape:path-effect id="valid" effect="x&lt;unsafe"/><inkscape:path-effect id="not safe" effect="fillet_chamfer"/></defs><path id="path" inkscape:path-effect="#valid"/></svg>',
+    );
+    expect(result).toEqual({
+      effects: [{ id: "valid", type: "unknown", usedBy: ["path"] }],
+    });
+  });
+
   it("detaches one local effect atomically before deleting its unused definition", () => {
     const source =
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><defs><inkscape:path-effect id="round" effect="fillet_chamfer"/><inkscape:path-effect id="bend" effect="bend_path"/></defs><path id="first" inkscape:path-effect="#round;#bend"/><path id="second" inkscape:path-effect="#round"/></svg>';

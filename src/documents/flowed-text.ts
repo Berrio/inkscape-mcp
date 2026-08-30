@@ -9,15 +9,22 @@ import { sanitizeSvg } from "../svg/index.js";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const SAFE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u;
+const MAX_FLOWED_TEXTS = 1_000;
+const MAX_FLOW_PARAGRAPHS = 1_000;
+const MAX_FLOW_TEXT_LENGTH = 100_000;
 const STYLE_ATTRIBUTES = [
+  "direction",
   "fill",
   "font-family",
   "font-size",
   "font-style",
   "font-weight",
+  "letter-spacing",
   "opacity",
   "stroke",
   "text-anchor",
+  "word-spacing",
+  "writing-mode",
 ] as const;
 
 export type FlowedTextInspection = {
@@ -27,15 +34,18 @@ export type FlowedTextInspection = {
 /** Lists non-standard Inkscape flowed text without interpreting layout. */
 export function inspectSvgFlowedText(source: string): FlowedTextInspection {
   const document = parseSafeDocument(source);
+  const flows = Array.from(document.getElementsByTagName("*")).filter(
+    (element) => element.localName === "flowRoot",
+  );
+  if (flows.length > MAX_FLOWED_TEXTS)
+    throw new Error("Flowed text inspection exceeds the supported limit");
   return {
-    flowedTexts: Array.from(document.getElementsByTagName("*"))
-      .filter((element) => element.localName === "flowRoot")
-      .map((element) => ({
-        ...(element.getAttribute("id") === null
-          ? {}
-          : { id: element.getAttribute("id")! }),
-        paragraphs: descendants(element, "flowPara").length,
-      })),
+    flowedTexts: flows.map((element) => ({
+      ...(safeId(element.getAttribute("id")) === undefined
+        ? {}
+        : { id: safeId(element.getAttribute("id"))! }),
+      paragraphs: descendants(element, "flowPara").length,
+    })),
   };
 }
 
@@ -46,15 +56,24 @@ export function convertSimpleSvgFlowedText(
 ): { id: string; svg: string; warning: "FLOWED_TEXT_LAYOUT_LOST" } {
   if (!SAFE_ID.test(id)) throw new Error("Flowed text ID is invalid");
   const document = parseSafeDocument(source);
-  const flow = Array.from(document.getElementsByTagName("*")).find(
+  const flows = Array.from(document.getElementsByTagName("*")).filter(
     (element) =>
       element.localName === "flowRoot" && element.getAttribute("id") === id,
   );
-  if (!flow) throw new Error("Flowed text ID does not exist");
+  if (flows.length !== 1)
+    throw new Error("Flowed text ID must identify exactly one flowRoot");
+  const flow = flows[0]!;
   const region = directChildren(flow, "flowRegion");
   const paragraphs = directChildren(flow, "flowPara");
-  const rects = region.length === 1 ? descendants(region[0]!, "rect") : [];
-  if (region.length !== 1 || rects.length !== 1 || paragraphs.length < 1)
+  const rects = region.length === 1 ? directChildren(region[0]!, "rect") : [];
+  if (
+    region.length !== 1 ||
+    rects.length !== 1 ||
+    paragraphs.length < 1 ||
+    paragraphs.length > MAX_FLOW_PARAGRAPHS ||
+    !hasOnlyElementChildren(region[0]!, new Set(rects)) ||
+    paragraphs.some((paragraph) => !hasOnlyPlainText(paragraph))
+  )
     throw new Error("Only one-region simple flowed text can be converted");
   if (
     Array.from(flow.childNodes).some(
@@ -65,6 +84,11 @@ export function convertSimpleSvgFlowedText(
     )
   )
     throw new Error("Flowed text structure is not supported for conversion");
+  const content = paragraphs.map((paragraph) =>
+    (paragraph.textContent ?? "").trim(),
+  );
+  if (content.join("\n").length > MAX_FLOW_TEXT_LENGTH)
+    throw new Error("Flowed text content exceeds the supported limit");
   const rect = rects[0]!;
   const x = finiteAttribute(rect, "x", 0);
   const y = finiteAttribute(rect, "y", 0);
@@ -75,13 +99,11 @@ export function convertSimpleSvgFlowedText(
     const value = flow.getAttribute(name);
     if (value !== null) text.setAttribute(name, value);
   }
-  paragraphs.forEach((paragraph, index) => {
+  content.forEach((paragraph, index) => {
     const span = document.createElementNS(SVG_NAMESPACE, "tspan");
     span.setAttribute("x", String(x));
     span.setAttribute("y", String(y + fontSize * (index + 1) * 1.2));
-    span.appendChild(
-      document.createTextNode((paragraph.textContent ?? "").trim()),
-    );
+    span.appendChild(document.createTextNode(paragraph));
     text.appendChild(span);
   });
   const parent = flow.parentNode;
@@ -119,6 +141,26 @@ function directChildren(element: XmlElement, localName: string): XmlElement[] {
     (child): child is XmlElement =>
       child.nodeType === child.ELEMENT_NODE && child.localName === localName,
   );
+}
+
+function hasOnlyElementChildren(
+  element: XmlElement,
+  allowed: ReadonlySet<XmlElement>,
+): boolean {
+  return Array.from(element.childNodes).every(
+    (node) =>
+      node.nodeType !== node.ELEMENT_NODE || allowed.has(node as XmlElement),
+  );
+}
+
+function hasOnlyPlainText(element: XmlElement): boolean {
+  return Array.from(element.childNodes).every(
+    (node) => node.nodeType !== node.ELEMENT_NODE,
+  );
+}
+
+function safeId(value: string | null): string | undefined {
+  return value !== null && SAFE_ID.test(value) ? value : undefined;
 }
 
 function finiteAttribute(

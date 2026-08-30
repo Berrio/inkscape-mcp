@@ -1063,6 +1063,80 @@ try {
   )
     throw new Error("text_path_manage did not detach text from a path");
   await writeFile(
+    join(workspaceRoot, "flowed-text.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30" viewBox="0 0 40 30"><flowRoot id="story" font-size="10" fill="#112233" letter-spacing="1"><flowRegion><rect x="4" y="2" width="30" height="24"/></flowRegion><flowPara>First line</flowPara><flowPara>Second line</flowPara></flowRoot></svg>',
+  );
+  const flowedTextRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "flowed-text.svg")))
+    .digest("hex");
+  const flowedTextInspection = await workspaceClient.callTool({
+    arguments: { path: "flowed-text.svg", workspaceId: workspace.id },
+    name: "flowed_text_inspect",
+  });
+  if (
+    flowedTextInspection.isError ||
+    flowedTextInspection.structuredContent?.flowedTexts?.[0]?.id !== "story" ||
+    flowedTextInspection.structuredContent?.flowedTexts?.[0]?.paragraphs !== 2
+  )
+    throw new Error("flowed_text_inspect did not report the simple flow root");
+  const flowedTextConverted = await workspaceClient.callTool({
+    arguments: {
+      confirmLossy: true,
+      expectedRevision: flowedTextRevision,
+      id: "story",
+      path: "flowed-text.svg",
+      workspaceId: workspace.id,
+    },
+    name: "flowed_text_convert",
+  });
+  const flowedTextConvertedRevision =
+    flowedTextConverted.structuredContent?.revision;
+  if (
+    flowedTextConverted.isError ||
+    flowedTextConverted.structuredContent?.warning !==
+      "FLOWED_TEXT_LAYOUT_LOST" ||
+    typeof flowedTextConvertedRevision !== "string"
+  )
+    throw new Error("flowed_text_convert did not publish the lossy conversion");
+  const flowedTextPreview = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: flowedTextConvertedRevision,
+      outputPath: "flowed-text.png",
+      path: "flowed-text.svg",
+      width: 160,
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  if (flowedTextPreview.isError)
+    throw new Error("flowed_text_convert result could not render in Inkscape");
+  await writeFile(
+    join(workspaceRoot, "flowed-text-complex.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><flowRoot id="complex"><flowRegion><rect/><rect/></flowRegion><flowPara>Not convertible</flowPara></flowRoot></svg>',
+  );
+  const complexFlowRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "flowed-text-complex.svg")))
+    .digest("hex");
+  const complexFlowConversion = await workspaceClient.callTool({
+    arguments: {
+      confirmLossy: true,
+      expectedRevision: complexFlowRevision,
+      id: "complex",
+      path: "flowed-text-complex.svg",
+      workspaceId: workspace.id,
+    },
+    name: "flowed_text_convert",
+  });
+  if (
+    !complexFlowConversion.isError ||
+    createHash("sha256")
+      .update(await readFile(join(workspaceRoot, "flowed-text-complex.svg")))
+      .digest("hex") !== complexFlowRevision
+  )
+    throw new Error(
+      "flowed_text_convert did not reject complex input atomically",
+    );
+  await writeFile(
     join(workspaceRoot, "connector-route.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><rect id="from" x="0" y="0" width="10" height="10"/><rect id="barrier" x="18" y="0" width="8" height="10"/><rect id="to" x="40" y="0" width="10" height="10"/><path id="connector" d="M 0 0 L 1 1" inkscape:connector-type="polyline"/></svg>',
   );

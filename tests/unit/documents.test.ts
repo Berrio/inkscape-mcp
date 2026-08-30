@@ -721,6 +721,16 @@ describe("basic SVG documents", () => {
       listSvgPages(deleteSvgPage(updated.svg, "page-a")).map((page) => page.id),
     ).toEqual(["page-b"]);
   });
+  it("reads pages from a sanitized copy while page mutations reject unsafe SVG", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"><sodipodi:namedview><inkscape:page id="page-safe" x="0" y="0" width="100" height="80"/></sodipodi:namedview><image href="https://example.test/private.png"/></svg>';
+    expect(listSvgPages(source)).toEqual([
+      { height: 80, id: "page-safe", width: 100, x: 0, y: 0 },
+    ]);
+    expect(() =>
+      addSvgPage(source, { height: 20, id: "page-new", width: 20, x: 0, y: 0 }),
+    ).toThrow("SVG must be sanitized before changing its pages");
+  });
   it("preserves page IDs and namedview references through full page CRUD", () => {
     const source =
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"><sodipodi:namedview inkscape:current-page="page_second"><sodipodi:guide position="4,5" orientation="1,0"/><inkscape:page id="page_first" x="0" y="0" width="100" height="80"/></sodipodi:namedview></svg>';

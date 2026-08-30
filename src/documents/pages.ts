@@ -50,7 +50,7 @@ export type SvgPageLayoutValidation = {
 };
 
 export function listSvgPages(source: string): readonly SvgPage[] {
-  return pageElements(parseDocument(source)).map(readPage);
+  return pageElements(parseReadDocument(source)).map(readPage);
 }
 
 /** Validates explicit page rectangles against visual object bounds supplied by a trusted adapter. */
@@ -142,6 +142,25 @@ function parseDocument(source: string): XmlDocument {
   if (checked.removed.length > 0)
     throw new Error("SVG must be sanitized before changing its pages");
   const document = new DOMParser().parseFromString(source, "image/svg+xml");
+  requireRoot(document);
+  return document;
+}
+
+/**
+ * Page enumeration is a read-only operation. Parse the sanitized copy so an
+ * unsafe external reference cannot make inspection fail or reach the XML DOM.
+ * Page mutations continue to use parseDocument and reject altered input.
+ */
+function parseReadDocument(source: string): XmlDocument {
+  const checked = sanitizeSvg(source, {
+    maxElements: 100_000,
+    maxInputBytes: 50 * 1024 * 1024,
+    mode: "preserve-local",
+  });
+  const document = new DOMParser().parseFromString(
+    checked.svg,
+    "image/svg+xml",
+  );
   requireRoot(document);
   return document;
 }

@@ -44,6 +44,7 @@
     "evidence:f03": "npm run build --silent && node scripts/generate-f03-preview-evidence.mjs",
     "test:f03-g08": "npm run build --silent && node scripts/test-f03-css-resize.mjs",
     "test:f03-g09": "npm run build --silent && node scripts/test-f03-page-settings.mjs",
+    "test:f04-g01": "npm run build --silent && node scripts/test-f04-inventory.mjs",
     "inspect": "npx --no-install @modelcontextprotocol/inspector node dist/cli.js",
     "test:conformance": "npx --no-install @modelcontextprotocol/conformance",
     "pack:check": "npm pack --dry-run --json",

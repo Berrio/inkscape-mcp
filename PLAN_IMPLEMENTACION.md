@@ -1666,7 +1666,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Puerta F04
 
-- [ ] `F04-G01` Inspección de corpus cubre todos los inventarios con paginación estable.
+- [x] `F04-G01` Inspección de corpus cubre todos los inventarios con paginación estable. — El smoke stdio `test:f04-g01` cubre inventario deep de defs, imágenes, capas, fuentes, namespaces, referencias y tipos, comprueba que no filtra texto ni URIs, y verifica tres páginas `rect` estables con `nextOffset` acotado.
 - [ ] `F04-G02` Preflight detecta fixtures deliberadamente defectuosos sin falsos éxitos críticos.
 - [ ] `F04-G03` Preview coincide en tamaño/área/transparencia y respeta límites.
 - [ ] `F04-G04` Ninguna lectura modifica mtime/contenido del diseño.

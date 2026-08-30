@@ -117,6 +117,23 @@ describe("basic SVG documents", () => {
     ).toBe(true);
     expect(result.svg).toContain('inkscape:connection-start="#from"');
   });
+
+  it("keeps compatible connectors attached when an endpoint is transformed or resized", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><rect id="from" x="0" y="0" width="10" height="10"/><rect id="to" x="20" y="0" width="10" height="10"/><path id="connector" d="M 5 5 L 25 5" inkscape:connector-type="polyline" inkscape:connection-start="#from" inkscape:connection-end="#to"/></svg>';
+    const transformed = transformSvgShapes(source, ["to"], {
+      kind: "translate",
+      x: 10,
+      y: 0,
+    });
+    expect(transformed.reroutedConnectorIds).toEqual(["connector"]);
+    expect(transformed.svg).toContain('d="M 5 5 L 35 5"');
+    const updated = updateSvgShapes(transformed.svg, [
+      { geometry: { kind: "rect", x: 30 }, id: "from" },
+    ]);
+    expect(updated.reroutedConnectorIds).toEqual(["connector"]);
+    expect(updated.svg).toContain('d="M 35 5"');
+  });
   it("provides immutable, versioned named page sizes", () => {
     const a4 = pageSizeFromPreset("a4-portrait");
     a4.width.value = 1;

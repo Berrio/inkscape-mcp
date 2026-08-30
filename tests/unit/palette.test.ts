@@ -85,4 +85,21 @@ describe("document palette", () => {
     expect(result.svg).toContain("stop-color:#010203");
     expect(result.svg).toContain("fill:#010203");
   });
+
+  it("handles document-local CSS colors that feed currentColor", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg"><style>.brand { color: #FF0000; fill: currentColor; } .accent { stroke:#00FF00; }</style><path class="brand"/><path class="accent"/></svg>';
+    expect(inspectSvgPalette(source).colors).toEqual([
+      { color: "#00ff00", uses: 1 },
+      { color: "#ff0000", uses: 1 },
+    ]);
+    const result = applySvgPalette(source, [
+      { from: "#ff0000", to: "#112233" },
+      { from: "#00ff00", to: "#445566" },
+    ]);
+    expect(result.replacements).toBe(2);
+    expect(result.svg).toContain("color: #112233");
+    expect(result.svg).toContain("stroke:#445566");
+    expect(result.svg).toContain("fill: currentColor");
+  });
 });

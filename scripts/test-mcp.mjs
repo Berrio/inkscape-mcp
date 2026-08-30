@@ -1183,14 +1183,14 @@ try {
     join(workspaceRoot, "connector-route.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><rect id="from" x="0" y="0" width="10" height="10"/><rect id="barrier" x="18" y="0" width="8" height="10"/><rect id="to" x="40" y="0" width="10" height="10"/><path id="connector" d="M 0 0 L 1 1" inkscape:connector-type="polyline"/></svg>',
   );
-  const connectorRouteRevision = createHash("sha256")
+  const connectorRouteSourceRevision = createHash("sha256")
     .update(await readFile(join(workspaceRoot, "connector-route.svg")))
     .digest("hex");
   const connectorRoute = await workspaceClient.callTool({
     arguments: {
       axis: "horizontal-first",
       clearance: 2,
-      expectedRevision: connectorRouteRevision,
+      expectedRevision: connectorRouteSourceRevision,
       fromId: "from",
       id: "connector",
       obstacleIds: ["barrier"],
@@ -1200,14 +1200,70 @@ try {
     },
     name: "connector_route",
   });
+  const connectorRouteRevision = connectorRoute.structuredContent?.revision;
   if (
     connectorRoute.isError ||
+    typeof connectorRouteRevision !== "string" ||
     connectorRoute.structuredContent?.avoidedObstacleIds?.[0] !== "barrier" ||
     !connectorRoute.structuredContent?.points?.some(
       (point) => point[1] === -2 || point[1] === 12,
     )
   )
     throw new Error("connector_route did not avoid its explicit obstacle");
+  const followedConnector = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: connectorRouteRevision,
+      ids: ["to"],
+      path: "connector-route.svg",
+      transform: { kind: "translate", x: 10, y: 0 },
+      workspaceId: workspace.id,
+    },
+    name: "elements_transform",
+  });
+  if (
+    followedConnector.isError ||
+    followedConnector.structuredContent?.reroutedConnectorIds?.[0] !==
+      "connector"
+  )
+    throw new Error("elements_transform did not follow the semantic connector");
+  await writeFile(
+    join(workspaceRoot, "path-node-transform.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><path id="curve" d="m 1 2 l 3 4 q 1 1 2 2"/></svg>',
+  );
+  const pathNodeSourceRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "path-node-transform.svg")))
+    .digest("hex");
+  const transformedPath = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: pathNodeSourceRevision,
+      ids: ["curve"],
+      path: "path-node-transform.svg",
+      transform: { angle: 30, cx: 0, cy: 0, kind: "rotate" },
+      workspaceId: workspace.id,
+    },
+    name: "elements_transform",
+  });
+  const transformedPathRevision = transformedPath.structuredContent?.revision;
+  if (transformedPath.isError || typeof transformedPathRevision !== "string")
+    throw new Error("elements_transform did not transform the path fixture");
+  const movedPathNode = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: transformedPathRevision,
+      id: "curve",
+      index: 2,
+      path: "path-node-transform.svg",
+      point: { x: 9, y: 8 },
+      workspaceId: workspace.id,
+    },
+    name: "path_node_move",
+  });
+  if (
+    movedPathNode.isError ||
+    !(
+      await readFile(join(workspaceRoot, "path-node-transform.svg"), "utf8")
+    ).includes('d="M 1 2 L 4 6 Q 5 7 9 8"')
+  )
+    throw new Error("path_node_move did not preserve a transformed path index");
   await writeFile(
     join(workspaceRoot, "image-crop.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><image id="photo" href="data:image/png;base64,AA==" width="10" height="8"/></svg>',

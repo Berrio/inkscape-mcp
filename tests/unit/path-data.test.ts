@@ -9,6 +9,10 @@ import {
   splitSvgPathSubpaths,
   SVG_PATH_LIMITS,
 } from "../../src/documents/index.js";
+import {
+  moveSvgPathNode,
+  transformSvgShapes,
+} from "../../src/documents/index.js";
 
 describe("SVG path AST", () => {
   it("parses all SVG command families and preserves relative commands", () => {
@@ -185,5 +189,16 @@ describe("SVG path AST", () => {
         index: 2,
       }),
     ).toBe("M 0 0 Q 1 2 3 4 Q 5 6 5 6");
+  });
+
+  it("keeps canonical segment indexes stable when an enclosing transform changes", () => {
+    const transformed = transformSvgShapes(
+      '<svg xmlns="http://www.w3.org/2000/svg"><path id="curve" d="m 1 2 l 3 4 q 1 1 2 2"/></svg>',
+      ["curve"],
+      { kind: "rotate", angle: 30, cx: 0, cy: 0 },
+    );
+    const moved = moveSvgPathNode(transformed.svg, "curve", 2, { x: 9, y: 8 });
+    expect(moved.svg).toContain('transform="rotate(30 0 0)"');
+    expect(moved.svg).toContain('d="M 1 2 L 4 6 Q 5 7 9 8"');
   });
 });

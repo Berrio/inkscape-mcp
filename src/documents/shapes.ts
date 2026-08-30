@@ -808,7 +808,11 @@ export function transformSvgShapes(
   source: string,
   ids: readonly string[],
   transform: ElementTransform,
-): { ids: readonly string[]; svg: string } {
+): {
+  ids: readonly string[];
+  reroutedConnectorIds: readonly string[];
+  svg: string;
+} {
   if (ids.length < 1 || ids.length > 100)
     throw new Error("Transform batch must contain between one and 100 IDs");
   if (new Set(ids).size !== ids.length)
@@ -827,9 +831,14 @@ export function transformSvgShapes(
       existing ? `${existing} ${transformValue}` : transformValue,
     );
   }
+  const synchronized = synchronizeSvgConnectors(
+    new XMLSerializer().serializeToString(document),
+    ids,
+  );
   return {
     ids: [...ids],
-    svg: new XMLSerializer().serializeToString(document),
+    reroutedConnectorIds: synchronized.reroutedConnectorIds,
+    svg: synchronized.svg,
   };
 }
 
@@ -1040,7 +1049,11 @@ export function editSvgPathNode(
 export function updateSvgShapes(
   source: string,
   updates: readonly ElementUpdate[],
-): { ids: readonly string[]; svg: string } {
+): {
+  ids: readonly string[];
+  reroutedConnectorIds: readonly string[];
+  svg: string;
+} {
   if (updates.length < 1 || updates.length > 100)
     throw new Error("Update batch must contain between one and 100 elements");
   if (new Set(updates.map((update) => update.id)).size !== updates.length)
@@ -1084,10 +1097,73 @@ export function updateSvgShapes(
       );
     }
   }
+  const geometryIds = updates
+    .filter((update) => update.geometry !== undefined)
+    .map((update) => update.id);
+  const synchronized = synchronizeSvgConnectors(
+    new XMLSerializer().serializeToString(document),
+    geometryIds,
+  );
   return {
     ids: updates.map((update) => update.id),
-    svg: new XMLSerializer().serializeToString(document),
+    reroutedConnectorIds: synchronized.reroutedConnectorIds,
+    svg: synchronized.svg,
   };
+}
+
+/** Re-routes safe simple connectors when one of their direct endpoints moves. */
+function synchronizeSvgConnectors(
+  source: string,
+  changedIds: readonly string[],
+): { reroutedConnectorIds: readonly string[]; svg: string } {
+  if (changedIds.length === 0) return { reroutedConnectorIds: [], svg: source };
+  const affected = new Set(changedIds);
+  const document = parseSafeDocument(source);
+  const connectors = Array.from(document.getElementsByTagName("path"))
+    .filter(
+      (element) => element.getAttribute("inkscape:connector-type") !== null,
+    )
+    .flatMap((element) => {
+      const id = element.getAttribute("id");
+      const fromId = connectorReferenceId(
+        element.getAttribute("inkscape:connection-start"),
+      );
+      const toId = connectorReferenceId(
+        element.getAttribute("inkscape:connection-end"),
+      );
+      return id === null || fromId === undefined || toId === undefined
+        ? []
+        : [{ fromId, id, toId }];
+    })
+    .filter(
+      (connector) =>
+        affected.has(connector.fromId) || affected.has(connector.toId),
+    )
+    .sort((left, right) => left.id.localeCompare(right.id));
+  if (connectors.length > 100)
+    throw new Error("Connector follow-after-move exceeds the supported limit");
+  let svg = source;
+  const reroutedConnectorIds: string[] = [];
+  for (const connector of connectors) {
+    try {
+      svg = routeSvgConnector(svg, {
+        axis: "auto",
+        fromId: connector.fromId,
+        id: connector.id,
+        toId: connector.toId,
+      }).svg;
+      reroutedConnectorIds.push(connector.id);
+    } catch {
+      // Unsupported endpoints or transforms keep their current user-authored route.
+    }
+  }
+  return { reroutedConnectorIds, svg };
+}
+
+function connectorReferenceId(value: string | null): string | undefined {
+  if (value === null || !value.startsWith("#")) return undefined;
+  const id = value.slice(1);
+  return SAFE_ID.test(id) ? id : undefined;
 }
 
 /** Duplicates a bounded SVG subtree or creates an explicit SVG <use> clone. */

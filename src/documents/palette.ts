@@ -3,11 +3,11 @@ import { DOMParser, type Element as XmlElement } from "@xmldom/xmldom";
 import { sanitizeSvg } from "../svg/index.js";
 
 const COLOR = /^#[0-9a-f]{6}$/iu;
-const PAINT_ATTRIBUTES = ["fill", "stroke", "stop-color"] as const;
+const PAINT_ATTRIBUTES = ["color", "fill", "stroke", "stop-color"] as const;
 const CSS_VARIABLE_DECLARATION =
   /(--[A-Za-z_][A-Za-z0-9_-]{0,63})\s*:\s*(#[0-9a-f]{6})\b/giu;
 const STYLE_PAINT_COLOR =
-  /((?:^|;)\s*(?:fill|stroke|stop-color)\s*:\s*)(#[0-9a-f]{6})\b/giu;
+  /((?:^|[;{])\s*(?:color|fill|stroke|stop-color)\s*:\s*)(#[0-9a-f]{6})\b/giu;
 
 export function inspectSvgPalette(
   source: string,
@@ -38,6 +38,9 @@ export function inspectSvgPalette(
     }
   for (const element of Array.from(document.getElementsByTagName("*")))
     for (const color of inlineStyleColors(element.getAttribute("style") ?? ""))
+      counts.set(color, (counts.get(color) ?? 0) + 1);
+  for (const style of Array.from(document.getElementsByTagName("style")))
+    for (const color of inlineStyleColors(style.textContent ?? ""))
       counts.set(color, (counts.get(color) ?? 0) + 1);
   const colors = [...counts.entries()]
     .sort(
@@ -94,13 +97,22 @@ export function applySvgPalette(
     }
   for (const style of Array.from(document.getElementsByTagName("style"))) {
     const css = style.textContent ?? "";
-    const rewritten = css.replace(
+    const variablesRewritten = css.replace(
       CSS_VARIABLE_DECLARATION,
       (whole, name: string, color: string) => {
         const replacement = normalized.get(color.toLowerCase());
         if (replacement === undefined) return whole;
         count += 1;
         return whole.replace(color, replacement);
+      },
+    );
+    const rewritten = variablesRewritten.replace(
+      STYLE_PAINT_COLOR,
+      (whole, prefix: string, color: string) => {
+        const replacement = normalized.get(color.toLowerCase());
+        if (replacement === undefined) return whole;
+        count += 1;
+        return `${prefix}${replacement}`;
       },
     );
     if (rewritten !== css) style.textContent = rewritten;

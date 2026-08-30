@@ -1418,6 +1418,7 @@ export function buildServer(
       outputSchema: z.object({
         backupCreated: z.boolean(),
         ids: z.array(shapeIdSchema),
+        reroutedConnectorIds: z.array(shapeIdSchema),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
       }),
       annotations: { destructiveHint: true },
@@ -1441,6 +1442,7 @@ export function buildServer(
       const output = {
         backupCreated: committed.backupPath !== undefined,
         ids: updated.ids,
+        reroutedConnectorIds: updated.reroutedConnectorIds,
         revision: committed.revision,
       };
       return {
@@ -3296,7 +3298,7 @@ export function buildServer(
     "elements_transform",
     {
       description:
-        "Appends an allowlisted numeric SVG transform to selected elements without accepting transform strings.",
+        "Appends an allowlisted numeric SVG transform to selected elements without accepting transform strings, then re-routes compatible semantic connectors attached to moved endpoints.",
       inputSchema: z.object({
         expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
         ids: z.array(shapeIdSchema).min(1).max(100),
@@ -3307,6 +3309,7 @@ export function buildServer(
       outputSchema: z.object({
         backupCreated: z.boolean(),
         ids: z.array(shapeIdSchema),
+        reroutedConnectorIds: z.array(shapeIdSchema),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
       }),
       annotations: { destructiveHint: true },
@@ -3331,6 +3334,7 @@ export function buildServer(
       const output = {
         backupCreated: committed.backupPath !== undefined,
         ids: transformed.ids,
+        reroutedConnectorIds: transformed.reroutedConnectorIds,
         revision: committed.revision,
       };
       return {

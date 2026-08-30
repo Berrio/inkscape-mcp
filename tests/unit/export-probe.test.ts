@@ -3,10 +3,12 @@ import { expect, it } from "vitest";
 import {
   isAsciiDxf,
   isAsciiHpgl,
+  probeGplExport,
   probeWebpExport,
 } from "../../src/capabilities/export-probe.js";
 import { inspectDxf } from "../../src/export/dxf.js";
 import { inspectHpgl } from "../../src/export/hpgl.js";
+import { inspectGpl } from "../../src/export/gpl.js";
 
 it("recognizes a structural ASCII DXF even when it has a leading comment", () => {
   expect(
@@ -40,6 +42,54 @@ it("recognizes only bounded ASCII HPGL command streams", () => {
   expect(inspectHpgl(Buffer.from("IN;PU0,0;PD1,1;"))).toEqual({
     byteLength: 15,
     penCommandCount: 2,
+  });
+});
+
+it("validates a bounded GIMP palette and rejects malformed palette output", () => {
+  expect(
+    inspectGpl(
+      Buffer.from(
+        "GIMP Palette\nName: Inkscape document\nColumns: 4\n#\n17 34 51 blue\n",
+        "utf8",
+      ),
+    ),
+  ).toEqual({ byteLength: 64, colorCount: 1, name: "Inkscape document" });
+  expect(() =>
+    inspectGpl(Buffer.from("GIMP Palette\nName: Missing colors\nColumns: 4\n")),
+  ).toThrow("no palette colors");
+  expect(() =>
+    inspectGpl(
+      Buffer.from("GIMP Palette\nName: Invalid\nColumns: 33\n1 2 3\n"),
+    ),
+  ).toThrow("invalid palette columns");
+});
+
+it("reports a missing GPL artifact without leaking its scratch path", async () => {
+  const result = await probeGplExport(
+    {
+      run: async () => ({
+        durationMs: 1,
+        exitCode: 0,
+        pid: 1,
+        signal: null,
+        stderr: Buffer.alloc(0),
+        stderrTruncated: false,
+        stdout: Buffer.alloc(0),
+        stdoutTruncated: false,
+        terminationReason: "completed" as const,
+      }),
+    },
+    process.execPath,
+    {
+      maxStderrBytes: 1024,
+      maxStdoutBytes: 1024,
+      processTimeoutMs: 1_000,
+      scratchRoot: "auto",
+    },
+  );
+  expect(result).toEqual({
+    available: false,
+    reason: "GPL output is missing or unreadable",
   });
 });
 

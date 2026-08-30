@@ -68,7 +68,7 @@ async function parseInxExporter(
       !name ||
       !extension ||
       !/^[a-z0-9][a-z0-9._-]{0,31}$/u.test(extension) ||
-      !/^[a-z0-9][a-z0-9.:-]{0,255}$/iu.test(id) ||
+      !/^[a-z0-9][a-z0-9._:-]{0,255}$/iu.test(id) ||
       name.length > 256
     )
       return undefined;

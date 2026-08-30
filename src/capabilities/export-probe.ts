@@ -6,6 +6,7 @@ import type { ServerConfig } from "../config/index.js";
 import type { ProcessExecutor } from "../discovery/probe.js";
 import { inspectDxf } from "../export/dxf.js";
 import { inspectHpgl } from "../export/hpgl.js";
+import { inspectGpl } from "../export/gpl.js";
 import { inspectRasterImport } from "../import/raster-import.js";
 
 export type ExportProbe = { available: boolean; reason?: string };
@@ -166,6 +167,45 @@ export async function probeHpglExport(
       available: false,
       reason: "HPGL output is missing or unreadable",
     };
+  } finally {
+    await rm(scratch, { force: true, recursive: true });
+  }
+}
+
+/** Probes the fixed GIMP Palette exporter without accepting an extension ID or options. */
+export async function probeGplExport(
+  runner: Pick<ProcessExecutor, "run">,
+  executable: string,
+  config: Pick<
+    ServerConfig,
+    "maxStderrBytes" | "maxStdoutBytes" | "processTimeoutMs" | "scratchRoot"
+  >,
+): Promise<ExportProbe> {
+  const root =
+    config.scratchRoot === "auto" ? tmpdir() : resolve(config.scratchRoot);
+  const scratch = await mkdtemp(join(root, "inkscape-mcp-probe-"));
+  const input = join(scratch, "probe.svg");
+  const output = join(scratch, "probe.gpl");
+  try {
+    await writeFile(
+      input,
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1" fill="#112233"/><rect x="1" width="1" height="1" fill="#aabbcc"/></svg>',
+      "utf8",
+    );
+    const result = await runner.run(executable, {
+      args: [input, "--export-type=gpl", `--export-filename=${output}`],
+      cwd: scratch,
+      maxStderrBytes: config.maxStderrBytes,
+      maxStdoutBytes: config.maxStdoutBytes,
+      timeoutMs: config.processTimeoutMs,
+    });
+    if (result.exitCode !== 0 || result.terminationReason !== "completed") {
+      return { available: false, reason: "GPL export did not complete" };
+    }
+    inspectGpl(await readFile(output));
+    return { available: true };
+  } catch {
+    return { available: false, reason: "GPL output is missing or unreadable" };
   } finally {
     await rm(scratch, { force: true, recursive: true });
   }

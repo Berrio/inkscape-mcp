@@ -6,6 +6,7 @@ export {
   type PngVisualDifference,
 } from "./png-visual.js";
 export { verifyPdf, type PdfMetadata } from "./pdf.js";
+export { inspectGpl, type GplMetadata } from "./gpl.js";
 export { verifySvg, type SvgMetadata } from "./svg.js";
 export {
   buildExportArgv,

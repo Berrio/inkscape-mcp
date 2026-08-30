@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { verifyPdf, type PdfMetadata } from "./pdf.js";
 import { inspectDxf, type DxfMetadata } from "./dxf.js";
 import { inspectHpgl, type HpglMetadata } from "./hpgl.js";
+import { inspectGpl, type GplMetadata } from "./gpl.js";
 import {
   inspectEmf,
   inspectWmf,
@@ -24,6 +25,7 @@ export type ExportVerification =
   | { format: "emf"; metadata: EmfMetadata }
   | { format: "wmf"; metadata: WmfMetadata }
   | { format: "dxf"; metadata: DxfMetadata }
+  | { format: "gpl"; metadata: GplMetadata }
   | { format: "hpgl"; metadata: HpglMetadata }
   | { format: "plain-svg" | "svg"; metadata: Record<string, never> };
 
@@ -34,6 +36,7 @@ export async function verifyExportArtifact(
     | "emf"
     | "dxf"
     | "eps"
+    | "gpl"
     | "pdf"
     | "plain-svg"
     | "png"
@@ -57,6 +60,8 @@ export async function verifyExportArtifact(
     return { format, metadata: inspectEmf(await readFile(path)) };
   if (format === "dxf")
     return { format, metadata: inspectDxf(await readFile(path)) };
+  if (format === "gpl")
+    return { format, metadata: inspectGpl(await readFile(path)) };
   if (format === "hpgl")
     return { format, metadata: inspectHpgl(await readFile(path)) };
   if (format === "wmf")

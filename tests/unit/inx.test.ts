@@ -35,7 +35,7 @@ it("skips malformed, oversized, and invalid-ID manifests without failing discove
   directories.push(directory);
   await writeFile(
     join(directory, "valid.inx"),
-    "<inkscape-extension><name>Valid</name><id>org.example.valid</id><output><extension>.valid</extension></output></inkscape-extension>",
+    "<inkscape-extension><name>Valid</name><id>org.example_valid</id><output><extension>.valid</extension></output></inkscape-extension>",
   );
   await writeFile(
     join(directory, "malformed.inx"),
@@ -51,6 +51,6 @@ it("skips malformed, oversized, and invalid-ID manifests without failing discove
   );
 
   await expect(discoverInxExporters([directory])).resolves.toEqual([
-    { id: "org.example.valid", name: "Valid", outputExtension: "valid" },
+    { id: "org.example_valid", name: "Valid", outputExtension: "valid" },
   ]);
 });

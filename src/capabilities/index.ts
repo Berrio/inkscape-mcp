@@ -1,6 +1,7 @@
 export { parseActionList, parseHelpOptions, parseInputTypes } from "./parse.js";
 export {
   probeDxfExport,
+  probeGplExport,
   probeHpglExport,
   probeJpegExport,
   probePngExport,

@@ -3734,6 +3734,113 @@ try {
   ) {
     throw new Error("document_export did not publish the generic PNG export");
   }
+  const postscriptExport = await workspaceClient.callTool({
+    arguments: {
+      spec: {
+        area: { kind: "drawing" },
+        format: "ps",
+        level: 3,
+        rasterizationPolicy: "reject",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+        target: { kind: "file", overwrite: false, path: "a4-drawing.ps" },
+        text: "preserve",
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export",
+  });
+  if (
+    postscriptExport.isError ||
+    postscriptExport.structuredContent?.format !== "ps" ||
+    !(
+      await readFile(join(workspaceRoot, "a4-drawing.ps"), "latin1")
+    ).startsWith("%!PS-Adobe-")
+  )
+    throw new Error("document_export did not publish verified PostScript");
+  const epsExport = await workspaceClient.callTool({
+    arguments: {
+      spec: {
+        area: { kind: "drawing" },
+        format: "eps",
+        level: 3,
+        rasterizationPolicy: "reject",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+        target: { kind: "file", overwrite: false, path: "a4-drawing.eps" },
+        text: "paths",
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export",
+  });
+  if (
+    epsExport.isError ||
+    epsExport.structuredContent?.format !== "eps" ||
+    !(await readFile(join(workspaceRoot, "a4-drawing.eps"), "latin1")).includes(
+      "%%BoundingBox:",
+    )
+  )
+    throw new Error("document_export did not publish verified EPS");
+  const epsExportBytes = await readFile(join(workspaceRoot, "a4-drawing.eps"));
+  const reimportedEps = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: createHash("sha256")
+        .update(epsExportBytes)
+        .digest("hex"),
+      format: "eps",
+      manifestPath: "a4-drawing.eps.import.json",
+      outputPath: "a4-drawing-reimported.svg",
+      path: "a4-drawing.eps",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_postscript",
+  });
+  if (
+    reimportedEps.isError ||
+    !(
+      await readFile(join(workspaceRoot, "a4-drawing-reimported.svg"), "utf8")
+    ).includes("<svg")
+  )
+    throw new Error(
+      "exported EPS did not round-trip through the safe importer",
+    );
+  const transparentPostscriptSource =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" opacity="0.5"/></svg>';
+  await writeFile(
+    join(workspaceRoot, "transparent-postscript.svg"),
+    transparentPostscriptSource,
+  );
+  const transparentPostscript = await workspaceClient.callTool({
+    arguments: {
+      spec: {
+        area: { kind: "drawing" },
+        format: "ps",
+        level: 2,
+        rasterizationPolicy: "reject",
+        source: {
+          expectedRevision: createHash("sha256")
+            .update(transparentPostscriptSource)
+            .digest("hex"),
+          path: "transparent-postscript.svg",
+        },
+        target: { kind: "file", overwrite: false, path: "transparent.ps" },
+        text: "preserve",
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export",
+  });
+  if (
+    !transparentPostscript.isError ||
+    !transparentPostscript.content.some(
+      (item) =>
+        item.type === "text" &&
+        item.text.includes("requires rasterize-with-warning"),
+    ) ||
+    existsSync(join(workspaceRoot, "transparent.ps"))
+  )
+    throw new Error(
+      "document_export did not reject transparent PostScript before publication",
+    );
   const genericPdf = await workspaceClient.callTool({
     arguments: {
       spec: {

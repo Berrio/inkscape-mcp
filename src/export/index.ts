@@ -47,6 +47,11 @@ export {
 } from "./spec.js";
 export { expandExportPreset } from "./presets.js";
 export { verifyExportArtifact, type ExportVerification } from "./verify.js";
+export {
+  preflightPostscriptExport,
+  type PostscriptPreflight,
+  type PostscriptRasterizationPolicy,
+} from "./postscript.js";
 export { pruneSvgPagesForPdf } from "./pdf-pages.js";
 export {
   planExportBatch,

@@ -142,7 +142,7 @@ exportación: inspección → `document_export_preset_plan` →
 | ----------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `document_export_preset_plan` | Documento/revisión, preset y directorio; devuelve preflight tipado. | Revisar preflight de `print-pdf-300dpi` y conservar su token. |
 | `document_export_batch`       | `planToken` o specs tipados, modo `all_or_nothing`/`best_effort`.   | Ejecutar el plan y leer manifest/artefactos publicados.       |
-| `document_export`             | Un `ExportSpec` discriminado de PNG/PDF/SVG/plain SVG.              | Exportar un archivo con área y target verificables.           |
+| `document_export`             | Un `ExportSpec` discriminado de PNG/PDF/SVG/plain SVG/PS/EPS.       | Exportar PS/EPS con preflight explícito de transparencia.     |
 | `export_png`                  | Documento/revisión, área, DPI/píxeles, fondo y output.              | Generar PNG transparente a DPI físico o dimensiones exactas.  |
 | `export_pdf`                  | Documento/revisión, PDF 1.4/1.5, texto/filtros/márgenes permitidos. | Exportar PDF multipágina completo o subset controlado.        |
 | `export_pdf_pages`            | Documento/revisión, IDs de páginas y directorio.                    | Crear `page-NNN.pdf` por página seleccionada.                 |

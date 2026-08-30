@@ -160,6 +160,7 @@ import {
   normalizeExportArea,
   parseExportSpec,
   planExportBatch,
+  preflightPostscriptExport,
   pruneSvgPagesForPdf,
   requiredPdfCapabilityFlags,
   requiredPngCapabilityFlags,
@@ -8124,7 +8125,7 @@ export function buildServer(
     "document_export",
     {
       description:
-        "Exports one PNG, baseline PDF, SVG, or plain SVG from a validated ExportSpec through the bounded Inkscape pipeline. Use export_pdf for PDF-specific features and document_export_batch for variants.",
+        "Exports one PNG, PDF, SVG, plain SVG, PS, or EPS from a validated ExportSpec through the bounded Inkscape pipeline. PS/EPS require an explicit rasterization policy for effects that cannot remain vector-native.",
       inputSchema: z
         .object({
           spec: exportSpecSchema,
@@ -8133,7 +8134,7 @@ export function buildServer(
         .strict(),
       outputSchema: z.object({
         artifact: artifactSchema,
-        format: z.enum(["pdf", "png", "plain-svg", "svg"]),
+        format: z.enum(["eps", "pdf", "png", "plain-svg", "ps", "svg"]),
         outputPath: z.string().min(1).max(1024),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
         warnings: z.array(z.string()),
@@ -8150,7 +8151,9 @@ export function buildServer(
         spec.format !== "png" &&
         spec.format !== "pdf" &&
         spec.format !== "svg" &&
-        spec.format !== "plain-svg"
+        spec.format !== "plain-svg" &&
+        spec.format !== "ps" &&
+        spec.format !== "eps"
       )
         throw new Error("Use the specialized export tool for this format");
       if (spec.format === "png" && spec.margin !== undefined)
@@ -8194,7 +8197,11 @@ export function buildServer(
           ? /\.png$/iu
           : spec.format === "pdf"
             ? /\.pdf$/iu
-            : /\.svg$/iu;
+            : spec.format === "ps"
+              ? /\.ps$/iu
+              : spec.format === "eps"
+                ? /\.eps$/iu
+                : /\.svg$/iu;
       if (!expectedExtension.test(output.relativePath))
         throw new Error(
           "Output extension does not match the requested export format",
@@ -8248,12 +8255,23 @@ export function buildServer(
               ? "export.png"
               : spec.format === "pdf"
                 ? "export.pdf"
-                : "export.svg",
+                : spec.format === "ps"
+                  ? "export.ps"
+                  : spec.format === "eps"
+                    ? "export.eps"
+                    : "export.svg",
           );
           const background =
             spec.format === "png" && spec.background.mode === "document"
               ? inspectDocumentDisplaySettings(
                   await readFile(nativeInput.path, "utf8"),
+                )
+              : undefined;
+          const postscriptPreflight =
+            spec.format === "ps" || spec.format === "eps"
+              ? preflightPostscriptExport(
+                  await readFile(nativeInput.path, "utf8"),
+                  spec.rasterizationPolicy,
                 )
               : undefined;
           const run = await runner.run(candidate.executablePath, {
@@ -8280,11 +8298,14 @@ export function buildServer(
             throw new Error("Inkscape document export failed");
           await verifyExportArtifact(spec.format, temporaryOutput);
           await nativeInput.assertCurrent();
-          return await readFile(temporaryOutput);
+          return {
+            bytes: await readFile(temporaryOutput),
+            warnings: postscriptPreflight?.warnings ?? [],
+          };
         },
       );
       const committed = await fileStore.commit({
-        contents: rendered,
+        contents: rendered.bytes,
         ...(spec.target.expectedOutputRevision === undefined
           ? {}
           : { expectedOutputRevision: spec.target.expectedOutputRevision }),
@@ -8305,7 +8326,7 @@ export function buildServer(
         format: spec.format,
         outputPath: output.relativePath,
         revision: committed.revision,
-        warnings: [],
+        warnings: rendered.warnings,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],

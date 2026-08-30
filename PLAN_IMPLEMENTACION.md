@@ -1905,8 +1905,8 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Exportaciones adicionales
 
-- [ ] `F08-T11` PS level 2/3 con preflight de transparencia/filtros.
-- [ ] `F08-T12` EPS con área de dibujo/temporal recortado; no usar área de página no soportada.
+- [x] `F08-T11` PS level 2/3 con preflight de transparencia/filtros. — `document_export` permite PS 2/3 únicamente con argv derivado de `ExportSpec`; el preflight detecta filtros, máscaras y opacidad. Por defecto rechaza antes de ejecutar; `rasterize-with-warning` exige aceptación explícita y declara la pérdida.
+- [x] `F08-T12` EPS con área de dibujo/temporal recortado; no usar área de página no soportada. — EPS acepta exclusivamente drawing/selection desde schema, verifica cabecera y BoundingBox concreto y el smoke real exporta/reimporta el resultado mediante el adaptador seguro EPS.
 - [ ] `F08-T13` EMF con flatten/preflight y round-trip fixture.
 - [ ] `F08-T14` WMF como compatibilidad experimental con warning fuerte.
 - [ ] `F08-T15` XAML mediante capability de extensión y fixtures WPF/Avalonia.

@@ -256,6 +256,9 @@ const psExportSchema = commonExportSchema
     filterRasterDpi: z.number().finite().min(0.1).max(MAX_DPI).optional(),
     format: z.literal("ps"),
     level: z.union([z.literal(2), z.literal(3)]),
+    rasterizationPolicy: z
+      .enum(["reject", "rasterize-with-warning"])
+      .default("reject"),
     text: textSchema,
   })
   .strict();
@@ -268,6 +271,9 @@ const epsExportSchema = commonExportSchema
     filterRasterDpi: z.number().finite().min(0.1).max(MAX_DPI).optional(),
     format: z.literal("eps"),
     level: z.union([z.literal(2), z.literal(3)]),
+    rasterizationPolicy: z
+      .enum(["reject", "rasterize-with-warning"])
+      .default("reject"),
     text: textSchema,
   })
   .strict();

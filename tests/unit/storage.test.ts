@@ -652,18 +652,22 @@ describe("file revisions and atomic store", () => {
       reopened.create(source, "owner-a", 60_000, firstRevision),
     ).rejects.toBeInstanceOf(RevisionConflictError);
   });
-  it("serves bounded artifact chunks to only their owner", async () => {
+  it("publishes an opaque fixture URI and rejects a different workspace owner", async () => {
     const root = await temporaryDirectory();
-    const source = join(root, "export.png");
+    const source = join(root, "fixture-export.png");
     await writeFile(source, "abcdefghij");
     const artifacts = new ArtifactStore(join(root, "artifacts"), 100);
     const artifact = await artifacts.publish(source, "owner-a", 60_000);
     expect(artifact.uri).toBe(`inkscape://artifact/${artifact.id}`);
+    expect(artifact.uri).not.toContain(root);
+    expect(artifact.uri).not.toContain("owner-a");
+    const opaqueId = new URL(artifact.uri).pathname.slice(1);
+    expect(opaqueId).toBe(artifact.id);
     await expect(
-      artifacts.readChunk(artifact.id, "owner-b", 0, 3, 4),
+      artifacts.readChunk(opaqueId, "owner-b", 0, 3, 4),
     ).rejects.toBeInstanceOf(RevisionConflictError);
     await expect(
-      artifacts.readChunk(artifact.id, "owner-a", 2, 3, 4),
+      artifacts.readChunk(opaqueId, "owner-a", 2, 3, 4),
     ).resolves.toMatchObject({ bytes: Buffer.from("cde"), size: 10 });
     await expect(
       artifacts.readChunk(artifact.id, "owner-a", 0, 5, 4),

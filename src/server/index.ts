@@ -7042,7 +7042,7 @@ export function buildServer(
     "document_resize",
     {
       description:
-        "Changes the SVG page size with page_only semantics while preserving element geometry. Requires the current document revision.",
+        "Changes the SVG page size with page_only semantics while preserving element geometry, returning a bounded semantic diff. Requires the current document revision.",
       inputSchema: z.object({
         anchor: z
           .enum([
@@ -7075,17 +7075,11 @@ export function buildServer(
       }),
       outputSchema: z.object({
         backupCreated: z.boolean(),
+        diff: semanticDiffSchema,
         dryRun: z.boolean(),
         predicted: z
           .object({
-            diff: z.object({
-              addedIds: z.array(z.string()),
-              afterElementCount: z.number().int().nonnegative(),
-              ambiguousIds: z.array(z.string()),
-              beforeElementCount: z.number().int().nonnegative(),
-              changedIds: z.array(z.string()),
-              removedIds: z.array(z.string()),
-            }),
+            diff: semanticDiffSchema,
             page: z.object({
               height: viewportLengthSchema,
               viewBox: z.object({
@@ -7145,13 +7139,15 @@ export function buildServer(
         mode === "page_only"
           ? resizePageOnlySvg(source, currentPage, targetPage, anchor)
           : resizeContentSvg(source, currentPage, targetPage, mode, anchor);
+      const diff = summarizeSvgDiff(source, resized.svg);
       if (dryRun) {
         const predictedSettings = inspectSvgSettings(resized.svg);
         const output = {
           backupCreated: false,
+          diff,
           dryRun: true,
           predicted: {
-            diff: summarizeSvgDiff(source, resized.svg),
+            diff,
             page: {
               height: parseViewportLength(predictedSettings.height),
               viewBox: predictedSettings.viewBox,
@@ -7179,6 +7175,7 @@ export function buildServer(
       });
       const output = {
         backupCreated: result.backupPath !== undefined,
+        diff,
         dryRun: false,
         revision: result.revision,
         warnings: resized.warnings,

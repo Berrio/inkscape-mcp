@@ -37,20 +37,20 @@ exportación: inspección → `document_export_preset_plan` →
 
 ## Creación, lectura, páginas y calidad
 
-| Tool                      | Schema/operación                                                               | Ejemplo de uso                                                  |
-| ------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| `document_create`         | Output relativo más preset o medidas tipadas.                                  | Crear A4 sin sobrescribir un archivo existente.                 |
-| `document_inspect`        | Documento, revisión opcional y nivel `summary`, `standard` o `deep`.           | Obtener tamaño, páginas e inventario antes de editar.           |
-| `document_preflight`      | Documento y perfil `basic`, `web`, `print` o `interchange`.                    | Detectar fuentes, recursos externos y riesgos de impresión.     |
-| `document_optimize`       | Plan `dryRun` o SVG derivado; sólo defs no referenciadas y comparación visual. | Publicar `diseño.optimized.svg` sin alterar el original.        |
-| `document_resize`         | Documento/revisión, target tipado y modo permitido.                            | Cambiar lienzo conservando geometría con `page_only`.           |
-| `document_fit_page`       | Documento/revisión, bounds nativos y márgenes por lado.                        | Eliminar espacio blanco ajustando la página al dibujo.          |
-| `document_page_adjust`    | Documento/revisión y acción `crop`, `expand` u orientación.                    | Añadir bleed temporal o cambiar orientación.                    |
-| `document_pages`          | `action` de listar/agregar/actualizar/eliminar/reordenar.                      | Reordenar con IDs de página estables, no por índice.            |
-| `document_page_validate`  | Documento/revisión y consulta de bounds nativos.                               | Reportar páginas vacías, solapadas u objetos fuera.             |
-| `document_settings`       | Leer o actualizar page/desk/border con revisión.                               | Cambiar color y opacidad de página sin confundir el escritorio. |
-| `document_render_preview` | Documento/revisión, área y tamaño PNG limitados.                               | Revisar un preview antes de publicar.                           |
-| `document_normalize_ids`  | Documento/revisión y política explícita.                                       | Reparar IDs duplicados antes de exportar o usar actions.        |
+| Tool                      | Schema/operación                                                                           | Ejemplo de uso                                                  |
+| ------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| `document_create`         | Output relativo más preset o medidas tipadas.                                              | Crear A4 sin sobrescribir un archivo existente.                 |
+| `document_inspect`        | Documento, revisión opcional y nivel `summary`, `standard` o `deep`.                       | Obtener tamaño, páginas e inventario antes de editar.           |
+| `document_preflight`      | Documento y perfil `basic`, `web`, `print` o `interchange`.                                | Detectar fuentes, recursos externos y riesgos de impresión.     |
+| `document_optimize`       | Plan `dryRun` o SVG derivado; sólo defs no referenciadas y comparación visual.             | Publicar `diseño.optimized.svg` sin alterar el original.        |
+| `document_resize`         | Documento/revisión, target tipado y modo permitido; devuelve backup/revisión/diff acotado. | Cambiar lienzo conservando geometría con `page_only`.           |
+| `document_fit_page`       | Documento/revisión, bounds nativos y márgenes por lado.                                    | Eliminar espacio blanco ajustando la página al dibujo.          |
+| `document_page_adjust`    | Documento/revisión y acción `crop`, `expand` u orientación.                                | Añadir bleed temporal o cambiar orientación.                    |
+| `document_pages`          | `action` de listar/agregar/actualizar/eliminar/reordenar.                                  | Reordenar con IDs de página estables, no por índice.            |
+| `document_page_validate`  | Documento/revisión y consulta de bounds nativos.                                           | Reportar páginas vacías, solapadas u objetos fuera.             |
+| `document_settings`       | Leer o actualizar page/desk/border con revisión.                                           | Cambiar color y opacidad de página sin confundir el escritorio. |
+| `document_render_preview` | Documento/revisión, área y tamaño PNG limitados.                                           | Revisar un preview antes de publicar.                           |
+| `document_normalize_ids`  | Documento/revisión y política explícita.                                                   | Reparar IDs duplicados antes de exportar o usar actions.        |
 
 ## Elementos, capas y composición
 

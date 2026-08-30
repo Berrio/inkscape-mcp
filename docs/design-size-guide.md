@@ -53,6 +53,10 @@ Usa siempre primero `document_resize` con `dryRun: true`. El resultado expone
 el tamaño, `viewBox`, diff, matriz si la hubiera y warnings previstos; sólo
 repite con `dryRun: false` cuando ese resultado sea correcto.
 
+La mutación publicada también devuelve el mismo diff semántico acotado, la
+nueva `revision` y `backupCreated`; si la revisión ya no coincide, falla sin
+publicar una modificación parcial.
+
 | Modo                    | Qué cambia                                                         | Cuándo usarlo                                                      |
 | ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
 | `page_only`             | El lienzo y un `viewBox` proporcional; no transforma objetos.      | Cambiar el formato o eliminar/añadir espacio alrededor del diseño. |

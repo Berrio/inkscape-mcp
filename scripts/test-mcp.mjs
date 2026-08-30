@@ -3011,6 +3011,13 @@ try {
   });
   if (
     resized.isError ||
+    resized.structuredContent?.backupCreated !== true ||
+    resized.structuredContent?.revision === revision ||
+    resized.structuredContent?.diff?.beforeElementCount !==
+      resized.structuredContent?.diff?.afterElementCount ||
+    resized.structuredContent?.diff?.addedIds?.length !== 0 ||
+    resized.structuredContent?.diff?.changedIds?.length !== 0 ||
+    resized.structuredContent?.diff?.removedIds?.length !== 0 ||
     !(await readFile(join(workspaceRoot, "a4.svg"), "utf8")).includes(
       'viewBox="0 0 148 210"',
     )
@@ -3020,6 +3027,25 @@ try {
   const resizedRevision = resized.structuredContent?.revision;
   if (typeof resizedRevision !== "string") {
     throw new Error("document_resize did not return a revision");
+  }
+  const staleResize = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: revision,
+      height: 100,
+      path: "a4.svg",
+      unit: "mm",
+      width: 100,
+      workspaceId: workspace.id,
+    },
+    name: "document_resize",
+  });
+  const revisionAfterStaleResize = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "a4.svg")))
+    .digest("hex");
+  if (!staleResize.isError || revisionAfterStaleResize !== resizedRevision) {
+    throw new Error(
+      "document_resize accepted a stale revision or published a partial mutation",
+    );
   }
   const restored = await workspaceClient.callTool({
     arguments: {
@@ -3070,6 +3096,8 @@ try {
     resizeDryRun.isError ||
     resizeDryRun.structuredContent?.dryRun !== true ||
     !resizeDryRun.structuredContent?.predicted?.transform ||
+    JSON.stringify(resizeDryRun.structuredContent?.diff) !==
+      JSON.stringify(resizeDryRun.structuredContent?.predicted?.diff) ||
     resizeDryRun.structuredContent?.revision !== resizedAgainRevision ||
     !(await readFile(join(workspaceRoot, "a4.svg"), "utf8")).includes(
       'viewBox="0 0 148 210"',

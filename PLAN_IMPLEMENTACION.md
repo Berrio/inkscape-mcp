@@ -1909,9 +1909,9 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F08-T12` EPS con área de dibujo/temporal recortado; no usar área de página no soportada. — EPS acepta exclusivamente drawing/selection desde schema, verifica cabecera y BoundingBox concreto y el smoke real exporta/reimporta el resultado mediante el adaptador seguro EPS.
 - [x] `F08-T13` EMF con flatten/preflight y round-trip fixture. — `document_export` admite EMF sólo tras validar su `ENHMETAHEADER` y preflight de filtros/máscaras/opacidad; la política por defecto rechaza y `flatten-with-warning` requiere aceptación explícita. `document_import_emf` exige la misma firma, staging/revisión, SVG saneado y manifest. La capability se valida mediante fixture interno SVG→EMF→SVG y el smoke repite el round-trip público.
 - [x] `F08-T14` WMF como compatibilidad experimental con warning fuerte. — `document_export` admite sólo WMF de área drawing/selection con el mismo preflight de flattening y validación de cabecera WMF/Placeable WMF. Devuelve siempre `WMF_EXPERIMENTAL_COMPATIBILITY`; no se publica un importador WMF sin round-trip y verificador de entrada aprobados.
-- [ ] `F08-T15` XAML mediante capability de extensión y fixtures WPF/Avalonia.
-- [ ] `F08-T16` SVG optimizado con adaptador opcional/Scour detectado, visual regression y manifest.
-- [ ] `F08-T17` Explorar JPG/WebP/TIFF solo como extensiones detectadas; no anunciar sin prueba.
+- [-] `F08-T15` XAML mediante capability de extensión y fixtures WPF/Avalonia. — La sonda local confirma que Inkscape conoce XAML, pero esta máquina no dispone de runtime WPF capaz de parsearlo ni de un consumidor Avalonia. Sin dos fixtures de consumidor no se publica exportación XAML ni se confunde la extensión con compatibilidad.
+- [-] `F08-T16` SVG optimizado con adaptador opcional/Scour detectado, visual regression y manifest. — `scour` no está instalado/detectable en el entorno; no se expone un optimizador ni se sustituye por una transformación no equivalente. La exportación SVG plana existente sigue siendo el camino soportado.
+- [-] `F08-T17` Explorar JPG/WebP/TIFF solo como extensiones detectadas; no anunciar sin prueba. — El doctor confirma JPEG/TIFF como tipos de entrada (ya cubiertos por `document_import_raster`), pero el help de salida local no anuncia JPG/WebP/TIFF ni se detectó un exportador adicional verificable. No se publica ninguna salida raster adicional.
 
 #### Presets y workflows
 

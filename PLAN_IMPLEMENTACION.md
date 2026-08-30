@@ -1516,7 +1516,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Puerta F01
 
-- [ ] `F01-G01` `doctor` encuentra Inkscape 1.4.4 MSIX mediante discovery automático o explica de forma accionable por qué requiere ruta explícita.
+- [x] `F01-G01` `doctor` encuentra Inkscape 1.4.4 MSIX mediante discovery automático o explica de forma accionable por qué requiere ruta explícita. — En Windows, la integración real y `--doctor --json` detectan automáticamente el paquete MSIX 1.4.4, informan su origen `msix` sin exponer la ruta y superan la sonda PNG.
 - [ ] `F01-G02` Se capturan versión y ≥1000 acciones en el baseline local sin colgarse ni abrir flujo GUI dependiente.
 - [ ] `F01-G03` El fake demuestra timeout/cancelación/salida acotada sin procesos huérfanos.
 - [ ] `F01-G04` Ninguna API pública acepta ejecutable, flags o comando arbitrarios.

@@ -27,6 +27,23 @@ const server = {
 };
 const isWithin = (actual, expected, tolerance = 0.6) =>
   Math.abs(actual - expected) <= tolerance;
+const A4_ROUND_TRIP_TOLERANCE_MM = 0.01;
+const toMillimeters = (viewportLength) => {
+  const match = /^(\d+(?:\.\d+)?)(mm|cm|in|pt|pc|q|px)$/u.exec(viewportLength);
+  if (!match) throw new Error(`Unsupported viewport length: ${viewportLength}`);
+  const value = Number(match[1]);
+  const unit = match[2];
+  const millimetersPerUnit = {
+    cm: 10,
+    in: 25.4,
+    mm: 1,
+    pc: 25.4 / 6,
+    pt: 25.4 / 72,
+    px: 25.4 / 96,
+    q: 0.25,
+  };
+  return value * millimetersPerUnit[unit];
+};
 
 for (const { label, versionNegotiation } of [
   {
@@ -2645,6 +2662,44 @@ try {
   const revision = created.structuredContent?.revision;
   if (typeof revision !== "string") {
     throw new Error("document_create did not return a revision");
+  }
+  const a4RoundTrip = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: revision,
+      flavor: "inkscape",
+      outputPath: "a4-round-trip.svg",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "export_svg",
+  });
+  const a4RoundTripInspection = await workspaceClient.callTool({
+    arguments: {
+      level: "summary",
+      path: "a4-round-trip.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_inspect",
+  });
+  if (
+    a4RoundTrip.isError ||
+    a4RoundTripInspection.isError ||
+    a4RoundTripInspection.structuredContent?.widthUnit !== "mm" ||
+    a4RoundTripInspection.structuredContent?.heightUnit !== "mm" ||
+    !isWithin(
+      toMillimeters(a4RoundTripInspection.structuredContent?.width ?? ""),
+      210,
+      A4_ROUND_TRIP_TOLERANCE_MM,
+    ) ||
+    !isWithin(
+      toMillimeters(a4RoundTripInspection.structuredContent?.height ?? ""),
+      297,
+      A4_ROUND_TRIP_TOLERANCE_MM,
+    )
+  ) {
+    throw new Error(
+      `A4 SVG round-trip did not preserve 210 × 297 mm within ${A4_ROUND_TRIP_TOLERANCE_MM} mm`,
+    );
   }
   const snapshot = await workspaceClient.callTool({
     arguments: {

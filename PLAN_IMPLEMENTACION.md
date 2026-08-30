@@ -1621,7 +1621,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Puerta F03
 
-- [ ] `F03-G01` A4 mide 210 × 297 mm y round-trip conserva medidas dentro de tolerancia definida.
+- [x] `F03-G01` A4 mide 210 × 297 mm y round-trip conserva medidas dentro de tolerancia definida. — El smoke stdio crea A4 mediante el preset, lo exporta con Inkscape como SVG Inkscape y vuelve a inspeccionarlo; exige unidades `mm` y 210 × 297 mm con tolerancia absoluta de 0,01 mm por eje.
 - [ ] `F03-G02` `page_only` no cambia transform/geometry de elementos.
 - [ ] `F03-G03` contain/cover/fit producen bounds y anchors esperados en fixtures.
 - [ ] `F03-G04` Multipágina conserva IDs/referencias tras CRUD y reorder.

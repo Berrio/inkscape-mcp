@@ -19,6 +19,30 @@ const IMAGE_MIME_TYPES = new Set([
 ]);
 
 export type EmbeddedRaster = { bytes: Buffer; mime: string };
+export type SvgImageSource =
+  | { href: string; kind: "linked" }
+  | { bytes: Buffer; kind: "embedded"; mime: string };
+
+/** Returns one supported local or embedded image source without resolving it. */
+export function inspectSvgImageSource(
+  source: string,
+  imageId: string,
+  maxBytes: number,
+): SvgImageSource {
+  if (!SAFE_ID.test(imageId)) throw new Error("Image ID is invalid");
+  if (!Number.isInteger(maxBytes) || maxBytes < 1)
+    throw new Error("Image inspection limit is invalid");
+  const document = parseDocument(source);
+  const image = findById(document, imageId);
+  if (!image || image.localName !== "image")
+    throw new Error("Image ID does not name an SVG image");
+  const href = image.getAttribute("href") ?? image.getAttribute("xlink:href");
+  if (href === null || !isSafeImageHref(href))
+    throw new Error("Image href is invalid");
+  if (!href.startsWith("data:")) return { href, kind: "linked" };
+  const embedded = parseEmbeddedRasterDataUri(href, maxBytes);
+  return { bytes: embedded.bytes, kind: "embedded", mime: embedded.mime };
+}
 
 export function setSvgImageHref(
   source: string,

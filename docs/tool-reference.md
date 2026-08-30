@@ -119,6 +119,7 @@ exportación: inspección → `document_export_preset_plan` →
 | -------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------- |
 | `images_manage`            | Link/embed/relink/extract con MIME y paths confinados. | Incrustar una imagen o extraerla a output seguro.                 |
 | `images_crop`              | Imagen, clip ID y rectángulo numérico.                 | Recortar sin alterar el raster original.                          |
+| `images_trace`             | Preset `default`, máximo 4 MP y confirmación.          | Vectorizar un bitmap local mediante Inkscape.                     |
 | `images_inspect_dpi`       | Documento y selección opcional de imágenes.            | Comprobar DPI X/Y efectivo antes de imprenta.                     |
 | `resources_inspect_remote` | Documento; sólo inspección.                            | Localizar URLs sin descargarlas.                                  |
 | `accessibility_inspect`    | Documento, fondo opaco conocido y límites de análisis. | Revisar orden y contraste heurístico, no auditoría WCAG completa. |

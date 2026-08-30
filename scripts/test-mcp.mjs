@@ -1241,6 +1241,44 @@ try {
       "images_manage did not atomically extract an embedded image",
     );
   await writeFile(
+    join(workspaceRoot, "images-trace.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><image id="trace_photo" href="managed-photo.png" width="10" height="10"/></svg>',
+  );
+  const traceImageRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "images-trace.svg")))
+    .digest("hex");
+  const tracedImage = await workspaceClient.callTool({
+    arguments: {
+      confirmIrreversible: true,
+      expectedRevision: traceImageRevision,
+      imageId: "trace_photo",
+      path: "images-trace.svg",
+      preset: "default",
+      workspaceId: workspace.id,
+    },
+    name: "images_trace",
+  });
+  if (
+    tracedImage.isError ||
+    tracedImage.structuredContent?.warning !== "IMAGE_TRACED_IRREVERSIBLY" ||
+    tracedImage.structuredContent?.raster?.width !== 1 ||
+    typeof tracedImage.structuredContent?.revision !== "string"
+  )
+    throw new Error("images_trace did not run the bounded default preset");
+  const invalidTracePreset = await workspaceClient.callTool({
+    arguments: {
+      confirmIrreversible: true,
+      expectedRevision: tracedImage.structuredContent.revision,
+      imageId: "trace_photo",
+      path: "images-trace.svg",
+      preset: "custom",
+      workspaceId: workspace.id,
+    },
+    name: "images_trace",
+  });
+  if (!invalidTracePreset.isError)
+    throw new Error("images_trace accepted an unallowlisted preset");
+  await writeFile(
     join(workspaceRoot, "dpi.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="25.4mm" height="25.4mm" viewBox="0 0 10 10"><image id="dpi_photo" width="10" height="10" transform="rotate(20)" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg=="/></svg>',
   );

@@ -108,9 +108,11 @@ export {
 export { cropSvgImage, type SvgImageCrop } from "./image-crop.js";
 export {
   extractEmbeddedRaster,
+  inspectSvgImageSource,
   parseEmbeddedRasterDataUri,
   setSvgImageHref,
   type EmbeddedRaster,
+  type SvgImageSource,
 } from "./images.js";
 export { inspectSvgImageDpi, type SvgImageDpiInspection } from "./image-dpi.js";
 export {

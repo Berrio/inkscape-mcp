@@ -24,6 +24,7 @@ import {
   applySvgFilter,
   cropSvgImage,
   extractEmbeddedRaster,
+  inspectSvgImageSource,
   applySvgClipPath,
   applySvgMask,
   createSvgRectClipPath,
@@ -1069,6 +1070,7 @@ const PREVIEW_CACHE_TTL_MS = 10 * 60 * 1_000;
 const EXPORT_PRESET_PLAN_TTL_MS = 5 * 60 * 1_000;
 const EXPORT_PRESET_PLAN_MAX_TTL_MS = 15 * 60 * 1_000;
 const PREVIEW_MAX_AXIS = 2_048;
+const TRACE_MAX_MEGAPIXELS = 4;
 
 function pngCapabilityLabel(flag: string): string {
   const labels: Readonly<Record<string, string>> = {
@@ -3751,6 +3753,106 @@ export function buildServer(
         backupCreated: documentCommit.backupPath !== undefined,
         imageId: input.imageId,
         revision: documentCommit.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "images_trace",
+    {
+      description:
+        "Irreversibly traces one local or embedded raster image through the verified Inkscape object-trace action. Only the bounded default preset is available; no trace parameters, actions, or extensions are accepted.",
+      inputSchema: z
+        .object({
+          confirmIrreversible: z.literal(true),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          imageId: shapeIdSchema,
+          path: z.string().min(1).max(1024),
+          preset: z.literal("default").default("default"),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        diff: semanticDiffSchema,
+        imageId: shapeIdSchema,
+        preset: z.literal("default"),
+        raster: z.object({
+          height: z.number().int().positive(),
+          mime: z.enum([
+            "image/bmp",
+            "image/gif",
+            "image/jpeg",
+            "image/png",
+            "image/tiff",
+            "image/x-tga",
+            "image/webp",
+          ]),
+          width: z.number().int().positive(),
+        }),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        warning: z.literal("IMAGE_TRACED_IRREVERSIBLY"),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, imageId, path, preset, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const document = await workspace.resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      const targets = querySvgElementTargets(source, {
+        ids: [imageId],
+        limit: 2,
+        offset: 0,
+      });
+      if (
+        targets.missingIds.length > 0 ||
+        targets.total !== 1 ||
+        targets.elements[0]?.summary.kind !== "image"
+      )
+        throw new Error("images_trace requires exactly one SVG image ID");
+      const image = inspectSvgImageSource(
+        source,
+        imageId,
+        config.maxInputBytes,
+      );
+      const bytes =
+        image.kind === "embedded"
+          ? image.bytes
+          : await readBoundedRasterAsset(
+              (await workspace.resolveExisting(workspaceId, image.href))
+                .absolutePath,
+              config.maxInputBytes,
+            );
+      const raster = inspectRasterImport(bytes, TRACE_MAX_MEGAPIXELS);
+      const traced = await runNativeImageTrace({
+        config,
+        document,
+        expectedRevision,
+        imageId,
+        runner,
+        scratch,
+      });
+      const diff = summarizeSvgDiff(source, traced);
+      const committed = await fileStore.commit({
+        contents: Buffer.from(traced),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        diff,
+        imageId,
+        preset,
+        raster,
+        revision: committed.revision,
+        warning: "IMAGE_TRACED_IRREVERSIBLY" as const,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
@@ -9814,6 +9916,71 @@ async function runNativeTextToPaths(request: {
     if (sanitized.removed.length > 0)
       throw new Error(
         "Inkscape text-to-path result did not meet SVG safety policy",
+      );
+    await nativeInput.assertCurrent();
+    return sanitized.svg;
+  });
+}
+
+async function runNativeImageTrace(request: {
+  config: ServerConfig;
+  document: ResolvedWorkspacePath;
+  expectedRevision: string;
+  imageId: string;
+  runner: ProcessRunner;
+  scratch: ScratchManager;
+}): Promise<string> {
+  const discovery = await locateInkscape({
+    config: request.config,
+    cwd: process.cwd(),
+    runner: request.runner,
+  });
+  const candidate = discovery.candidates[0];
+  if (!candidate) throw new Error("Inkscape executable is unavailable");
+  const probe = await probeInkscapeCandidate(
+    request.runner,
+    candidate,
+    process.cwd(),
+  );
+  if (!("version" in probe))
+    throw new Error("Inkscape executable could not be validated");
+  return request.scratch.withDirectory("staging", async (directory) => {
+    const nativeInput = await createNativeInputBundle(
+      request.document.absolutePath,
+      request.expectedRevision,
+      directory,
+      {
+        allowedRoot: request.document.workspaceRoot,
+        maxDependencyBytes: request.config.maxInputBytes,
+        maximumSanitizeMode: request.config.maximumSanitizeMode,
+      },
+    );
+    const outputPath = join(directory, "result.svg");
+    const actions = [
+      `select-by-id:${request.imageId}`,
+      "object-trace",
+      `export-filename:${outputPath}`,
+      "export-plain-svg",
+      "export-do",
+    ].join(";");
+    const run = await request.runner.run(candidate.executablePath, {
+      args: [nativeInput.path, `--actions=${actions}`],
+      cwd: directory,
+      maxStderrBytes: request.config.maxStderrBytes,
+      maxStdoutBytes: request.config.maxStdoutBytes,
+      timeoutMs: request.config.processTimeoutMs,
+    });
+    if (run.exitCode !== 0 || run.terminationReason !== "completed")
+      throw new Error("Inkscape bitmap trace is unavailable or failed");
+    const exported = await readFile(outputPath, "utf8");
+    const sanitized = sanitizeSvg(exported, {
+      maxElements: 100_000,
+      maxInputBytes: request.config.maxInputBytes,
+      mode: request.config.maximumSanitizeMode,
+    });
+    if (sanitized.removed.length > 0)
+      throw new Error(
+        "Inkscape bitmap trace result did not meet SVG safety policy",
       );
     await nativeInput.assertCurrent();
     return sanitized.svg;

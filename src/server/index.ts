@@ -20,7 +20,10 @@ import {
   inspectRasterImport,
   sniffRasterMime,
 } from "../import/raster-import.js";
-import { inspectNativeImportGates } from "../import/native-import-gates.js";
+import {
+  inspectNativeImportGates,
+  type NativeImportHeadlessStatuses,
+} from "../import/native-import-gates.js";
 import { inspectPdfImportPage } from "../import/pdf-import.js";
 import { publishImportedSvg } from "../import/publication.js";
 import { importSanitizedSvg } from "../import/svg-import.js";
@@ -2028,7 +2031,7 @@ export function buildServer(
     "document_import_capabilities",
     {
       description:
-        "Reports the exact input types observed from this local Inkscape --list-input-types probe, including explicitly blocked AI/EPS/PS/EMF/WMF/XAML/DXF gates. A detected type is never exposed until its real headless conversion fixture passes.",
+        "Reports the exact input types observed from this local Inkscape --list-input-types probe, including headless fixture gates for supported native import adapters. A detected type is never exposed until its real headless conversion fixture passes.",
       inputSchema: z.object({}),
       outputSchema: z.object({
         inputTypes: z.array(z.string().min(1).max(128)),
@@ -2036,8 +2039,12 @@ export function buildServer(
           z.object({
             advertisedTypes: z.array(z.string().min(1).max(128)),
             format: z.enum(["ai", "eps", "ps", "emf", "wmf", "xaml", "dxf"]),
-            headless: z.literal("not-validated"),
-            status: z.enum(["detected-but-blocked", "not-detected"]),
+            headless: z.enum(["not-headless", "not-validated", "validated"]),
+            status: z.enum([
+              "available",
+              "detected-but-blocked",
+              "not-detected",
+            ]),
           }),
         ),
         nativeProbeAvailable: z.boolean(),
@@ -2049,9 +2056,18 @@ export function buildServer(
     async () => {
       const report = await runDoctor(config, process.cwd());
       const inputTypes = [...(report.capabilities?.inputTypes ?? [])];
+      const headlessStatuses = await probePostscriptHeadlessImports({
+        config,
+        inputTypes,
+        runner,
+        scratch,
+      });
       const output = {
         inputTypes,
-        nativeImportGates: inspectNativeImportGates(inputTypes),
+        nativeImportGates: inspectNativeImportGates(
+          inputTypes,
+          headlessStatuses,
+        ),
         nativeProbeAvailable:
           report.capabilities?.observations.inputTypes.available ?? false,
         rasterImport: "built-in-byte-sniffed" as const,
@@ -2060,6 +2076,190 @@ export function buildServer(
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_import_postscript",
+    {
+      description:
+        "Imports one trusted workspace-local EPS or PostScript file through the observed local Inkscape capability into a sanitized SVG and conversion manifest. It never accepts arbitrary native formats or arguments.",
+      inputSchema: z
+        .object({
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          format: z.enum(["eps", "ps"]),
+          manifestPath: z.string().min(1).max(1024),
+          outputPath: z.string().min(1).max(1024),
+          path: z.string().min(1).max(1024),
+          sanitizeMode: z
+            .enum(["strict", "preserve-local", "trusted"])
+            .default("preserve-local"),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        manifest: z.object({
+          format: z.enum(["eps", "ps"]),
+          inputBytes: z.number().int().positive(),
+          losses: z.tuple([
+            z.literal("POSTSCRIPT_NATIVE_IMPORT_FIDELITY_NOT_GUARANTEED"),
+          ]),
+          outputPath: z.string(),
+          outputSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+          removed: z.array(z.string()),
+          schema: z.literal("inkscape-mcp-document-import/v1"),
+          sourcePath: z.string(),
+          sourceSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+          warnings: z.tuple([
+            z.literal("POSTSCRIPT_NATIVE_IMPORT_FIDELITY_NOT_GUARANTEED"),
+          ]),
+        }),
+        manifestPath: z.string(),
+        manifestRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+        outputPath: z.string(),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async (input) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const source = await workspace.resolveExisting(
+        input.workspaceId,
+        input.path,
+      );
+      const output = await workspace.resolveNewOutput(
+        input.workspaceId,
+        input.outputPath,
+      );
+      const manifestOutput = await workspace.resolveNewOutput(
+        input.workspaceId,
+        input.manifestPath,
+      );
+      if (!source.relativePath.toLowerCase().endsWith(`.${input.format}`))
+        throw new Error(
+          "PostScript import source extension must match the requested format",
+        );
+      if (!/\.svg$/iu.test(output.relativePath))
+        throw new Error(
+          "document_import_postscript requires a .svg output path",
+        );
+      if (!/\.json$/iu.test(manifestOutput.relativePath))
+        throw new Error(
+          "document_import_postscript requires a .json manifest path",
+        );
+      const sourceBytes = await readBoundedNativeImportSource(
+        source.absolutePath,
+        config.maxInputBytes,
+        "PostScript",
+      );
+      if (!sourceBytes.subarray(0, 2).equals(Buffer.from("%!")))
+        throw new Error("PostScript import source is missing its %! signature");
+      const discovery = await locateInkscape({
+        config,
+        cwd: process.cwd(),
+        runner,
+      });
+      const candidate = discovery.candidates[0];
+      if (!candidate)
+        throw new Error("Inkscape executable could not be located");
+      const probe = await probeInkscapeCandidate(
+        runner,
+        candidate,
+        process.cwd(),
+      );
+      if (!("version" in probe))
+        throw new Error("Inkscape executable could not be validated");
+      const observed = await capabilities.inspect(
+        runner,
+        candidate,
+        probe.version,
+        process.cwd(),
+      );
+      if (!observed.inputTypes.includes(input.format))
+        throw new Error(
+          `This Inkscape installation does not advertise ${input.format.toUpperCase()} import`,
+        );
+      const imported = await scratch.withDirectory(
+        "staging",
+        async (directory) => {
+          const stagedSource = join(directory, `input.${input.format}`);
+          const temporaryOutput = join(directory, "imported.svg");
+          await copyFile(source.absolutePath, stagedSource);
+          if (
+            (await sha256File(source.absolutePath)) !== input.expectedRevision
+          )
+            throw new Error(
+              "PostScript import source revision changed before staging",
+            );
+          const result = await runner.run(candidate.executablePath, {
+            args: [
+              stagedSource,
+              "--export-type=svg",
+              `--export-filename=${temporaryOutput}`,
+            ],
+            cwd: directory,
+            maxStderrBytes: config.maxStderrBytes,
+            maxStdoutBytes: config.maxStdoutBytes,
+            timeoutMs: config.processTimeoutMs,
+          });
+          if (result.exitCode !== 0 || result.terminationReason !== "completed")
+            throw new Error(
+              "PostScript import is not headless on this Inkscape installation",
+            );
+          const sanitized = importSanitizedSvg(
+            await readFile(temporaryOutput),
+            {
+              format: "svg",
+              maxInputBytes: config.maxInputBytes,
+              maximumMode: config.maximumSanitizeMode,
+              mode: input.sanitizeMode,
+            },
+          );
+          if (
+            (await sha256File(source.absolutePath)) !== input.expectedRevision
+          )
+            throw new Error(
+              "PostScript import source revision changed during conversion",
+            );
+          return sanitized;
+        },
+      );
+      const contents = Buffer.from(imported.svg, "utf8");
+      const warning =
+        "POSTSCRIPT_NATIVE_IMPORT_FIDELITY_NOT_GUARANTEED" as const;
+      const manifest = {
+        format: input.format,
+        inputBytes: sourceBytes.length,
+        losses: [warning] as const,
+        outputPath: output.relativePath,
+        outputSha256: createHash("sha256").update(contents).digest("hex"),
+        removed: [...imported.removed],
+        schema: "inkscape-mcp-document-import/v1" as const,
+        sourcePath: source.relativePath,
+        sourceSha256: createHash("sha256").update(sourceBytes).digest("hex"),
+        warnings: [warning] as const,
+      };
+      const publication = await publishImportedSvg({
+        contents,
+        expectedRevision: input.expectedRevision,
+        fileStore,
+        manifest,
+        manifestTargetPath: manifestOutput.absolutePath,
+        outputTargetPath: output.absolutePath,
+        sourcePath: source.absolutePath,
+      });
+      const outputResult = {
+        manifest: publication.manifest,
+        manifestPath: manifestOutput.relativePath,
+        manifestRevision: publication.manifestRevision,
+        outputPath: output.relativePath,
+        revision: publication.revision,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(outputResult) }],
+        structuredContent: outputResult,
       };
     },
   );
@@ -9534,6 +9734,80 @@ async function readBoundedRasterAsset(
   const bytes = await readFile(path);
   sniffRasterMime(bytes);
   return bytes;
+}
+
+/** Reads a trusted-local native source after applying the common input bound. */
+async function readBoundedNativeImportSource(
+  path: string,
+  maximumBytes: number,
+  formatName: string,
+): Promise<Buffer> {
+  const metadata = await stat(path);
+  if (!metadata.isFile() || metadata.size < 1 || metadata.size > maximumBytes)
+    throw new Error(
+      `${formatName} import source exceeds the configured size limit`,
+    );
+  return readFile(path);
+}
+
+/**
+ * Exercises only the fixed, server-owned EPS/PS fixture in scratch. A failed
+ * native invocation proves that this local installation cannot import that
+ * format headlessly; it never becomes a public arbitrary-format probe.
+ */
+async function probePostscriptHeadlessImports(request: {
+  config: ServerConfig;
+  inputTypes: readonly string[];
+  runner: ProcessRunner;
+  scratch: ScratchManager;
+}): Promise<NativeImportHeadlessStatuses> {
+  const advertised = new Set(
+    request.inputTypes.map((type) => type.toLowerCase()),
+  );
+  const formats = (["eps", "ps"] as const).filter((format) =>
+    advertised.has(format),
+  );
+  if (formats.length === 0) return {};
+  const discovery = await locateInkscape({
+    config: request.config,
+    cwd: process.cwd(),
+    runner: request.runner,
+  });
+  const candidate = discovery.candidates[0];
+  if (!candidate) return {};
+  const probe = await probeInkscapeCandidate(
+    request.runner,
+    candidate,
+    process.cwd(),
+  );
+  if (!("version" in probe)) return {};
+  return request.scratch.withDirectory("probe", async (directory) => {
+    const statuses: NativeImportHeadlessStatuses = {};
+    for (const format of formats) {
+      const source = join(directory, `headless-probe.${format}`);
+      const output = join(directory, `headless-probe-${format}.svg`);
+      await writeFile(
+        source,
+        "%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 10 10\nnewpath 0 0 moveto 10 10 lineto stroke\nshowpage\n",
+        "ascii",
+      );
+      const result = await request.runner.run(candidate.executablePath, {
+        args: [source, "--export-type=svg", `--export-filename=${output}`],
+        cwd: directory,
+        maxStderrBytes: request.config.maxStderrBytes,
+        maxStdoutBytes: request.config.maxStdoutBytes,
+        timeoutMs: request.config.processTimeoutMs,
+      });
+      const converted =
+        result.exitCode === 0 &&
+        result.terminationReason === "completed" &&
+        (await readFile(output).catch(() => Buffer.alloc(0))).includes(
+          Buffer.from("<svg"),
+        );
+      statuses[format] = converted ? "validated" : "not-headless";
+    }
+    return statuses;
+  });
 }
 
 /** Rejects encrypted PDFs before an interactive native password prompt is possible. */

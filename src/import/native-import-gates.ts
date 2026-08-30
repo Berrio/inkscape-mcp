@@ -11,9 +11,14 @@ const NATIVE_IMPORT_FORMATS = [
 export type NativeImportGate = {
   advertisedTypes: readonly string[];
   format: (typeof NATIVE_IMPORT_FORMATS)[number]["format"];
-  headless: "not-validated";
-  status: "detected-but-blocked" | "not-detected";
+  headless: "not-headless" | "not-validated" | "validated";
+  status: "available" | "detected-but-blocked" | "not-detected";
 };
+
+export type NativeImportHeadlessStatus = NativeImportGate["headless"];
+export type NativeImportHeadlessStatuses = Partial<
+  Record<NativeImportGate["format"], NativeImportHeadlessStatus>
+>;
 
 /**
  * Reports formats that Inkscape advertises but the MCP does not expose until
@@ -21,18 +26,22 @@ export type NativeImportGate = {
  */
 export function inspectNativeImportGates(
   inputTypes: readonly string[],
+  headlessStatuses: NativeImportHeadlessStatuses = {},
 ): NativeImportGate[] {
   const observed = new Set(inputTypes.map((type) => type.toLowerCase()));
   return NATIVE_IMPORT_FORMATS.map(({ aliases, format }) => {
     const advertisedTypes = aliases.filter((alias) => observed.has(alias));
+    const headless = headlessStatuses[format] ?? "not-validated";
     return {
       advertisedTypes,
       format,
-      headless: "not-validated" as const,
+      headless,
       status:
         advertisedTypes.length === 0
           ? ("not-detected" as const)
-          : ("detected-but-blocked" as const),
+          : headless === "validated"
+            ? ("available" as const)
+            : ("detected-but-blocked" as const),
     };
   });
 }

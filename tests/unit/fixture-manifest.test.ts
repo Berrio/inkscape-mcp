@@ -27,7 +27,17 @@ describe("fixture manifest bootstrap", () => {
     };
 
     expect(manifest.schemaVersion).toBe(1);
-    expect(manifest.fixtures).toEqual([]);
+    expect(manifest.fixtures).toEqual([
+      expect.objectContaining({
+        applicability: expect.objectContaining({
+          capabilities: ["input:eps"],
+          inkscape: "1.4.4",
+        }),
+        id: "minimal-eps",
+        license: { spdx: "MIT" },
+        source: { file: "minimal.eps", origin: "first-party" },
+      }),
+    ]);
     expect(manifest.$schema).toContain("fixture-manifest.schema.json");
     expect(schema.$schema).toContain("draft/2020-12/schema");
     expect(schema.required).toEqual(["schemaVersion", "fixtures"]);

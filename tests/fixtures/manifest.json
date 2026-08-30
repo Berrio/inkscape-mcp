@@ -1,5 +1,26 @@
 {
   "$schema": "../../schemas/fixture-manifest.schema.json",
   "schemaVersion": 1,
-  "fixtures": []
+  "fixtures": [
+    {
+      "id": "minimal-eps",
+      "source": {
+        "file": "minimal.eps",
+        "origin": "first-party"
+      },
+      "license": {
+        "spdx": "MIT"
+      },
+      "applicability": {
+        "inkscape": "1.4.4",
+        "platforms": ["windows"],
+        "capabilities": ["input:eps"]
+      },
+      "assertions": {
+        "structural": ["imports to a sanitized SVG"],
+        "numeric": [],
+        "visual": []
+      }
+    }
+  ]
 }

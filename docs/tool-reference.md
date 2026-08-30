@@ -133,6 +133,7 @@ exportación: inspección → `document_export_preset_plan` →
 | `document_import_svg`          | SVG local, output y política.                                                     | Importar un SVG como documento editable nuevo.          |
 | `document_import_raster`       | Raster local aprobado, link/embed, límite de megapíxeles y pérdidas normalizadas. | Crear SVG desde un raster aprobado.                     |
 | `document_import_pdf`          | PDF local, página dentro de política, importador gateado y pérdidas normalizadas. | Importar una página declarando pérdida de editabilidad. |
+| `document_import_postscript`   | EPS/PS local, sonda headless, SVG saneado y manifest de fidelidad.                | Importar un EPS local sin argumentos nativos libres.    |
 | `assets_package`               | Documento/revisión y directorio nuevo.                                            | Publicar SVG, assets locales y manifest juntos.         |
 
 ## Exportación, presets y jobs

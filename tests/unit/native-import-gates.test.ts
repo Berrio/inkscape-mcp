@@ -49,4 +49,28 @@ describe("native import capability gates", () => {
       },
     ]);
   });
+
+  it("only exposes an advertised format after its controlled probe validates it", () => {
+    expect(
+      inspectNativeImportGates(["eps", "ps"], {
+        eps: "validated",
+        ps: "not-headless",
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          advertisedTypes: ["eps"],
+          format: "eps",
+          headless: "validated",
+          status: "available",
+        },
+        {
+          advertisedTypes: ["ps"],
+          format: "ps",
+          headless: "not-headless",
+          status: "detected-but-blocked",
+        },
+      ]),
+    );
+  });
 });

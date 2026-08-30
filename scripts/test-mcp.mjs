@@ -1656,9 +1656,15 @@ try {
     importCapabilities.structuredContent?.svgzImport !== "built-in-sanitized" ||
     importCapabilities.structuredContent?.rasterImport !==
       "built-in-byte-sniffed" ||
-    !importCapabilities.structuredContent?.nativeImportGates?.every(
-      (gate) => gate.headless === "not-validated",
-    ) ||
+    importCapabilities.structuredContent?.nativeImportGates?.find(
+      (gate) => gate.format === "eps",
+    )?.headless !== "validated" ||
+    importCapabilities.structuredContent?.nativeImportGates?.find(
+      (gate) => gate.format === "eps",
+    )?.status !== "available" ||
+    importCapabilities.structuredContent?.nativeImportGates?.find(
+      (gate) => gate.format === "ps",
+    )?.headless !== "validated" ||
     typeof importCapabilities.structuredContent?.nativeProbeAvailable !==
       "boolean"
   )
@@ -3758,6 +3764,75 @@ try {
   const genericPdfRevision = createHash("sha256")
     .update(genericPdfBytes)
     .digest("hex");
+  const epsFixtureBytes = await readFile(
+    join(process.cwd(), "tests", "fixtures", "minimal.eps"),
+  );
+  await writeFile(join(workspaceRoot, "minimal.eps"), epsFixtureBytes);
+  const importedEps = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: createHash("sha256")
+        .update(epsFixtureBytes)
+        .digest("hex"),
+      format: "eps",
+      manifestPath: "minimal.eps.import.json",
+      outputPath: "minimal-eps.svg",
+      path: "minimal.eps",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_postscript",
+  });
+  if (
+    importedEps.isError ||
+    importedEps.structuredContent?.manifest?.format !== "eps" ||
+    importedEps.structuredContent?.manifest?.warnings?.[0] !==
+      "POSTSCRIPT_NATIVE_IMPORT_FIDELITY_NOT_GUARANTEED" ||
+    !(await readFile(join(workspaceRoot, "minimal-eps.svg"), "utf8")).includes(
+      "<svg",
+    )
+  )
+    throw new Error(
+      "document_import_postscript did not publish a sanitized EPS",
+    );
+  const epsPreview = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: importedEps.structuredContent.revision,
+      outputPath: "minimal-eps-preview.png",
+      path: "minimal-eps.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  if (epsPreview.isError)
+    throw new Error(
+      "document_import_postscript did not render its EPS fixture",
+    );
+  const corruptEpsBytes = Buffer.from("not postscript", "ascii");
+  await writeFile(join(workspaceRoot, "corrupt.eps"), corruptEpsBytes);
+  const corruptEps = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: createHash("sha256")
+        .update(corruptEpsBytes)
+        .digest("hex"),
+      format: "eps",
+      manifestPath: "corrupt.eps.import.json",
+      outputPath: "corrupt-eps.svg",
+      path: "corrupt.eps",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_postscript",
+  });
+  if (
+    !corruptEps.isError ||
+    !corruptEps.content.some(
+      (item) =>
+        item.type === "text" && item.text.includes("missing its %! signature"),
+    ) ||
+    existsSync(join(workspaceRoot, "corrupt-eps.svg")) ||
+    existsSync(join(workspaceRoot, "corrupt.eps.import.json"))
+  )
+    throw new Error(
+      "document_import_postscript did not reject corrupt EPS before publication",
+    );
   const encryptedPdfBytes = Buffer.from(
     "%PDF-1.7\n1 0 obj\n<< /Encrypt 2 0 R >>\nendobj\n%%EOF\n",
     "ascii",

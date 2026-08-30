@@ -1578,7 +1578,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [ ] `F02-G06` Un artefacto de fixture se publica/lee por URI opaca y otro workspace no puede accederlo.
 - [ ] `F02-G07` Carreras symlink/junction deterministas se rechazan en tests y el ADR declara qué ataque local concurrente no cubre Node estándar.
 - [ ] `F02-G08` Una exportación usa un bundle de inputs consistente o devuelve conflicto; nunca mezcla revisiones de SVG/dependencias.
-- [ ] `F02-G09` El cliente no puede seleccionar `trusted` ni un modo menos restrictivo que el ceiling de arranque; el intento deja evento auditado sin contenido sensible.
+- [x] `F02-G09` El cliente no puede seleccionar `trusted` ni un modo menos restrictivo que el ceiling de arranque; el intento deja evento auditado sin contenido sensible. — Los cinco schemas MCP de importación rechazan `trusted` antes de IO/publicación; el smoke stdio verifica el rechazo sin output y emite el evento fijo `sanitize_mode_trusted_rejected`, sin rutas, documento, workspace ni valor de cliente.
 
 ---
 

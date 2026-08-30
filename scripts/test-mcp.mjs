@@ -1696,6 +1696,24 @@ try {
   const unsafeRevision = createHash("sha256")
     .update(await readFile(join(workspaceRoot, "unsafe-import.svg")))
     .digest("hex");
+  const trustedImportAttempt = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: unsafeRevision,
+      outputPath: "trusted-import-must-not-publish.svg",
+      path: "unsafe-import.svg",
+      sanitizeMode: "trusted",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_svg",
+  });
+  if (
+    !trustedImportAttempt.isError ||
+    existsSync(join(workspaceRoot, "trusted-import-must-not-publish.svg"))
+  ) {
+    throw new Error(
+      "document_import_svg accepted trusted sanitizeMode or published output",
+    );
+  }
   const importedSvg = await workspaceClient.callTool({
     arguments: {
       expectedRevision: unsafeRevision,

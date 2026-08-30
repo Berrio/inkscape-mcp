@@ -15,6 +15,7 @@ import { z } from "zod";
 import packageMetadata from "../../package.json" with { type: "json" };
 import { CapabilityService } from "../capabilities/index.js";
 import { assertDocumentWorkspace, type ServerConfig } from "../config/index.js";
+import { writeSecurityAuditLog } from "./security-audit.js";
 import {
   createRasterImportSvg,
   inspectRasterImport,
@@ -1099,6 +1100,14 @@ const importDependencyPolicySchema = z
   })
   .strict()
   .default({ fonts: "record", profiles: "record" });
+const clientSanitizeModeSchema = z.preprocess(
+  (value) => {
+    if (value === "trusted")
+      writeSecurityAuditLog("sanitize_mode_trusted_rejected");
+    return value;
+  },
+  z.enum(["strict", "preserve-local"]).default("preserve-local"),
+);
 const importedDependenciesSchema = z.object({
   colorManagement: z.object({
     cmykLikeReferenceCount: z.number().int().nonnegative(),
@@ -1844,9 +1853,7 @@ export function buildServer(
           manifestPath: z.string().min(1).max(1024),
           outputPath: z.string().min(1).max(1024),
           path: z.string().min(1).max(1024),
-          sanitizeMode: z
-            .enum(["strict", "preserve-local", "trusted"])
-            .default("preserve-local"),
+          sanitizeMode: clientSanitizeModeSchema,
           workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
         })
         .strict(),
@@ -2147,9 +2154,7 @@ export function buildServer(
           manifestPath: z.string().min(1).max(1024),
           outputPath: z.string().min(1).max(1024),
           path: z.string().min(1).max(1024),
-          sanitizeMode: z
-            .enum(["strict", "preserve-local", "trusted"])
-            .default("preserve-local"),
+          sanitizeMode: clientSanitizeModeSchema,
           workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
         })
         .strict(),
@@ -2339,9 +2344,7 @@ export function buildServer(
           manifestPath: z.string().min(1).max(1024),
           outputPath: z.string().min(1).max(1024),
           path: z.string().min(1).max(1024),
-          sanitizeMode: z
-            .enum(["strict", "preserve-local", "trusted"])
-            .default("preserve-local"),
+          sanitizeMode: clientSanitizeModeSchema,
           workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
         })
         .strict(),
@@ -2535,9 +2538,7 @@ export function buildServer(
           outputPath: z.string().min(1).max(1024),
           page: z.number().int().min(1).max(10_000),
           path: z.string().min(1).max(1024),
-          sanitizeMode: z
-            .enum(["strict", "preserve-local", "trusted"])
-            .default("preserve-local"),
+          sanitizeMode: clientSanitizeModeSchema,
           workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
         })
         .strict()
@@ -2762,9 +2763,7 @@ export function buildServer(
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
           outputPath: z.string().min(1).max(1024),
           path: z.string().min(1).max(1024),
-          sanitizeMode: z
-            .enum(["strict", "preserve-local", "trusted"])
-            .default("preserve-local"),
+          sanitizeMode: clientSanitizeModeSchema,
           workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
         })
         .strict(),

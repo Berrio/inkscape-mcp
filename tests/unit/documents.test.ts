@@ -792,12 +792,31 @@ describe("basic SVG documents", () => {
     expect(combinedPaths.svg).toContain(
       'id="left" fill="#ff0000" d="M 0 0 L 1 0 M 2 0 L 3 0"',
     );
+    expect(() =>
+      combineSvgPaths(
+        '<svg xmlns="http://www.w3.org/2000/svg"><path id="left" fill="#ff0000" d="M 0 0 L 1 0"/><path id="right" fill="#0000ff" d="M 2 0 L 3 0"/></svg>',
+        ["left", "right"],
+      ),
+    ).toThrow("identical presentation");
+    expect(() =>
+      combineSvgPaths(
+        '<svg xmlns="http://www.w3.org/2000/svg"><path id="left" d="M 0 0 L 1 0"/><path id="right" d="M 2 0 L 3 0"/><use href="#right"/></svg>',
+        ["left", "right"],
+      ),
+    ).toThrow("reference");
     const brokenPaths = breakApartSvgPath(combinedPaths.svg, "left", [
       "part_one",
       "part_two",
     ]);
     expect(brokenPaths.ids).toEqual(["part_one", "part_two"]);
     expect(brokenPaths.svg).toContain('id="part_one"');
+    expect(() =>
+      breakApartSvgPath(
+        '<svg xmlns="http://www.w3.org/2000/svg"><path id="compound" d="M 0 0 L 1 0 M 2 0 L 3 0"/><use href="#compound"/></svg>',
+        "compound",
+        ["part_one", "part_two"],
+      ),
+    ).toThrow("reference");
     const reversedPath = reverseSvgPath(
       '<svg xmlns="http://www.w3.org/2000/svg"><path id="line" d="M 0 0 H 2 V 3"/></svg>',
       "line",

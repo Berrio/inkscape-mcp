@@ -7,6 +7,7 @@ import {
   reverseLinearSvgPathData,
   serializeSvgPathData,
   splitSvgPathSubpaths,
+  SVG_PATH_LIMITS,
 } from "../../src/documents/index.js";
 
 describe("SVG path AST", () => {
@@ -40,6 +41,29 @@ describe("SVG path AST", () => {
       "arc flags",
     );
     expect(() => parseSvgPathData("M 0 0 R 1 2")).toThrow("invalid syntax");
+    expect(() => parseSvgPathData("M 0 0 L 1000001 0")).toThrow(
+      "supported range",
+    );
+  });
+
+  it("returns a mutable bounded AST and serializes numbers deterministically", () => {
+    const segments = parseSvgPathData("M -0 0 L 1.25 2");
+    segments[1]!.values[0] = 3.5;
+    expect(serializeSvgPathData(segments)).toBe("M 0 0 L 3.5 2");
+    expect(SVG_PATH_LIMITS).toEqual({
+      maxDataLength: 100_000,
+      maxNumericMagnitude: 1_000_000,
+      maxSegments: 10_000,
+    });
+    expect(() =>
+      serializeSvgPathData([
+        { command: "M", values: [0, 0] },
+        {
+          command: "L",
+          values: [0, -1_000_001],
+        },
+      ]),
+    ).toThrow("supported range");
   });
 
   it("splits compound paths and reverses supported linear subpaths", () => {

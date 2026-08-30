@@ -192,6 +192,7 @@ export {
   reverseLinearSvgPathData,
   serializeSvgPathData,
   splitSvgPathSubpaths,
+  SVG_PATH_LIMITS,
   type SvgPathSegment,
 } from "./path-data.js";
 export {

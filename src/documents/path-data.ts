@@ -20,8 +20,22 @@ export type SvgPathSegment = {
     | "v"
     | "Z"
     | "z";
-  values: readonly number[];
+  /** Mutable validated numeric arguments for this command. */
+  values: number[];
 };
+
+/**
+ * Resource and numeric bounds for the editable SVG path AST.
+ *
+ * Numbers are emitted with ECMAScript's shortest round-trippable decimal
+ * representation (with negative zero canonicalized to `0`); this module does
+ * not round or approximate path geometry.
+ */
+export const SVG_PATH_LIMITS = {
+  maxDataLength: 100_000,
+  maxNumericMagnitude: 1_000_000,
+  maxSegments: 10_000,
+} as const;
 
 const COMMAND_ARITY: Readonly<Record<SvgPathSegment["command"], number>> = {
   A: 7,
@@ -51,7 +65,7 @@ const COMMAND = /^[AaCcHhLlMmQqSsTtVvZz]$/u;
 
 /** Parses bounded SVG path data into a mutable command stream. */
 export function parseSvgPathData(value: string): SvgPathSegment[] {
-  if (value.length < 1 || value.length > 100_000)
+  if (value.length < 1 || value.length > SVG_PATH_LIMITS.maxDataLength)
     throw new Error("Path data is invalid or too long");
   const tokens = value.match(TOKEN);
   if (!tokens || value.replace(/[\s,]/gu, "") !== tokens.join(""))
@@ -93,7 +107,8 @@ export function parseSvgPathData(value: string): SvgPathSegment[] {
     firstPairForCommand = false;
     index += arity;
   }
-  if (segments.length > 10_000) throw new Error("Path has too many segments");
+  if (segments.length > SVG_PATH_LIMITS.maxSegments)
+    throw new Error("Path has too many segments");
   return segments;
 }
 
@@ -101,7 +116,7 @@ export function parseSvgPathData(value: string): SvgPathSegment[] {
 export function serializeSvgPathData(
   segments: readonly SvgPathSegment[],
 ): string {
-  if (segments.length < 1 || segments.length > 10_000)
+  if (segments.length < 1 || segments.length > SVG_PATH_LIMITS.maxSegments)
     throw new Error("Path must contain between one and 10,000 segments");
   if (segments[0]!.command !== "M" && segments[0]!.command !== "m")
     throw new Error("Path data must start with a moveto command");
@@ -113,7 +128,7 @@ export function serializeSvgPathData(
       validatePathValues(segment.command, segment.values);
       return segment.values.length === 0
         ? segment.command
-        : `${segment.command} ${segment.values.join(" ")}`;
+        : `${segment.command} ${segment.values.map(formatPathNumber).join(" ")}`;
     })
     .join(" ");
 }
@@ -727,8 +742,16 @@ function validatePathValues(
   command: SvgPathSegment["command"],
   values: readonly number[],
 ): void {
-  if (values.some((item) => !Number.isFinite(item)))
-    throw new Error("Path coordinate must be finite");
+  if (
+    values.some(
+      (item) =>
+        !Number.isFinite(item) ||
+        Math.abs(item) > SVG_PATH_LIMITS.maxNumericMagnitude,
+    )
+  )
+    throw new Error(
+      "Path coordinate must be finite and within supported range",
+    );
   if (
     (command === "A" || command === "a") &&
     (values[0]! < 0 || values[1]! < 0)
@@ -740,4 +763,8 @@ function validatePathValues(
       (values[4] !== 0 && values[4] !== 1))
   )
     throw new Error("Path arc flags must be zero or one");
+}
+
+function formatPathNumber(value: number): string {
+  return Object.is(value, -0) ? "0" : value.toString();
 }

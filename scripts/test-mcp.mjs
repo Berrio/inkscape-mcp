@@ -208,22 +208,120 @@ try {
     typeof reversedPathRevision !== "string"
   )
     throw new Error("path_reverse did not preserve the path identity");
-  const booleanPaths = await workspaceClient.callTool({
-    arguments: {
-      expectedRevision: reversedPathRevision,
-      ids: ["path_first", "path_second"],
-      operation: "union",
-      path: "paths.svg",
-      workspaceId: workspace.id,
-    },
-    name: "paths_boolean",
-  });
-  if (
-    booleanPaths.isError ||
-    booleanPaths.structuredContent?.operation !== "union" ||
-    (booleanPaths.structuredContent?.diff?.removedIds?.length ?? 0) < 1
-  )
-    throw new Error("paths_boolean did not run Inkscape path union");
+  if (reversedPathRevision === pathsRevision)
+    throw new Error("path_reverse did not create a new document revision");
+  async function assertBooleanVisual(operation, expectedPaths) {
+    const path = `boolean-${operation}.svg`;
+    const referencePath = `boolean-${operation}-reference.svg`;
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="10" viewBox="0 0 15 10"><path id="target" d="M 0 0 H 10 V 10 H 0 Z"/><path id="cutter" d="M 5 0 H 15 V 10 H 5 Z"/></svg>';
+    await writeFile(join(workspaceRoot, path), source);
+    const expected = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="10" viewBox="0 0 15 10">${expectedPaths}</svg>`;
+    await writeFile(join(workspaceRoot, referencePath), expected);
+    const sourceRevision = createHash("sha256")
+      .update(await readFile(join(workspaceRoot, path)))
+      .digest("hex");
+    const referenceRevision = createHash("sha256")
+      .update(await readFile(join(workspaceRoot, referencePath)))
+      .digest("hex");
+    const result = await workspaceClient.callTool({
+      arguments: {
+        expectedRevision: sourceRevision,
+        ids: ["target", "cutter"],
+        operation,
+        path,
+        workspaceId: workspace.id,
+      },
+      name: "paths_boolean",
+    });
+    const revision = result.structuredContent?.revision;
+    if (
+      result.isError ||
+      result.structuredContent?.operation !== operation ||
+      typeof revision !== "string" ||
+      revision === sourceRevision
+    )
+      throw new Error(`paths_boolean did not publish ${operation}`);
+    const preview = await workspaceClient.callTool({
+      arguments: {
+        expectedRevision: revision,
+        outputPath: `boolean-${operation}.png`,
+        path,
+        width: 150,
+        workspaceId: workspace.id,
+      },
+      name: "document_render_preview",
+    });
+    const referencePreview = await workspaceClient.callTool({
+      arguments: {
+        expectedRevision: referenceRevision,
+        outputPath: `boolean-${operation}-reference.png`,
+        path: referencePath,
+        width: 150,
+        workspaceId: workspace.id,
+      },
+      name: "document_render_preview",
+    });
+    if (preview.isError || referencePreview.isError)
+      throw new Error(`paths_boolean could not render ${operation}`);
+    const visualDiff = comparePngVisual(
+      decodePngRgba(
+        await readFile(join(workspaceRoot, `boolean-${operation}.png`)),
+      ),
+      decodePngRgba(
+        await readFile(
+          join(workspaceRoot, `boolean-${operation}-reference.png`),
+        ),
+      ),
+      1,
+    );
+    if (visualDiff.differingPixels !== 0)
+      throw new Error(
+        `paths_boolean ${operation} differs from its visual fixture: ${JSON.stringify(visualDiff)}`,
+      );
+  }
+  await assertBooleanVisual("union", '<path d="M 0 0 H 15 V 10 H 0 Z"/>');
+  await assertBooleanVisual("difference", '<path d="M 0 0 H 5 V 10 H 0 Z"/>');
+  await assertBooleanVisual(
+    "intersection",
+    '<path d="M 5 0 H 10 V 10 H 5 Z"/>',
+  );
+  await assertBooleanVisual(
+    "exclusion",
+    '<path d="M 0 0 H 5 V 10 H 0 Z M 10 0 H 15 V 10 H 10 Z"/>',
+  );
+  async function assertNativePathOperation(operation, source) {
+    const path = `path-${operation}.svg`;
+    await writeFile(join(workspaceRoot, path), source);
+    const sourceRevision = createHash("sha256")
+      .update(await readFile(join(workspaceRoot, path)))
+      .digest("hex");
+    const result = await workspaceClient.callTool({
+      arguments: {
+        expectedRevision: sourceRevision,
+        ids: ["target", "cutter"],
+        operation,
+        path,
+        workspaceId: workspace.id,
+      },
+      name: "paths_boolean",
+    });
+    if (
+      result.isError ||
+      result.structuredContent?.operation !== operation ||
+      typeof result.structuredContent?.revision !== "string" ||
+      result.structuredContent.revision === sourceRevision
+    )
+      throw new Error(`paths_boolean did not run native ${operation}`);
+  }
+  await assertNativePathOperation(
+    "division",
+    '<svg xmlns="http://www.w3.org/2000/svg"><path id="target" fill="#ff0000" d="M 0 0 H 10 V 10 H 0 Z"/><path id="cutter" d="M 5 -2 H 7 V 12 H 5 Z"/></svg>',
+  );
+  await assertNativePathOperation(
+    "cut",
+    '<svg xmlns="http://www.w3.org/2000/svg"><path id="target" fill="none" stroke="#ff0000" d="M 0 5 H 10"/><path id="cutter" d="M 5 -2 V 12"/></svg>',
+  );
   await writeFile(
     join(workspaceRoot, "path-effects.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><defs><inkscape:path-effect id="round" effect="fillet_chamfer"/><inkscape:path-effect id="bend" effect="bend_path"/></defs><path id="lpe_path" d="M 0 0 L 10 0" inkscape:path-effect="#round;#bend"/></svg>',

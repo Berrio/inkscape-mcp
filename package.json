@@ -51,6 +51,7 @@
     "test:f05-g02": "npm run build --silent && node scripts/test-f05-png-backgrounds.mjs",
     "test:f05-g03": "npm run build --silent && node scripts/test-f05-pdf-multipage.mjs",
     "test:f05-g04": "npm run build --silent && node scripts/test-f05-svg-reopen.mjs",
+    "test:f05-g05": "npm run build --silent && vitest run tests/unit/storage.test.ts tests/unit/recovery.test.ts && node scripts/test-f05-batch-recovery.mjs",
     "inspect": "npx --no-install @modelcontextprotocol/inspector node dist/cli.js",
     "test:conformance": "npx --no-install @modelcontextprotocol/conformance",
     "pack:check": "npm pack --dry-run --json",

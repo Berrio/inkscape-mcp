@@ -10,12 +10,13 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
-import { z } from "zod";
+import { z as baseZ } from "zod";
 
 import packageMetadata from "../../package.json" with { type: "json" };
 import { CapabilityService } from "../capabilities/index.js";
 import { assertDocumentWorkspace, type ServerConfig } from "../config/index.js";
 import { writeSecurityAuditLog } from "./security-audit.js";
+
 import {
   createRasterImportSvg,
   inspectRasterImport,
@@ -199,6 +200,14 @@ import {
   WorkspaceService,
   type ResolvedWorkspacePath,
 } from "../workspace/index.js";
+
+/**
+ * MCP schemas reject unknown object properties throughout the public catalog.
+ * This prevents clients from smuggling executable, argv, flag, or action-like
+ * fields into otherwise typed requests where Zod's default strip mode would
+ * silently accept and discard them.
+ */
+const z = { ...baseZ, object: baseZ.strictObject };
 
 const statusSchema = z.object({
   actionCount: z.number().int().nonnegative(),
@@ -610,7 +619,7 @@ const shapeSchema = z.discriminatedUnion("kind", [
     style: shapeStyleSchema.optional(),
   }),
 ]);
-type ShapeRequest = z.infer<typeof shapeSchema>;
+type ShapeRequest = baseZ.infer<typeof shapeSchema>;
 const transformSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("translate"),
@@ -1047,7 +1056,7 @@ const designOperationSchema = z.discriminatedUnion("kind", [
     ids: z.array(transactionReferenceSchema).min(1).max(100),
   }),
 ]);
-type DesignOperation = z.infer<typeof designOperationSchema>;
+type DesignOperation = baseZ.infer<typeof designOperationSchema>;
 const semanticDiffSchema = z.object({
   addedIds: z.array(shapeIdSchema),
   afterElementCount: z.number().int().nonnegative(),
@@ -10244,7 +10253,7 @@ function resolveTransactionReference(
 }
 
 function resolveTransactionElementUpdates(
-  updates: readonly z.infer<typeof transactionElementUpdateSchema>[],
+  updates: readonly baseZ.infer<typeof transactionElementUpdateSchema>[],
   aliases: ReadonlyMap<string, string>,
 ): Parameters<typeof updateSvgShapes>[1] {
   return updates.map(({ id, ...update }) => ({
@@ -10693,7 +10702,7 @@ function requireLayoutBounds(
 }
 
 function resolveLayoutAnchor(
-  anchor: z.infer<typeof layoutAnchorSchema>,
+  anchor: baseZ.infer<typeof layoutAnchorSchema>,
   source: string,
   selected: readonly LayoutBounds[],
   nativeBounds: ReadonlyMap<string, InkscapeBounds>,

@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import {
   isAsciiDxf,
   isAsciiHpgl,
+  probeWebpExport,
 } from "../../src/capabilities/export-probe.js";
 import { inspectDxf } from "../../src/export/dxf.js";
 import { inspectHpgl } from "../../src/export/hpgl.js";
@@ -39,5 +40,35 @@ it("recognizes only bounded ASCII HPGL command streams", () => {
   expect(inspectHpgl(Buffer.from("IN;PU0,0;PD1,1;"))).toEqual({
     byteLength: 15,
     penCommandCount: 2,
+  });
+});
+
+it("reports a missing WebP artifact without leaking its scratch path", async () => {
+  const result = await probeWebpExport(
+    {
+      run: async () => ({
+        durationMs: 1,
+        exitCode: 0,
+        pid: 1,
+        signal: null,
+        stderr: Buffer.alloc(0),
+        stderrTruncated: false,
+        stdout: Buffer.alloc(0),
+        stdoutTruncated: false,
+        terminationReason: "completed" as const,
+      }),
+    },
+    process.execPath,
+    {
+      maxRasterMegapixels: 1,
+      maxStderrBytes: 1024,
+      maxStdoutBytes: 1024,
+      processTimeoutMs: 1_000,
+      scratchRoot: "auto",
+    },
+  );
+  expect(result).toEqual({
+    available: false,
+    reason: "WebP output is missing or unreadable",
   });
 });

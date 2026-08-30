@@ -3,6 +3,7 @@ export {
   probeDxfExport,
   probeHpglExport,
   probePngExport,
+  probeWebpExport,
   type ExportProbe,
 } from "./export-probe.js";
 export { CapabilityService } from "./service.js";

@@ -6,6 +6,7 @@ import type { ServerConfig } from "../config/index.js";
 import type { ProcessExecutor } from "../discovery/probe.js";
 import { inspectDxf } from "../export/dxf.js";
 import { inspectHpgl } from "../export/hpgl.js";
+import { inspectRasterImport } from "../import/raster-import.js";
 
 export type ExportProbe = { available: boolean; reason?: string };
 
@@ -72,11 +73,10 @@ export async function probePngExport(
       .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
       ? { available: true }
       : { available: false, reason: "output is not a PNG" };
-  } catch (error: unknown) {
+  } catch {
     return {
       available: false,
-      reason:
-        error instanceof Error ? error.message : "unknown export probe error",
+      reason: "PNG output is missing or unreadable",
     };
   } finally {
     await rm(scratch, { force: true, recursive: true });
@@ -117,13 +117,10 @@ export async function probeDxfExport(
     return isAsciiDxf(dxf)
       ? { available: true }
       : { available: false, reason: "output is not ASCII DXF" };
-  } catch (error: unknown) {
+  } catch {
     return {
       available: false,
-      reason:
-        error instanceof Error
-          ? error.message
-          : "unknown DXF export probe error",
+      reason: "DXF output is missing or unreadable",
     };
   } finally {
     await rm(scratch, { force: true, recursive: true });
@@ -164,13 +161,63 @@ export async function probeHpglExport(
     return isAsciiHpgl(hpgl)
       ? { available: true }
       : { available: false, reason: "output is not bounded ASCII HPGL" };
-  } catch (error: unknown) {
+  } catch {
     return {
       available: false,
-      reason:
-        error instanceof Error
-          ? error.message
-          : "unknown HPGL export probe error",
+      reason: "HPGL output is missing or unreadable",
+    };
+  } finally {
+    await rm(scratch, { force: true, recursive: true });
+  }
+}
+
+/** Probes only Inkscape's fixed WebP extension with a known small SVG. */
+export async function probeWebpExport(
+  runner: Pick<ProcessExecutor, "run">,
+  executable: string,
+  config: Pick<
+    ServerConfig,
+    | "maxRasterMegapixels"
+    | "maxStderrBytes"
+    | "maxStdoutBytes"
+    | "processTimeoutMs"
+    | "scratchRoot"
+  >,
+): Promise<ExportProbe> {
+  const root =
+    config.scratchRoot === "auto" ? tmpdir() : resolve(config.scratchRoot);
+  const scratch = await mkdtemp(join(root, "inkscape-mcp-probe-"));
+  const input = join(scratch, "probe.svg");
+  const output = join(scratch, "probe.webp");
+  try {
+    await writeFile(
+      input,
+      '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="3"><rect width="4" height="3" fill="#000"/></svg>',
+      "utf8",
+    );
+    const result = await runner.run(executable, {
+      args: [input, "--export-type=webp", `--export-filename=${output}`],
+      cwd: scratch,
+      maxStderrBytes: config.maxStderrBytes,
+      maxStdoutBytes: config.maxStdoutBytes,
+      timeoutMs: config.processTimeoutMs,
+    });
+    if (result.exitCode !== 0 || result.terminationReason !== "completed") {
+      return { available: false, reason: "WebP export did not complete" };
+    }
+    const raster = inspectRasterImport(
+      await readFile(output),
+      config.maxRasterMegapixels,
+    );
+    return raster.mime === "image/webp" &&
+      raster.width === 4 &&
+      raster.height === 3
+      ? { available: true }
+      : { available: false, reason: "output is not the expected WebP image" };
+  } catch {
+    return {
+      available: false,
+      reason: "WebP output is missing or unreadable",
     };
   } finally {
     await rm(scratch, { force: true, recursive: true });

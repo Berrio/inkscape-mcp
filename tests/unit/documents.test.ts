@@ -653,6 +653,38 @@ describe("basic SVG documents", () => {
       listSvgPages(deleteSvgPage(updated.svg, "page-a")).map((page) => page.id),
     ).toEqual(["page-b"]);
   });
+  it("preserves page IDs and namedview references through full page CRUD", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"><sodipodi:namedview inkscape:current-page="page_second"><sodipodi:guide position="4,5" orientation="1,0"/><inkscape:page id="page_first" x="0" y="0" width="100" height="80"/></sodipodi:namedview></svg>';
+    const added = addSvgPage(source, {
+      height: 60,
+      id: "page_second",
+      width: 70,
+      x: 110,
+      y: 0,
+    });
+    const updated = updateSvgPage(added.svg, "page_second", {
+      label: "Back",
+      x: 120,
+    });
+    const reordered = reorderSvgPages(updated.svg, [
+      "page_second",
+      "page_first",
+    ]);
+    const deleted = deleteSvgPage(reordered, "page_first");
+    expect(listSvgPages(deleted)).toEqual([
+      {
+        height: 60,
+        id: "page_second",
+        label: "Back",
+        width: 70,
+        x: 120,
+        y: 0,
+      },
+    ]);
+    expect(deleted).toContain('inkscape:current-page="page_second"');
+    expect(deleted).toContain('<sodipodi:guide position="4,5"');
+  });
   it("reports overlapping and empty pages plus objects outside every page", () => {
     expect(
       validateSvgPageLayout(

@@ -1624,7 +1624,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F03-G01` A4 mide 210 × 297 mm y round-trip conserva medidas dentro de tolerancia definida. — El smoke stdio crea A4 mediante el preset, lo exporta con Inkscape como SVG Inkscape y vuelve a inspeccionarlo; exige unidades `mm` y 210 × 297 mm con tolerancia absoluta de 0,01 mm por eje.
 - [x] `F03-G02` `page_only` no cambia transform/geometry de elementos. — Las pruebas unitarias y el smoke MCP comparan todos los atributos de los hijos SVG antes/después: grupo con transform anidado, `rect` geométrico transformado y `path` con `d` y matriz permanecen idénticos; sólo cambian viewport/viewBox.
 - [x] `F03-G03` contain/cover/fit producen bounds y anchors esperados en fixtures. — Los vectores unitarios fijan contain/cover 800 × 600 → 1080 × 1080 en `top_left` y `bottom_right`; el smoke MCP confirma las matrices `contain`/`cover`, el warning de crop y el fit por bounds nativos con márgenes. Las comparaciones numéricas usan tolerancia absoluta de 0,01 en el adapter nativo y 12 decimales en el modelo puro.
-- [ ] `F03-G04` Multipágina conserva IDs/referencias tras CRUD y reorder.
+- [x] `F03-G04` Multipágina conserva IDs/referencias tras CRUD y reorder. — El vector unitario y el smoke MCP ejecutan add → update → reorder → delete → list sobre páginas `page_*`; verifican ID/label/rectángulo final, orden estable y preservación de guía y referencia `inkscape:current-page` en namedview.
 - [ ] `F03-G05` Mutaciones rechazan revisión obsoleta y producen backup/revision/diff.
 - [ ] `F03-G06` Evidencia y previews comparativos en `docs/progress/F03.md`.
 - [ ] `F03-G07` Los cinco vectores normativos de la sección 10 pasan con tolerancias numéricas fijadas en el ADR.

@@ -2726,6 +2726,115 @@ try {
   ) {
     throw new Error("document_page_adjust did not change orientation");
   }
+  const pageCrudFixture =
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"><sodipodi:namedview inkscape:current-page="page_second"><sodipodi:guide position="4,5" orientation="1,0"/><inkscape:page id="page_first" x="0" y="0" width="100" height="80"/></sodipodi:namedview></svg>';
+  await writeFile(join(workspaceRoot, "page-crud.svg"), pageCrudFixture);
+  const pageCrudInitialRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "page-crud.svg")))
+    .digest("hex");
+  const pageCrudAdded = await workspaceClient.callTool({
+    arguments: {
+      action: "add",
+      expectedRevision: pageCrudInitialRevision,
+      page: {
+        height: 60,
+        id: "page_second",
+        width: 70,
+        x: 110,
+        y: 0,
+      },
+      path: "page-crud.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_pages",
+  });
+  const pageCrudAddedRevision = pageCrudAdded.structuredContent?.revision;
+  if (
+    pageCrudAdded.isError ||
+    pageCrudAdded.structuredContent?.pages?.map((page) => page.id).join(",") !==
+      "page_first,page_second" ||
+    typeof pageCrudAddedRevision !== "string"
+  ) {
+    throw new Error("document_pages did not add the stable second page");
+  }
+  const pageCrudUpdated = await workspaceClient.callTool({
+    arguments: {
+      action: "update",
+      expectedRevision: pageCrudAddedRevision,
+      pageId: "page_second",
+      patch: { label: "Back", x: 120 },
+      path: "page-crud.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_pages",
+  });
+  const pageCrudUpdatedRevision = pageCrudUpdated.structuredContent?.revision;
+  if (
+    pageCrudUpdated.isError ||
+    pageCrudUpdated.structuredContent?.pages?.[1]?.label !== "Back" ||
+    pageCrudUpdated.structuredContent?.pages?.[1]?.x !== 120 ||
+    typeof pageCrudUpdatedRevision !== "string"
+  ) {
+    throw new Error("document_pages did not update the stable page ID");
+  }
+  const pageCrudReordered = await workspaceClient.callTool({
+    arguments: {
+      action: "reorder",
+      expectedRevision: pageCrudUpdatedRevision,
+      pageIds: ["page_second", "page_first"],
+      path: "page-crud.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_pages",
+  });
+  const pageCrudReorderedRevision =
+    pageCrudReordered.structuredContent?.revision;
+  if (
+    pageCrudReordered.isError ||
+    pageCrudReordered.structuredContent?.pages
+      ?.map((page) => page.id)
+      .join(",") !== "page_second,page_first" ||
+    typeof pageCrudReorderedRevision !== "string"
+  ) {
+    throw new Error("document_pages did not reorder stable page IDs");
+  }
+  const pageCrudDeleted = await workspaceClient.callTool({
+    arguments: {
+      action: "delete",
+      expectedRevision: pageCrudReorderedRevision,
+      pageId: "page_first",
+      path: "page-crud.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_pages",
+  });
+  const pageCrudDeletedRevision = pageCrudDeleted.structuredContent?.revision;
+  const pageCrudListed = await workspaceClient.callTool({
+    arguments: {
+      action: "list",
+      expectedRevision: pageCrudDeletedRevision,
+      path: "page-crud.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_pages",
+  });
+  const pageCrudSource = await readFile(
+    join(workspaceRoot, "page-crud.svg"),
+    "utf8",
+  );
+  if (
+    pageCrudDeleted.isError ||
+    pageCrudListed.isError ||
+    pageCrudListed.structuredContent?.pages?.length !== 1 ||
+    pageCrudListed.structuredContent?.pages?.[0]?.id !== "page_second" ||
+    pageCrudListed.structuredContent?.pages?.[0]?.label !== "Back" ||
+    !pageCrudSource.includes('inkscape:current-page="page_second"') ||
+    !pageCrudSource.includes('<sodipodi:guide position="4,5"')
+  ) {
+    throw new Error(
+      "document_pages did not preserve IDs and namedview references through CRUD",
+    );
+  }
   const created = await workspaceClient.callTool({
     arguments: {
       outputPath: "a4.svg",

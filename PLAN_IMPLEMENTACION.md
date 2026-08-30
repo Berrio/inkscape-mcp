@@ -1629,7 +1629,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F03-G06` Evidencia y previews comparativos en `docs/progress/F03.md`. — `npm run evidence:f03` reproduce cuatro PNG mediante las tools MCP `document_resize` y `document_render_preview`; el manifiesto versionado fija dimensiones, modos y SHA-256.
 - [x] `F03-G07` Los cinco vectores normativos de la sección 10 pasan con tolerancias numéricas fijadas en el ADR. — ADR-010 fija comparación de 12 decimales para los modelos puros y conserva 0,01 unidades para observaciones nativas parciales; pruebas focalizadas cubren A4 user-scale/viewBox, contain, cover y fit negativo.
 - [x] `F03-G08` Escalar contenido preserva el subconjunto CSS declarado o rechaza sin mutar; fixtures difíciles reportan fidelidad/pérdidas exactas. — `document_resize` informa `contentFidelity`/`contentLimitations`; CSS simple type/id/class conserva cascade, mientras combinadores, variables, porcentajes geométricos, `objectBoundingBox` y non-scaling stroke rechazan antes del commit.
-- [ ] `F03-G09` Settings de página round-trip y el modo de fondo PNG `document` usa esos valores sin confundir desk con página.
+- [x] `F03-G09` Settings de página round-trip y el modo de fondo PNG `document` usa esos valores sin confundir desk con página. — Smoke MCP por stdio persiste y relee page/desk/border, exporta una página vacía y verifica RGBA de cada píxel contra `pageColor/pageOpacity`, con `deskColor` contrastante.
 
 ---
 

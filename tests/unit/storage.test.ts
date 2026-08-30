@@ -548,6 +548,41 @@ describe("file revisions and atomic store", () => {
     ).rejects.toThrow("authorized workspace");
     await expect(readFile(join(outside, "result.png"))).rejects.toBeDefined();
   });
+  it("rejects a batch when a destination directory becomes a junction during staging", async () => {
+    const root = await temporaryDirectory();
+    const outside = await temporaryDirectory();
+    const safeDestination = join(root, "safe-destination");
+    const swappedDestination = join(root, "swapped-destination");
+    const source = join(root, "source.svg");
+    const safeTarget = join(safeDestination, "safe.png");
+    const swappedTarget = join(swappedDestination, "swapped.png");
+    await Promise.all([mkdir(safeDestination), mkdir(swappedDestination)]);
+    await writeFile(source, "source");
+    let writes = 0;
+    const store = new AtomicFileStore(
+      new CanonicalPathLocks(),
+      async (temporaryPath, contents) => {
+        await writeFile(temporaryPath, contents);
+        writes += 1;
+        if (writes !== 2) return;
+        await rm(swappedDestination, { force: true, recursive: true });
+        await symlink(outside, swappedDestination, "junction");
+      },
+      { workspaceRoots: [root] },
+    );
+    await expect(
+      store.commitBatch({
+        expectedRevision: await sha256File(source),
+        files: [
+          { contents: Buffer.from("safe"), targetPath: safeTarget },
+          { contents: Buffer.from("swapped"), targetPath: swappedTarget },
+        ],
+        sourcePath: source,
+      }),
+    ).rejects.toThrow("authorized workspace");
+    await expect(readFile(safeTarget)).rejects.toBeDefined();
+    await expect(readFile(join(outside, "swapped.png"))).rejects.toBeDefined();
+  });
   it("serializes conflicting writers in a deterministic lock order", async () => {
     const locks = new CanonicalPathLocks();
     const events: string[] = [];

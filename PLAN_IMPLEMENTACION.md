@@ -1670,7 +1670,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F04-G02` Preflight detecta fixtures deliberadamente defectuosos sin falsos éxitos críticos. — El smoke stdio `test:f04-g02` cubre SVG negativo web, impresión, intercambio y XML inválido; fija códigos, severidades, detalle tipado de bleed/DPI, ausencia de filtraciones y que los defectos críticos dejan `valid=false`.
 - [x] `F04-G03` Preview coincide en tamaño/área/transparencia y respeta límites. — El smoke stdio `test:f04-g03` decodifica previews de página, drawing y selección, fija sus dimensiones/colores/alfa, verifica cache hit reproducible y comprueba el rechazo de una dimensión mayor a 2048 px.
 - [x] `F04-G04` Ninguna lectura modifica mtime/contenido del diseño. — El smoke stdio `test:f04-g04` fija y compara hash/mtime de un SVG antes y después de `document_inspect` deep con bounds nativos, `document_preflight` y `document_render_preview`; los tres preservan el original mientras preview publica sólo su derivado.
-- [ ] `F04-G05` Evidencia en `docs/progress/F04.md`.
+- [x] `F04-G05` Evidencia en `docs/progress/F04.md`. — Las puertas G01–G04 tienen smokes stdio independientes y reproducibles; el cierre F04 registra su alcance, comandos, resultados y límites declarados sin ampliar el contrato.
 
 ---
 
@@ -2676,7 +2676,7 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 - [~] F01 Discovery/runner (todos los WP implementados; gates de acciones, carreras y Job Object aún abiertos).
 - [~] F02 Workspace/XML/transacciones.
 - [~] F03 Tamaños/páginas.
-- [~] F04 Inspección/preflight/preview.
+- [x] F04 Inspección/preflight/preview.
 - [~] F05 Exportación MVP.
 - [x] F06 Diseño básico.
 - [~] F07 Diseño avanzado.

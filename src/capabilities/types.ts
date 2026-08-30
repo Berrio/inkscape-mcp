@@ -15,6 +15,11 @@ export type FlagCapability = {
   availability: CapabilityAvailability;
   name: string;
 };
+export type ExtensionExporterCapability = {
+  id: string;
+  name: string;
+  outputExtension: string;
+};
 
 export type CapabilityCacheContext = {
   dataDirectories?: readonly string[];
@@ -28,6 +33,7 @@ export type InkscapeCapabilities = {
   actionEvidence: readonly ActionEvidence[];
   actions: readonly string[];
   experimentalCapabilities: readonly string[];
+  extensionExporters: readonly ExtensionExporterCapability[];
   flags: readonly FlagCapability[];
   fingerprint: string;
   helpOptions: readonly string[];

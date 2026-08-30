@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 
 import type { InkscapeCandidate } from "../discovery/index.js";
 import type { ProcessExecutor } from "../discovery/probe.js";
+import { discoverInxExporters } from "../extensions/inx.js";
 
 import { parseActionList, parseHelpOptions, parseInputTypes } from "./parse.js";
 import type {
@@ -55,11 +56,13 @@ export class CapabilityService {
       return cached.value;
     }
 
-    const [helpAll, inputTypes, actionList] = await Promise.all([
-      collect(runner, candidate.executablePath, ["--help-all"], cwd),
-      collect(runner, candidate.executablePath, ["--list-input-types"], cwd),
-      collect(runner, candidate.executablePath, ["--action-list"], cwd),
-    ]);
+    const [helpAll, inputTypes, actionList, extensionExporters] =
+      await Promise.all([
+        collect(runner, candidate.executablePath, ["--help-all"], cwd),
+        collect(runner, candidate.executablePath, ["--list-input-types"], cwd),
+        collect(runner, candidate.executablePath, ["--action-list"], cwd),
+        discoverInxExporters(cacheContext.extensionDirectories ?? []),
+      ]);
     const actions = actionList.available
       ? parseActionList(actionList.output)
       : [];
@@ -71,6 +74,7 @@ export class CapabilityService {
       actionEvidence: actions.map((name) => ({ name, origin: "unknown" })),
       actions,
       experimentalCapabilities: [],
+      extensionExporters,
       flags: TRACKED_FLAGS.map((name) => ({
         availability: helpOptions.includes(name) ? "available" : "absent",
         name,
@@ -170,9 +174,10 @@ function defaultCacheContext(executablePath: string): CapabilityCacheContext {
     process.env.INKSCAPE_PROFILE_DIR ?? defaultProfileDirectory();
   return {
     dataDirectories: [dirname(executablePath)],
-    extensionDirectories: profileDirectory
-      ? [resolve(profileDirectory, "extensions")]
-      : [],
+    extensionDirectories: [
+      resolve(dirname(executablePath), "..", "share", "inkscape", "extensions"),
+      ...(profileDirectory ? [resolve(profileDirectory, "extensions")] : []),
+    ],
     helperPaths: [process.execPath],
     ...(profileDirectory === undefined ? {} : { profileDirectory }),
   };

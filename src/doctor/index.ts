@@ -22,7 +22,7 @@ export type DoctorReport = {
   capabilities?: Pick<
     InkscapeCapabilities,
     "actionCount" | "helpOptions" | "inputTypes" | "observations"
-  >;
+  > & { extensionExporterCount?: number };
   config: RedactedConfig;
   diagnostics: readonly string[];
   inkscape?: {
@@ -65,6 +65,7 @@ export async function runDoctor(
     return {
       capabilities: {
         actionCount: capabilities.actionCount,
+        extensionExporterCount: capabilities.extensionExporters.length,
         helpOptions: capabilities.helpOptions,
         inputTypes: capabilities.inputTypes,
         observations: capabilities.observations,

@@ -1934,7 +1934,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Ecosistema de extensiones y optimización
 
-- [ ] `F08-T31` Descubrir exporters INX desde directorios de datos, parsear sus manifests de forma segura y validarlos con export real; no existe un `--list-output-types` simétrico fiable.
+- [~] `F08-T31` Descubrir exporters INX desde directorios de datos, parsear sus manifests de forma segura y validarlos con export real; no existe un `--list-output-types` simétrico fiable. — Se descubren INX sólo desde directorios internos, con límite, XML sin DTD/entidades y sin exponer paths/IDs como inputs; el doctor informa únicamente el conteo. Falta el smoke de export por adapter antes de anunciar cualquiera.
 - [ ] `F08-T32` Definir adapter versionado para outputs de extensión y evaluar DXF, HPGL/PLT, G-code y raster adicionales solo si están instalados y son headless.
 - [ ] `F08-T33` Rechazar parámetros/IDs arbitrarios de extensión; cada adapter publicado tiene schema, allowlist, threat model y fixture.
 - [ ] `F08-T34` Implementar `document_optimize` como plan de operaciones seguras con dryRun, derivado por defecto y visual regression.

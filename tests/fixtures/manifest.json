@@ -21,6 +21,58 @@
         "numeric": [],
         "visual": []
       }
+    },
+    {
+      "id": "benign-svg-sanitization",
+      "source": {
+        "file": "benign-svg-sanitization.svg",
+        "origin": "first-party"
+      },
+      "license": {
+        "spdx": "MIT"
+      },
+      "applicability": {
+        "inkscape": "1.4.4",
+        "platforms": ["windows"],
+        "capabilities": ["input:svg", "output:png"]
+      },
+      "assertions": {
+        "structural": [
+          "preserves metadata, comment, namespace, defs, local href and local paint reference",
+          "removes no nodes or references"
+        ],
+        "numeric": [
+          {
+            "name": "preview-width",
+            "expected": 128,
+            "tolerance": 0,
+            "unit": "px"
+          },
+          {
+            "name": "preview-height",
+            "expected": 96,
+            "tolerance": 0,
+            "unit": "px"
+          }
+        ],
+        "visual": [
+          {
+            "renderer": "Inkscape 1.4.4 headless PNG preview",
+            "golden": "benign-svg-sanitization.golden.png",
+            "background": "transparent",
+            "widthPx": 128,
+            "heightPx": 96,
+            "threshold": {
+              "maxDifferingPixels": 0,
+              "maxChannelDelta": 0
+            },
+            "approval": {
+              "reason": "First-party clean SVG; any visual difference after sanitization is rejected rather than accepted.",
+              "approvedBy": "repository maintainer"
+            }
+          }
+        ]
+      }
     }
   ]
 }

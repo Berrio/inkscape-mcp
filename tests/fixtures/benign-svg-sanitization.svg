@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="64" height="48" viewBox="0 0 64 48">
+  <!-- Local-only sanitization fixture: all nodes and references are safe. -->
+  <metadata><dc:title>Benign sanitization fixture</dc:title></metadata>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4cc9f0"/>
+      <stop offset="1" stop-color="#4361ee"/>
+    </linearGradient>
+    <path id="diamond" d="M 0 -6 L 6 0 L 0 6 L -6 0 Z"/>
+  </defs>
+  <rect id="background" width="64" height="48" fill="url(#sky)"/>
+  <circle id="sun" cx="48" cy="14" r="7" fill="#f9c74f"/>
+  <use id="mark" href="#diamond" x="20" y="27" fill="#ffffff" inkscape:label="Local mark"/>
+</svg>

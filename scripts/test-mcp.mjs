@@ -5,7 +5,14 @@ import packageMetadata from "../package.json" with { type: "json" };
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -1688,6 +1695,89 @@ try {
     throw new Error(
       "document_resize accepted an ambiguous percentage viewport",
     );
+  }
+  const fixtureDirectory = join(process.cwd(), "tests", "fixtures");
+  await copyFile(
+    join(fixtureDirectory, "benign-svg-sanitization.svg"),
+    join(workspaceRoot, "benign-svg-sanitization.svg"),
+  );
+  await copyFile(
+    join(fixtureDirectory, "benign-svg-sanitization.golden.png"),
+    join(workspaceRoot, "benign-svg-sanitization.golden.png"),
+  );
+  const benignSourcePath = "benign-svg-sanitization.svg";
+  const benignSourceRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, benignSourcePath)))
+    .digest("hex");
+  const benignImport = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: benignSourceRevision,
+      outputPath: "benign-svg-sanitization.sanitized.svg",
+      path: benignSourcePath,
+      sanitizeMode: "preserve-local",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_svg",
+  });
+  const benignSanitizedRevision = benignImport.structuredContent?.revision;
+  if (
+    benignImport.isError ||
+    benignImport.structuredContent?.removed?.length !== 0 ||
+    typeof benignSanitizedRevision !== "string"
+  ) {
+    throw new Error("benign SVG sanitization removed safe fixture content");
+  }
+  const renderBenignPreview = async (path, expectedRevision, outputPath) =>
+    workspaceClient.callTool({
+      arguments: {
+        expectedRevision,
+        outputPath,
+        path,
+        width: 128,
+        workspaceId: workspace.id,
+      },
+      name: "document_render_preview",
+    });
+  const [benignSourcePreview, benignSanitizedPreview] = await Promise.all([
+    renderBenignPreview(
+      benignSourcePath,
+      benignSourceRevision,
+      "benign-svg-sanitization.source.png",
+    ),
+    renderBenignPreview(
+      "benign-svg-sanitization.sanitized.svg",
+      benignSanitizedRevision,
+      "benign-svg-sanitization.sanitized.png",
+    ),
+  ]);
+  if (
+    benignSourcePreview.isError ||
+    benignSanitizedPreview.isError ||
+    benignSourcePreview.structuredContent?.width !== 128 ||
+    benignSourcePreview.structuredContent?.height !== 96 ||
+    benignSanitizedPreview.structuredContent?.width !== 128 ||
+    benignSanitizedPreview.structuredContent?.height !== 96
+  ) {
+    throw new Error(
+      "benign SVG fixture preview dimensions are not reproducible",
+    );
+  }
+  const benignGolden = decodePngRgba(
+    await readFile(join(workspaceRoot, "benign-svg-sanitization.golden.png")),
+  );
+  for (const [id, previewPath] of [
+    ["source", "benign-svg-sanitization.source.png"],
+    ["sanitized", "benign-svg-sanitization.sanitized.png"],
+  ]) {
+    const difference = comparePngVisual(
+      decodePngRgba(await readFile(join(workspaceRoot, previewPath))),
+      benignGolden,
+    );
+    if (difference.differingPixels !== 0 || difference.maxChannelDelta !== 0) {
+      throw new Error(
+        `benign SVG ${id} render differs from its approved golden: ${JSON.stringify(difference)}`,
+      );
+    }
   }
   await writeFile(
     join(workspaceRoot, "unsafe-import.svg"),

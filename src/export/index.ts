@@ -49,10 +49,12 @@ export { expandExportPreset } from "./presets.js";
 export { verifyExportArtifact, type ExportVerification } from "./verify.js";
 export {
   inspectEmf,
+  inspectWmf,
   preflightEmfExport,
   type EmfFlattenPolicy,
   type EmfMetadata,
   type EmfPreflight,
+  type WmfMetadata,
 } from "./emf.js";
 export {
   inspectLegacyVectorEffects,

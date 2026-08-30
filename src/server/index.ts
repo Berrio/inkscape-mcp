@@ -8319,7 +8319,7 @@ export function buildServer(
     "document_export",
     {
       description:
-        "Exports one PNG, PDF, SVG, plain SVG, PS, EPS, or EMF from a validated ExportSpec through the bounded Inkscape pipeline. Legacy vector formats require an explicit fidelity policy for effects that cannot remain vector-native.",
+        "Exports one PNG, PDF, SVG, plain SVG, PS, EPS, EMF, or experimental WMF from a validated ExportSpec through the bounded Inkscape pipeline. Legacy vector formats require an explicit fidelity policy for effects that cannot remain vector-native.",
       inputSchema: z
         .object({
           spec: exportSpecSchema,
@@ -8328,7 +8328,16 @@ export function buildServer(
         .strict(),
       outputSchema: z.object({
         artifact: artifactSchema,
-        format: z.enum(["emf", "eps", "pdf", "png", "plain-svg", "ps", "svg"]),
+        format: z.enum([
+          "emf",
+          "eps",
+          "pdf",
+          "png",
+          "plain-svg",
+          "ps",
+          "svg",
+          "wmf",
+        ]),
         outputPath: z.string().min(1).max(1024),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
         warnings: z.array(z.string()),
@@ -8348,7 +8357,8 @@ export function buildServer(
         spec.format !== "plain-svg" &&
         spec.format !== "ps" &&
         spec.format !== "eps" &&
-        spec.format !== "emf"
+        spec.format !== "emf" &&
+        spec.format !== "wmf"
       )
         throw new Error("Use the specialized export tool for this format");
       if (spec.format === "png" && spec.margin !== undefined)
@@ -8398,7 +8408,9 @@ export function buildServer(
                 ? /\.eps$/iu
                 : spec.format === "emf"
                   ? /\.emf$/iu
-                  : /\.svg$/iu;
+                  : spec.format === "wmf"
+                    ? /\.wmf$/iu
+                    : /\.svg$/iu;
       if (!expectedExtension.test(output.relativePath))
         throw new Error(
           "Output extension does not match the requested export format",
@@ -8458,7 +8470,9 @@ export function buildServer(
                     ? "export.eps"
                     : spec.format === "emf"
                       ? "export.emf"
-                      : "export.svg",
+                      : spec.format === "wmf"
+                        ? "export.wmf"
+                        : "export.svg",
           );
           const background =
             spec.format === "png" && spec.background.mode === "document"
@@ -8474,7 +8488,7 @@ export function buildServer(
                 )
               : undefined;
           const emfPreflight =
-            spec.format === "emf"
+            spec.format === "emf" || spec.format === "wmf"
               ? preflightEmfExport(
                   await readFile(nativeInput.path, "utf8"),
                   spec.flattenPolicy,
@@ -8509,6 +8523,9 @@ export function buildServer(
             warnings: [
               ...(postscriptPreflight?.warnings ?? []),
               ...(emfPreflight?.warnings ?? []),
+              ...(spec.format === "wmf"
+                ? ["WMF_EXPERIMENTAL_COMPATIBILITY"]
+                : []),
             ],
           };
         },

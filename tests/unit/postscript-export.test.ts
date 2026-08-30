@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   inspectEmf,
+  inspectWmf,
   parseExportSpec,
   preflightEmfExport,
   preflightPostscriptExport,
@@ -110,5 +111,22 @@ describe("PostScript export policy and verification", () => {
     });
     emf.writeUInt32LE(87, 48);
     expect(() => inspectEmf(emf)).toThrow("declared size or record count");
+  });
+
+  it("validates a placeable WMF header before experimental publication", () => {
+    const wmf = Buffer.alloc(40);
+    wmf.writeUInt32LE(0x9ac6cdd7, 0);
+    wmf.writeInt16LE(0, 6);
+    wmf.writeInt16LE(0, 8);
+    wmf.writeInt16LE(100, 10);
+    wmf.writeInt16LE(50, 12);
+    wmf.writeUInt16LE(1440, 14);
+    wmf.writeUInt16LE(1, 22);
+    wmf.writeUInt16LE(9, 24);
+    wmf.writeUInt16LE(0x300, 26);
+    wmf.writeUInt32LE(9, 28);
+    expect(inspectWmf(wmf)).toEqual({ byteLength: 40, placeable: true });
+    wmf.writeUInt16LE(0, 14);
+    expect(() => inspectWmf(wmf)).toThrow("placeable frame");
   });
 });

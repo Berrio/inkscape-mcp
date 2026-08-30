@@ -6,6 +6,10 @@ export type EmfMetadata = {
   frame: readonly [number, number, number, number];
   recordCount: number;
 };
+export type WmfMetadata = {
+  byteLength: number;
+  placeable: boolean;
+};
 export type EmfPreflight = {
   filterReferenceCount: number;
   maskReferenceCount: number;
@@ -56,4 +60,26 @@ export function inspectEmf(bytes: Uint8Array): EmfMetadata {
   if (frame[2] <= frame[0] || frame[3] <= frame[1])
     throw new Error("EMF frame is invalid");
   return { byteLength: bytes.length, frame, recordCount };
+}
+
+/** Validates either a placeable Aldus WMF header or a standard WMF header. */
+export function inspectWmf(bytes: Uint8Array): WmfMetadata {
+  if (bytes.length < 18) throw new Error("WMF is smaller than its header");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const placeable = view.getUint32(0, true) === 0x9ac6cdd7;
+  const offset = placeable ? 22 : 0;
+  if (bytes.length < offset + 18) throw new Error("WMF header is truncated");
+  if (placeable) {
+    const left = view.getInt16(6, true);
+    const top = view.getInt16(8, true);
+    const right = view.getInt16(10, true);
+    const bottom = view.getInt16(12, true);
+    if (right <= left || bottom <= top || view.getUint16(14, true) < 1)
+      throw new Error("WMF placeable frame is invalid");
+  }
+  const headerSize = view.getUint16(offset + 2, true);
+  const fileSizeWords = view.getUint32(offset + 6, true);
+  if (headerSize !== 9 || fileSizeWords * 2 !== bytes.length - offset)
+    throw new Error("WMF declared header or size is invalid");
+  return { byteLength: bytes.length, placeable };
 }

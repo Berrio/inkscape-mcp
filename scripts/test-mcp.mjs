@@ -3807,6 +3807,31 @@ try {
     emfExportBytes.subarray(40, 44).toString("ascii") !== " EMF"
   )
     throw new Error("document_export did not publish verified EMF");
+  const wmfExport = await workspaceClient.callTool({
+    arguments: {
+      spec: {
+        area: { kind: "drawing" },
+        flattenPolicy: "reject",
+        format: "wmf",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+        target: { kind: "file", overwrite: false, path: "a4-drawing.wmf" },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export",
+  });
+  const wmfExportBytes = await readFile(join(workspaceRoot, "a4-drawing.wmf"));
+  if (
+    wmfExport.isError ||
+    wmfExport.structuredContent?.format !== "wmf" ||
+    !wmfExport.structuredContent?.warnings?.includes(
+      "WMF_EXPERIMENTAL_COMPATIBILITY",
+    ) ||
+    wmfExportBytes.length < 18
+  )
+    throw new Error(
+      "document_export did not publish verified experimental WMF",
+    );
   const reimportedEmf = await workspaceClient.callTool({
     arguments: {
       expectedRevision: createHash("sha256")

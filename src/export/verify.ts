@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 
 import { verifyPdf, type PdfMetadata } from "./pdf.js";
-import { inspectEmf, type EmfMetadata } from "./emf.js";
+import {
+  inspectEmf,
+  inspectWmf,
+  type EmfMetadata,
+  type WmfMetadata,
+} from "./emf.js";
 import { verifyPng, type PngMetadata } from "./png.js";
 import { verifySvg } from "./svg.js";
 
@@ -15,6 +20,7 @@ export type ExportVerification =
   | { format: "pdf"; metadata: PdfMetadata }
   | { format: "eps" | "ps"; metadata: PostscriptMetadata }
   | { format: "emf"; metadata: EmfMetadata }
+  | { format: "wmf"; metadata: WmfMetadata }
   | { format: "plain-svg" | "svg"; metadata: Record<string, never> };
 
 /** Dispatches only to verifiers that can prove the artifact's structure. Other
@@ -43,6 +49,8 @@ export async function verifyExportArtifact(
     return { format, metadata: await verifyPostscript(path, format) };
   if (format === "emf")
     return { format, metadata: inspectEmf(await readFile(path)) };
+  if (format === "wmf")
+    return { format, metadata: inspectWmf(await readFile(path)) };
   throw new Error(`No structural verifier is available for ${format}`);
 }
 

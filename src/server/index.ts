@@ -1,6 +1,13 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rmdir, stat, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  readFile,
+  rmdir,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import { z } from "zod";
@@ -15,6 +22,7 @@ import {
 } from "../import/raster-import.js";
 import { inspectNativeImportGates } from "../import/native-import-gates.js";
 import { inspectPdfImportPage } from "../import/pdf-import.js";
+import { publishImportedSvg } from "../import/publication.js";
 import { importSanitizedSvg } from "../import/svg-import.js";
 import {
   addSvgPage,
@@ -1833,11 +1841,6 @@ export function buildServer(
         throw new Error("document_import requires a .svg output path");
       if (!/\.json$/iu.test(manifestOutput.relativePath))
         throw new Error("document_import requires a .json manifest path");
-      if (
-        output.absolutePath.toLocaleLowerCase() ===
-        manifestOutput.absolutePath.toLocaleLowerCase()
-      )
-        throw new Error("Import output and manifest paths must differ");
       const inputStats = await stat(input.absolutePath);
       if (!inputStats.isFile() || inputStats.size > config.maxInputBytes)
         throw new Error("SVG import exceeds the configured size limit");
@@ -1859,32 +1862,21 @@ export function buildServer(
         sourcePath: input.relativePath,
         sourceSha256: imported.sourceSha256,
       };
-      const committed = await fileStore.commitBatch({
+      const publication = await publishImportedSvg({
+        contents,
         expectedRevision,
-        files: [
-          { contents, targetPath: output.absolutePath },
-          {
-            contents: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`),
-            targetPath: manifestOutput.absolutePath,
-          },
-        ],
+        fileStore,
+        manifest,
+        manifestTargetPath: manifestOutput.absolutePath,
+        outputTargetPath: output.absolutePath,
         sourcePath: input.absolutePath,
       });
-      const revisions = new Map(
-        committed.files.map((file) => [file.targetPath, file.revision]),
-      );
-      const revision = revisions.get(output.absolutePath);
-      const manifestRevision = revisions.get(manifestOutput.absolutePath);
-      if (!revision || !manifestRevision)
-        throw new Error(
-          "document_import did not publish its complete manifest",
-        );
       const result = {
-        manifest,
+        manifest: publication.manifest,
         manifestPath: manifestOutput.relativePath,
-        manifestRevision,
+        manifestRevision: publication.manifestRevision,
         outputPath: output.relativePath,
-        revision,
+        revision: publication.revision,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
@@ -1962,11 +1954,6 @@ export function buildServer(
         throw new Error(
           "document_import_raster requires a .json manifest path",
         );
-      if (
-        output.absolutePath.toLocaleLowerCase() ===
-        manifestOutput.absolutePath.toLocaleLowerCase()
-      )
-        throw new Error("Import output and manifest paths must differ");
       const sourceBytes = await readBoundedRasterAsset(
         source.absolutePath,
         config.maxInputBytes,
@@ -2014,32 +2001,21 @@ export function buildServer(
         warnings,
         width: raster.width,
       };
-      const committed = await fileStore.commitBatch({
+      const publication = await publishImportedSvg({
+        contents,
         expectedRevision,
-        files: [
-          { contents, targetPath: output.absolutePath },
-          {
-            contents: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`),
-            targetPath: manifestOutput.absolutePath,
-          },
-        ],
+        fileStore,
+        manifest,
+        manifestTargetPath: manifestOutput.absolutePath,
+        outputTargetPath: output.absolutePath,
         sourcePath: source.absolutePath,
       });
-      const revisions = new Map(
-        committed.files.map((file) => [file.targetPath, file.revision]),
-      );
-      const revision = revisions.get(output.absolutePath);
-      const manifestRevision = revisions.get(manifestOutput.absolutePath);
-      if (!revision || !manifestRevision)
-        throw new Error(
-          "document_import_raster did not publish its complete manifest",
-        );
       const result = {
-        manifest,
+        manifest: publication.manifest,
         manifestPath: manifestOutput.relativePath,
-        manifestRevision,
+        manifestRevision: publication.manifestRevision,
         outputPath: output.relativePath,
-        revision,
+        revision: publication.revision,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
@@ -2179,11 +2155,6 @@ export function buildServer(
         throw new Error("document_import_pdf requires a .svg output path");
       if (!/\.json$/iu.test(manifestOutput.relativePath))
         throw new Error("document_import_pdf requires a .json manifest path");
-      if (
-        output.absolutePath.toLocaleLowerCase() ===
-        manifestOutput.absolutePath.toLocaleLowerCase()
-      )
-        throw new Error("Import output and manifest paths must differ");
       const sourceStats = await stat(source.absolutePath);
       if (!sourceStats.isFile() || sourceStats.size < 5)
         throw new Error("PDF import source is not a regular non-empty file");
@@ -2236,9 +2207,17 @@ export function buildServer(
       const imported = await scratch.withDirectory(
         "staging",
         async (directory) => {
+          const stagedSource = join(directory, "input.pdf");
+          await copyFile(source.absolutePath, stagedSource);
+          if (
+            (await sha256File(source.absolutePath)) !== input.expectedRevision
+          )
+            throw new Error(
+              "PDF import source revision changed before staging",
+            );
           const temporaryOutput = join(directory, "imported.svg");
           const args = [
-            source.absolutePath,
+            stagedSource,
             `--pages=${input.page}`,
             ...(input.mode === "poppler" ? ["--pdf-poppler"] : []),
             ...(input.fontStrategy === undefined
@@ -2257,12 +2236,19 @@ export function buildServer(
           if (result.exitCode !== 0 || result.terminationReason !== "completed")
             throw new Error("Inkscape PDF import failed");
           const bytes = await readFile(temporaryOutput);
-          return importSanitizedSvg(bytes, {
+          const sanitized = importSanitizedSvg(bytes, {
             format: "svg",
             maxInputBytes: config.maxInputBytes,
             maximumMode: config.maximumSanitizeMode,
             mode: input.sanitizeMode,
           });
+          if (
+            (await sha256File(source.absolutePath)) !== input.expectedRevision
+          )
+            throw new Error(
+              "PDF import source revision changed during conversion",
+            );
+          return sanitized;
         },
       );
       const contents = Buffer.from(imported.svg, "utf8");
@@ -2287,32 +2273,21 @@ export function buildServer(
         sourceSha256: createHash("sha256").update(sourceBytes).digest("hex"),
         warnings,
       };
-      const committed = await fileStore.commitBatch({
+      const publication = await publishImportedSvg({
+        contents,
         expectedRevision: input.expectedRevision,
-        files: [
-          { contents, targetPath: output.absolutePath },
-          {
-            contents: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`),
-            targetPath: manifestOutput.absolutePath,
-          },
-        ],
+        fileStore,
+        manifest,
+        manifestTargetPath: manifestOutput.absolutePath,
+        outputTargetPath: output.absolutePath,
         sourcePath: source.absolutePath,
       });
-      const revisions = new Map(
-        committed.files.map((file) => [file.targetPath, file.revision]),
-      );
-      const revision = revisions.get(output.absolutePath);
-      const manifestRevision = revisions.get(manifestOutput.absolutePath);
-      if (!revision || !manifestRevision)
-        throw new Error(
-          "document_import_pdf did not publish its complete manifest",
-        );
       const outputResult = {
-        manifest,
+        manifest: publication.manifest,
         manifestPath: manifestOutput.relativePath,
-        manifestRevision,
+        manifestRevision: publication.manifestRevision,
         outputPath: output.relativePath,
-        revision,
+        revision: publication.revision,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(outputResult) }],

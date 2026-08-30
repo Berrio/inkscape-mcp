@@ -73,7 +73,7 @@ export function normalizeSvgIds(
 
   if (firstRename.size > 0) {
     for (const element of elements)
-      rewriteElementReferences(element, firstRename);
+      rewriteSvgElementReferences(element, firstRename);
   }
   return {
     renamed,
@@ -117,7 +117,12 @@ export function remapSvgIdsForNativeQuery(
   return { originalIdByNativeId, svg: normalized.svg };
 }
 
-function rewriteElementReferences(
+/**
+ * Rewrites only local fragment references represented by `renames` on one
+ * already-trusted DOM element. Callers use this when cloning a bounded SVG
+ * subtree so references outside that subtree are deliberately left intact.
+ */
+export function rewriteSvgElementReferences(
   element: XmlElement,
   renames: ReadonlyMap<string, string>,
 ): void {

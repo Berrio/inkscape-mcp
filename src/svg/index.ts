@@ -8,6 +8,7 @@ export {
 export {
   normalizeSvgIds,
   remapSvgIdsForNativeQuery,
+  rewriteSvgElementReferences,
   type SvgIdNormalization,
   type SvgNativeQueryIdRemap,
   type SvgIdNormalizationOptions,

@@ -904,13 +904,6 @@ describe("basic SVG documents", () => {
       newId: "rect_use",
     });
     expect(cloned.svg).toContain('<use id="rect_use" href="#rect_1"/>');
-    expect(() =>
-      duplicateSvgShape(created.svg, {
-        id: "layer_main",
-        mode: "copy",
-        newId: "layer_copy",
-      }),
-    ).toThrow("descendant IDs");
     const reparented = reparentSvgShapes(created.svg, {
       ids: ["star_1"],
       parentId: "layer_main",
@@ -928,6 +921,55 @@ describe("basic SVG documents", () => {
         parentId: "layer_main",
       }),
     ).toThrow("cycle");
+  });
+
+  it("deeply copies a bounded subtree and rewrites only its internal ID references", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg"><defs><filter id="external_filter"/></defs><g id="card"><style>#body { fill: url(#gradient); }</style><title id="title">Card</title><defs><clipPath id="clip"><rect id="clip_shape" width="10" height="10"/></clipPath><linearGradient id="gradient"><stop offset="0" stop-color="#112233"/><stop offset="1" stop-color="#445566"/></linearGradient></defs><rect id="body" fill="url(#gradient)" clip-path="url(#clip)" filter="url(#external_filter)" aria-labelledby="title"/><use id="badge" href="#body"/></g></svg>';
+    const copied = duplicateSvgShape(source, {
+      id: "card",
+      mode: "copy",
+      newId: "card_copy",
+    });
+    const remapped = new Map(
+      copied.remappedIds.map((item) => [item.from, item.to]),
+    );
+    expect(remapped.get("card")).toBe("card_copy");
+    for (const id of [
+      "title",
+      "clip",
+      "clip_shape",
+      "gradient",
+      "body",
+      "badge",
+    ])
+      expect(remapped.get(id)).toMatch(/^card_copy_copy_\d+$/u);
+    expect(copied.svg).toContain(`id="${remapped.get("body")}"`);
+    expect(copied.svg).toContain(`href="#${remapped.get("body")}"`);
+    expect(copied.svg).toContain(`url(#${remapped.get("gradient")})`);
+    expect(copied.svg).toContain(`url(#${remapped.get("clip")})`);
+    expect(copied.svg).toContain(`aria-labelledby="${remapped.get("title")}"`);
+    expect(copied.svg).toContain(`#${remapped.get("body")} {`);
+    expect(copied.svg).toContain('filter="url(#external_filter)"');
+  });
+
+  it("rejects ambiguous and oversized deep-copy source subtrees", () => {
+    expect(() =>
+      duplicateSvgShape(
+        '<svg xmlns="http://www.w3.org/2000/svg"><g id="card"><rect id="shared"/></g><rect id="shared"/></svg>',
+        { id: "card", mode: "copy", newId: "card_copy" },
+      ),
+    ).toThrow("normalize IDs first");
+    const children = Array.from(
+      { length: 257 },
+      (_, index) => `<rect id="child_${index}"/>`,
+    ).join("");
+    expect(() =>
+      duplicateSvgShape(
+        `<svg xmlns="http://www.w3.org/2000/svg"><g id="large">${children}</g></svg>`,
+        { id: "large", mode: "copy", newId: "large_copy" },
+      ),
+    ).toThrow("ID limit");
   });
 
   it("creates a bounded standard SVG spiral path", () => {

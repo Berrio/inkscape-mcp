@@ -2273,9 +2273,32 @@ try {
     typeof duplicatedRevision !== "string"
   )
     throw new Error("elements_duplicate did not create a use clone");
-  const reparented = await workspaceClient.callTool({
+  const deeplyCopied = await workspaceClient.callTool({
     arguments: {
       expectedRevision: duplicatedRevision,
+      id: "demo_group",
+      mode: "copy",
+      newId: "demo_group_copy",
+      path: "a4.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_duplicate",
+  });
+  const deeplyCopiedRevision = deeplyCopied.structuredContent?.revision;
+  if (
+    deeplyCopied.isError ||
+    deeplyCopied.structuredContent?.id !== "demo_group_copy" ||
+    !deeplyCopied.structuredContent?.remappedIds?.some(
+      (item) => item.from === "demo_rect" && item.to !== "demo_rect",
+    ) ||
+    typeof deeplyCopiedRevision !== "string"
+  )
+    throw new Error(
+      "elements_duplicate did not remap IDs in an independent subtree copy",
+    );
+  const reparented = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: deeplyCopiedRevision,
       ids: ["demo_star"],
       parentId: "demo_group",
       path: "a4.svg",

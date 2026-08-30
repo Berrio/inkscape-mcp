@@ -5,7 +5,7 @@ import {
   type Element as XmlElement,
 } from "@xmldom/xmldom";
 
-import { sanitizeSvg } from "../svg/index.js";
+import { rewriteSvgElementReferences, sanitizeSvg } from "../svg/index.js";
 import {
   editAbsoluteLinearSvgPathNode,
   moveAbsoluteSvgPathNode,
@@ -209,6 +209,9 @@ export type ShapeSpec =
 
 const COLOR = /^#[a-fA-F0-9]{6}$/u;
 const SAFE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u;
+const MAX_DUPLICATE_SUBTREE_ELEMENTS = 1_000;
+const MAX_DUPLICATE_SUBTREE_IDS = 256;
+const MAX_DUPLICATE_ID_ALLOCATION_ATTEMPTS = 4_096;
 const INKSCAPE_NAMESPACE = "http://www.inkscape.org/namespaces/inkscape";
 
 /** Creates one Inkscape semantic connector without accepting arbitrary XML. */
@@ -1087,11 +1090,15 @@ export function updateSvgShapes(
   };
 }
 
-/** Duplicates one simple element or creates an explicit SVG <use> clone. */
+/** Duplicates a bounded SVG subtree or creates an explicit SVG <use> clone. */
 export function duplicateSvgShape(
   source: string,
   request: ElementDuplicateRequest,
-): { id: string; svg: string } {
+): {
+  id: string;
+  remappedIds: readonly { from: string; to: string }[];
+  svg: string;
+} {
   if (!SAFE_ID.test(request.id) || !SAFE_ID.test(request.newId))
     throw new Error("Shape ID is invalid");
   if (request.parentId !== undefined && !SAFE_ID.test(request.parentId))
@@ -1112,18 +1119,21 @@ export function duplicateSvgShape(
       : resolveParent(document, root, request.parentId);
   if (!parent) throw new Error("Shape parent is missing");
   if (request.mode === "copy") {
-    const descendantIds = Array.from(original.getElementsByTagName("*")).some(
-      (element) => element.hasAttribute("id"),
-    );
-    if (descendantIds)
-      throw new Error(
-        "Copying an element subtree with descendant IDs requires ID remapping",
-      );
     const copy = original.cloneNode(true) as XmlElement;
-    copy.setAttribute("id", request.newId);
+    const remappedIds = remapDuplicateSubtreeIds(
+      elements,
+      original,
+      copy,
+      request.newId,
+    );
     if (parent === parentElement(original))
       parent.insertBefore(copy, original.nextSibling);
     else parent.appendChild(copy);
+    return {
+      id: request.newId,
+      remappedIds,
+      svg: new XMLSerializer().serializeToString(document),
+    };
   } else {
     const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
     use.setAttribute("id", request.newId);
@@ -1134,8 +1144,86 @@ export function duplicateSvgShape(
   }
   return {
     id: request.newId,
+    remappedIds: [],
     svg: new XMLSerializer().serializeToString(document),
   };
+}
+
+/**
+ * Gives every copied ID a unique deterministic name and rewrites only the
+ * clone's internal local references. Source IDs must already be unambiguous:
+ * silently guessing around malformed duplicate IDs could retarget a filter,
+ * clip, ARIA label or use clone to an unrelated source object.
+ */
+function remapDuplicateSubtreeIds(
+  documentElements: readonly XmlElement[],
+  original: XmlElement,
+  copy: XmlElement,
+  newRootId: string,
+): readonly { from: string; to: string }[] {
+  const originalElements = elementsInSubtree(original);
+  const copiedElements = elementsInSubtree(copy);
+  if (originalElements.length > MAX_DUPLICATE_SUBTREE_ELEMENTS)
+    throw new Error("Copied SVG subtree exceeds the element limit");
+  if (originalElements.length !== copiedElements.length)
+    throw new Error("Copied SVG subtree structure is invalid");
+  const counts = new Map<string, number>();
+  const used = new Set<string>();
+  for (const element of documentElements) {
+    const id = element.getAttribute("id");
+    if (id === null) continue;
+    used.add(id);
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  const ids = originalElements.flatMap((element) => {
+    const id = element.getAttribute("id");
+    return id === null ? [] : [id];
+  });
+  if (ids.length > MAX_DUPLICATE_SUBTREE_IDS)
+    throw new Error("Copied SVG subtree exceeds the ID limit");
+  if (ids.some((id) => !SAFE_ID.test(id) || counts.get(id) !== 1))
+    throw new Error(
+      "Copied SVG subtree IDs must be safe and unique; normalize IDs first",
+    );
+  const renames = new Map<string, string>();
+  let sequence = 1;
+  for (const id of ids) {
+    const next =
+      id === original.getAttribute("id")
+        ? newRootId
+        : nextDuplicateSubtreeId(newRootId, used, () => sequence++);
+    renames.set(id, next);
+    used.add(next);
+  }
+  for (let index = 0; index < copiedElements.length; index += 1) {
+    const sourceId = originalElements[index]!.getAttribute("id");
+    if (sourceId !== null)
+      copiedElements[index]!.setAttribute("id", renames.get(sourceId)!);
+  }
+  for (const element of copiedElements)
+    rewriteSvgElementReferences(element, renames);
+  return [...renames].map(([from, to]) => ({ from, to }));
+}
+
+function elementsInSubtree(root: XmlElement): XmlElement[] {
+  return [root, ...Array.from(root.getElementsByTagName("*"))];
+}
+
+function nextDuplicateSubtreeId(
+  rootId: string,
+  used: ReadonlySet<string>,
+  nextSequence: () => number,
+): string {
+  for (
+    let attempts = 0;
+    attempts < MAX_DUPLICATE_ID_ALLOCATION_ATTEMPTS;
+    attempts += 1
+  ) {
+    const suffix = `_copy_${nextSequence()}`;
+    const candidate = `${rootId.slice(0, 128 - suffix.length)}${suffix}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  throw new Error("Could not allocate a safe copied subtree ID");
 }
 
 /** Moves selected elements under one existing group/layer in document order. */

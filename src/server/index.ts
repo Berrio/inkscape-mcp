@@ -1601,7 +1601,7 @@ export function buildServer(
     "elements_duplicate",
     {
       description:
-        "Duplicates one simple SVG element independently or creates an explicit SVG use clone. Descendant IDs are rejected for independent copies until a remapping operation is requested.",
+        "Duplicates a bounded SVG subtree with deterministic local-ID remapping, or creates an explicit SVG use clone. Only internal fragment references in a copied subtree are rewritten; malformed source IDs must be normalized first.",
       inputSchema: z
         .object({
           expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -1617,6 +1617,9 @@ export function buildServer(
         backupCreated: z.boolean(),
         id: shapeIdSchema,
         mode: z.enum(["copy", "use"]),
+        remappedIds: z.array(
+          z.object({ from: shapeIdSchema, to: shapeIdSchema }),
+        ),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
       }),
       annotations: { destructiveHint: true },
@@ -1649,6 +1652,7 @@ export function buildServer(
         backupCreated: committed.backupPath !== undefined,
         id: duplicated.id,
         mode,
+        remappedIds: duplicated.remappedIds,
         revision: committed.revision,
       };
       return {

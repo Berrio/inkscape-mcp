@@ -1,5 +1,6 @@
 import {
   CapabilityService,
+  probeDxfExport,
   probePngExport,
   type InkscapeCapabilities,
 } from "../capabilities/index.js";
@@ -31,6 +32,7 @@ export type DoctorReport = {
     version: string;
   };
   pngExportProbe?: { available: boolean; reason?: string };
+  dxfExportProbe?: { available: boolean; reason?: string };
   securityPosture: NativeSecurityPosture;
   workspaceReady: boolean;
 };
@@ -62,6 +64,11 @@ export async function runDoctor(
       candidate.executablePath,
       config,
     );
+    const dxfExportProbe = await probeDxfExport(
+      runner,
+      candidate.executablePath,
+      config,
+    );
     return {
       capabilities: {
         actionCount: capabilities.actionCount,
@@ -78,6 +85,7 @@ export async function runDoctor(
         version: probe.version,
       },
       pngExportProbe,
+      dxfExportProbe,
       securityPosture: nativeSecurityPosture(config),
       workspaceReady: isWorkspaceReady(config),
     };

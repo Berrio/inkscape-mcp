@@ -3832,6 +3832,33 @@ try {
     throw new Error(
       "document_export did not publish verified experimental WMF",
     );
+  const dxfExport = await workspaceClient.callTool({
+    arguments: {
+      spec: {
+        area: { kind: "drawing" },
+        fidelityPolicy: "acknowledge-limited-fidelity",
+        format: "dxf",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+        target: { kind: "file", overwrite: false, path: "a4-drawing.dxf" },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export",
+  });
+  const dxfExportBytes = await readFile(join(workspaceRoot, "a4-drawing.dxf"));
+  if (
+    dxfExport.isError ||
+    dxfExport.structuredContent?.adapter !== "inkscape-dxf/v1" ||
+    dxfExport.structuredContent?.format !== "dxf" ||
+    !dxfExport.structuredContent?.warnings?.includes(
+      "DXF_LIMITED_FIDELITY_ACKNOWLEDGED",
+    ) ||
+    !dxfExportBytes.includes(Buffer.from("\nSECTION\n", "ascii")) ||
+    !dxfExportBytes.includes(Buffer.from("\nEOF\n", "ascii"))
+  )
+    throw new Error(
+      "document_export did not publish the verified versioned DXF adapter",
+    );
   const reimportedEmf = await workspaceClient.callTool({
     arguments: {
       expectedRevision: createHash("sha256")

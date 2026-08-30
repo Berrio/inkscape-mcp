@@ -4,8 +4,24 @@ import { join, resolve } from "node:path";
 
 import type { ServerConfig } from "../config/index.js";
 import type { ProcessExecutor } from "../discovery/probe.js";
+import { inspectDxf } from "../export/dxf.js";
 
 export type ExportProbe = { available: boolean; reason?: string };
+
+/**
+ * Checks the small, structural subset that makes a DXF result usable as an
+ * ASCII interchange file. DXF permits a leading 999 comment, so it must not
+ * be mistaken for a failed export merely because SECTION is not the first
+ * group pair.
+ */
+export function isAsciiDxf(bytes: Buffer): boolean {
+  try {
+    inspectDxf(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function probePngExport(
   runner: Pick<ProcessExecutor, "run">,
@@ -50,6 +66,53 @@ export async function probePngExport(
       available: false,
       reason:
         error instanceof Error ? error.message : "unknown export probe error",
+    };
+  } finally {
+    await rm(scratch, { force: true, recursive: true });
+  }
+}
+
+/** Probes the fixed built-in DXF exporter without accepting extension IDs or argv. */
+export async function probeDxfExport(
+  runner: Pick<ProcessExecutor, "run">,
+  executable: string,
+  config: Pick<
+    ServerConfig,
+    "maxStderrBytes" | "maxStdoutBytes" | "processTimeoutMs" | "scratchRoot"
+  >,
+): Promise<ExportProbe> {
+  const root =
+    config.scratchRoot === "auto" ? tmpdir() : resolve(config.scratchRoot);
+  const scratch = await mkdtemp(join(root, "inkscape-mcp-probe-"));
+  const input = join(scratch, "probe.svg");
+  const output = join(scratch, "probe.dxf");
+  try {
+    await writeFile(
+      input,
+      '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L1 1"/></svg>',
+      "utf8",
+    );
+    const result = await runner.run(executable, {
+      args: [input, "--export-type=dxf", `--export-filename=${output}`],
+      cwd: scratch,
+      maxStderrBytes: config.maxStderrBytes,
+      maxStdoutBytes: config.maxStdoutBytes,
+      timeoutMs: config.processTimeoutMs,
+    });
+    if (result.exitCode !== 0 || result.terminationReason !== "completed") {
+      return { available: false, reason: "DXF export did not complete" };
+    }
+    const dxf = await readFile(output);
+    return isAsciiDxf(dxf)
+      ? { available: true }
+      : { available: false, reason: "output is not ASCII DXF" };
+  } catch (error: unknown) {
+    return {
+      available: false,
+      reason:
+        error instanceof Error
+          ? error.message
+          : "unknown DXF export probe error",
     };
   } finally {
     await rm(scratch, { force: true, recursive: true });

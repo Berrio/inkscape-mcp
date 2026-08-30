@@ -53,6 +53,7 @@ export {
   type ExportPresetDefinition,
 } from "./preset-resolver.js";
 export { verifyExportArtifact, type ExportVerification } from "./verify.js";
+export { DXF_EXPORT_ADAPTER, inspectDxf, type DxfMetadata } from "./dxf.js";
 export {
   inspectEmf,
   inspectWmf,

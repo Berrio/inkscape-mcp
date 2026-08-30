@@ -340,6 +340,16 @@ const metafileExportSchema = commonExportSchema
     flattenPolicy: z.enum(["reject", "flatten-with-warning"]).default("reject"),
   })
   .strict();
+const dxfExportSchema = commonExportSchema
+  .extend({
+    area: z.union([
+      z.object({ kind: z.literal("drawing") }).strict(),
+      selectionAreaSchema,
+    ]),
+    fidelityPolicy: z.literal("acknowledge-limited-fidelity"),
+    format: z.literal("dxf"),
+  })
+  .strict();
 
 export const exportSpecSchema = z
   .discriminatedUnion("format", [
@@ -349,6 +359,7 @@ export const exportSpecSchema = z
     psExportSchema,
     epsExportSchema,
     metafileExportSchema,
+    dxfExportSchema,
   ])
   .superRefine((value, context) => {
     const selection = value.area.kind === "selection" ? value.area : undefined;

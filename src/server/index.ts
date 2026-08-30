@@ -152,6 +152,7 @@ import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import {
   buildExportArgv,
   createExportBatchManifest,
+  DXF_EXPORT_ADAPTER,
   executeExportBatch,
   expandExportPreset,
   inspectEmf,
@@ -8342,7 +8343,7 @@ export function buildServer(
     "document_export",
     {
       description:
-        "Exports one PNG, PDF, SVG, plain SVG, PS, EPS, EMF, or experimental WMF from a validated ExportSpec through the bounded Inkscape pipeline. Legacy vector formats require an explicit fidelity policy for effects that cannot remain vector-native.",
+        "Exports one PNG, PDF, SVG, plain SVG, PS, EPS, EMF, experimental WMF, or the versioned DXF adapter from a validated ExportSpec through the bounded Inkscape pipeline. Legacy vector formats require explicit acknowledgement of fidelity limits.",
       inputSchema: z
         .object({
           spec: exportSpecSchema,
@@ -8350,9 +8351,11 @@ export function buildServer(
         })
         .strict(),
       outputSchema: z.object({
+        adapter: z.literal(DXF_EXPORT_ADAPTER).optional(),
         artifact: artifactSchema,
         format: z.enum([
           "emf",
+          "dxf",
           "eps",
           "pdf",
           "png",
@@ -8381,7 +8384,8 @@ export function buildServer(
         spec.format !== "ps" &&
         spec.format !== "eps" &&
         spec.format !== "emf" &&
-        spec.format !== "wmf"
+        spec.format !== "wmf" &&
+        spec.format !== "dxf"
       )
         throw new Error("Use the specialized export tool for this format");
       if (spec.format === "png" && spec.margin !== undefined)
@@ -8433,7 +8437,9 @@ export function buildServer(
                   ? /\.emf$/iu
                   : spec.format === "wmf"
                     ? /\.wmf$/iu
-                    : /\.svg$/iu;
+                    : spec.format === "dxf"
+                      ? /\.dxf$/iu
+                      : /\.svg$/iu;
       if (!expectedExtension.test(output.relativePath))
         throw new Error(
           "Output extension does not match the requested export format",
@@ -8495,7 +8501,9 @@ export function buildServer(
                       ? "export.emf"
                       : spec.format === "wmf"
                         ? "export.wmf"
-                        : "export.svg",
+                        : spec.format === "dxf"
+                          ? "export.dxf"
+                          : "export.svg",
           );
           const background =
             spec.format === "png" && spec.background.mode === "document"
@@ -8549,6 +8557,9 @@ export function buildServer(
               ...(spec.format === "wmf"
                 ? ["WMF_EXPERIMENTAL_COMPATIBILITY"]
                 : []),
+              ...(spec.format === "dxf"
+                ? ["DXF_LIMITED_FIDELITY_ACKNOWLEDGED"]
+                : []),
             ],
           };
         },
@@ -8571,6 +8582,7 @@ export function buildServer(
       if (artifact.hash !== committed.revision)
         throw new Error("Export output changed before artifact publication");
       const result = {
+        ...(spec.format === "dxf" ? { adapter: DXF_EXPORT_ADAPTER } : {}),
         artifact,
         format: spec.format,
         outputPath: output.relativePath,

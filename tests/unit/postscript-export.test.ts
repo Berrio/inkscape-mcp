@@ -57,6 +57,22 @@ describe("PostScript export policy and verification", () => {
     ).toThrow();
   });
 
+  it("requires explicit DXF fidelity acknowledgement and fixes its adapter", () => {
+    const common = {
+      area: { kind: "drawing" as const },
+      format: "dxf" as const,
+      source: { expectedRevision: "a".repeat(64), path: "source.svg" },
+      target: { kind: "file" as const, overwrite: false, path: "out.dxf" },
+    };
+    expect(() => parseExportSpec(common)).toThrow("fidelityPolicy");
+    expect(
+      parseExportSpec({
+        ...common,
+        fidelityPolicy: "acknowledge-limited-fidelity",
+      }),
+    ).toMatchObject({ format: "dxf" });
+  });
+
   it("verifies PostScript signatures and requires a concrete EPS bounding box", async () => {
     const directory = await mkdtemp(join(tmpdir(), "inkscape-mcp-ps-"));
     directories.push(directory);

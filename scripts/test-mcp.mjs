@@ -920,6 +920,67 @@ try {
   if (defsVacuumed.isError || defsVacuumed.structuredContent?.dryRun !== false)
     throw new Error("defs_vacuum did not commit its approved cleanup plan");
   await writeFile(
+    join(workspaceRoot, "optimize.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><defs><linearGradient id="keep"><stop stop-color="#f00"/></linearGradient><filter id="unused"/></defs><rect width="10" height="10" fill="url(#keep)"/></svg>',
+  );
+  const optimizeRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "optimize.svg")))
+    .digest("hex");
+  const optimizePlan = await workspaceClient.callTool({
+    arguments: {
+      path: "optimize.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_optimize",
+  });
+  if (
+    optimizePlan.isError ||
+    optimizePlan.structuredContent?.dryRun !== true ||
+    optimizePlan.structuredContent?.outputPath !== "optimize.optimized.svg" ||
+    optimizePlan.structuredContent?.removedIds?.[0] !== "unused"
+  )
+    throw new Error(
+      "document_optimize did not produce its derived dry-run plan",
+    );
+  const optimizeWithoutRevision = await workspaceClient.callTool({
+    arguments: {
+      dryRun: false,
+      path: "optimize.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_optimize",
+  });
+  if (
+    !optimizeWithoutRevision.isError ||
+    existsSync(join(workspaceRoot, "optimize.optimized.svg"))
+  )
+    throw new Error(
+      "document_optimize did not require a source revision before publication",
+    );
+  const optimized = await workspaceClient.callTool({
+    arguments: {
+      dryRun: false,
+      expectedRevision: optimizeRevision,
+      path: "optimize.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_optimize",
+  });
+  if (
+    optimized.isError ||
+    optimized.structuredContent?.dryRun !== false ||
+    optimized.structuredContent?.visualRegression?.differingPixels !== 0 ||
+    (await readFile(join(workspaceRoot, "optimize.svg"), "utf8")).includes(
+      'id="unused"',
+    ) === false ||
+    (
+      await readFile(join(workspaceRoot, "optimize.optimized.svg"), "utf8")
+    ).includes('id="unused"')
+  )
+    throw new Error(
+      "document_optimize did not publish a visually equivalent derived SVG",
+    );
+  await writeFile(
     join(workspaceRoot, "metadata.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><image id="accessible_image" href="data:image/png;base64,AA==" width="1" height="1"/></svg>',
   );

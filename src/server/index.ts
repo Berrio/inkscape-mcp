@@ -151,8 +151,10 @@ import { runDoctor } from "../doctor/index.js";
 import { locateInkscape, probeInkscapeCandidate } from "../discovery/index.js";
 import {
   buildExportArgv,
+  comparePngVisual,
   createExportBatchManifest,
   DXF_EXPORT_ADAPTER,
+  decodePngRgba,
   executeExportBatch,
   expandExportPreset,
   inspectEmf,
@@ -4803,6 +4805,133 @@ export function buildServer(
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
         structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "document_optimize",
+    {
+      description:
+        "Plans or writes a derived SVG that removes only unused top-level definitions. Publication requires a deterministic Inkscape visual-regression render; the source document is never modified.",
+      inputSchema: z
+        .object({
+          dryRun: z.boolean().default(true),
+          expectedOutputRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
+          expectedRevision: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
+          outputPath: z.string().min(1).max(1024).optional(),
+          path: z.string().min(1).max(1024),
+          visualTolerance: z.number().int().min(0).max(2).default(0),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict()
+        .superRefine((value, context) => {
+          if (!value.dryRun && value.expectedRevision === undefined)
+            context.addIssue({
+              code: "custom",
+              message: "expectedRevision is required when dryRun is false",
+              path: ["expectedRevision"],
+            });
+          if (
+            value.expectedOutputRevision !== undefined &&
+            value.outputPath === undefined
+          )
+            context.addIssue({
+              code: "custom",
+              message: "expectedOutputRevision requires outputPath",
+              path: ["expectedOutputRevision"],
+            });
+        }),
+      outputSchema: z.object({
+        candidateIds: z.array(z.string().min(1).max(1024)),
+        dryRun: z.boolean(),
+        outputPath: z.string().min(1).max(1024),
+        removedIds: z.array(z.string().min(1).max(1024)),
+        revision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/u)
+          .optional(),
+        visualRegression: z
+          .object({
+            differingPixels: z.number().int().nonnegative(),
+            maxChannelDelta: z.number().nonnegative(),
+            meanChannelDelta: z.number().nonnegative(),
+            totalPixels: z.number().int().positive(),
+          })
+          .optional(),
+      }),
+      annotations: { destructiveHint: false },
+    },
+    async ({
+      dryRun,
+      expectedOutputRevision,
+      expectedRevision,
+      outputPath,
+      path,
+      visualTolerance,
+      workspaceId,
+    }) => {
+      assertDocumentWorkspace(config);
+      const workspace = await workspaces();
+      const document = await workspace.resolveExisting(workspaceId, path);
+      if (!/\.svg$/iu.test(document.relativePath))
+        throw new Error("document_optimize requires an SVG source path");
+      const derivedOutputPath =
+        outputPath ?? deriveOptimizationOutputPath(document.relativePath);
+      const source = await readFile(document.absolutePath, "utf8");
+      const optimized = vacuumUnusedSvgDefs(source);
+      if (dryRun) {
+        const result = {
+          ...optimized.plan,
+          dryRun: true,
+          outputPath: derivedOutputPath,
+        };
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }],
+          structuredContent: result,
+        };
+      }
+      const output = await workspace.resolveNewOutput(
+        workspaceId,
+        derivedOutputPath,
+      );
+      if (!/\.svg$/iu.test(output.relativePath))
+        throw new Error("document_optimize requires a .svg output path");
+      const visualRegression = await renderOptimizationVisualRegression({
+        config,
+        input: document,
+        runner,
+        scratch,
+        sourceRevision: expectedRevision!,
+        tolerance: visualTolerance,
+      });
+      if (visualRegression.differingPixels > 0)
+        throw new Error("Optimization visual regression check failed");
+      const committed = await fileStore.commit({
+        contents: Buffer.from(optimized.svg),
+        ...(expectedOutputRevision === undefined
+          ? {}
+          : { expectedOutputRevision }),
+        expectedRevision: expectedRevision!,
+        sourcePath: document.absolutePath,
+        targetPath: output.absolutePath,
+      });
+      const result = {
+        ...optimized.plan,
+        dryRun: false,
+        outputPath: output.relativePath,
+        revision: committed.revision,
+        visualRegression,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
       };
     },
   );
@@ -9770,6 +9899,89 @@ async function publishSelectionSvgWithAssets(args: {
     await rmdir(args.assetDirectory).catch(() => undefined);
     throw error;
   }
+}
+
+function deriveOptimizationOutputPath(sourcePath: string): string {
+  const directory = dirname(sourcePath);
+  const name = basename(sourcePath).replace(/\.svg$/iu, "");
+  return directory === "."
+    ? `${name}.optimized.svg`
+    : `${directory}/${name}.optimized.svg`;
+}
+
+async function renderOptimizationVisualRegression(request: {
+  config: ServerConfig;
+  input: ResolvedWorkspacePath;
+  runner: ProcessRunner;
+  scratch: ScratchManager;
+  sourceRevision: string;
+  tolerance: number;
+}): Promise<ReturnType<typeof comparePngVisual>> {
+  const discovery = await locateInkscape({
+    config: request.config,
+    cwd: process.cwd(),
+    runner: request.runner,
+  });
+  const candidate = discovery.candidates[0];
+  if (!candidate) throw new Error("Inkscape executable is unavailable");
+  const probe = await probeInkscapeCandidate(
+    request.runner,
+    candidate,
+    process.cwd(),
+  );
+  if (!("version" in probe))
+    throw new Error("Inkscape executable could not be validated");
+  return request.scratch.withDirectory("staging", async (directory) => {
+    const nativeInput = await createNativeInputBundle(
+      request.input.absolutePath,
+      request.sourceRevision,
+      directory,
+      {
+        allowedRoot: request.input.workspaceRoot,
+        maxDependencyBytes: request.config.maxInputBytes,
+        maximumSanitizeMode: request.config.maximumSanitizeMode,
+      },
+    );
+    const optimizedInput = join(directory, "optimized.svg");
+    await writeFile(
+      optimizedInput,
+      vacuumUnusedSvgDefs(await readFile(nativeInput.path, "utf8")).svg,
+      "utf8",
+    );
+    const sourcePreview = join(directory, "source.png");
+    const optimizedPreview = join(directory, "optimized.png");
+    for (const [inputPath, outputPath] of [
+      [nativeInput.path, sourcePreview],
+      [optimizedInput, optimizedPreview],
+    ] as const) {
+      const rendered = await request.runner.run(candidate.executablePath, {
+        args: [
+          inputPath,
+          "--export-type=png",
+          `--export-filename=${outputPath}`,
+          "--export-area-page",
+          "--export-background-opacity=0",
+          "--export-width=512",
+        ],
+        cwd: directory,
+        maxStderrBytes: request.config.maxStderrBytes,
+        maxStdoutBytes: request.config.maxStdoutBytes,
+        timeoutMs: request.config.processTimeoutMs,
+      });
+      if (rendered.exitCode !== 0 || rendered.terminationReason !== "completed")
+        throw new Error("Inkscape optimization visual render failed");
+      const metadata = await stat(outputPath);
+      if (!metadata.isFile() || metadata.size > request.config.maxArtifactBytes)
+        throw new Error("Optimization visual preview exceeds artifact limit");
+      await verifyPng(outputPath);
+    }
+    await nativeInput.assertCurrent();
+    return comparePngVisual(
+      decodePngRgba(await readFile(optimizedPreview)),
+      decodePngRgba(await readFile(sourcePreview)),
+      request.tolerance,
+    );
+  });
 }
 
 function fileExportTarget(

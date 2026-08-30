@@ -41,6 +41,7 @@
     "test:cli": "npm run build --silent && node scripts/test-autonomous-cli.mjs",
     "test:windows": "npm run build --silent && node scripts/test-windows-automation.mjs",
     "test:mcp": "node scripts/test-mcp.mjs",
+    "evidence:f03": "npm run build --silent && node scripts/generate-f03-preview-evidence.mjs",
     "inspect": "npx --no-install @modelcontextprotocol/inspector node dist/cli.js",
     "test:conformance": "npx --no-install @modelcontextprotocol/conformance",
     "pack:check": "npm pack --dry-run --json",

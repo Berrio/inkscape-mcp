@@ -1,0 +1,41 @@
+{
+  "fixture": "docs/progress/assets/f03-resize-comparison.svg",
+  "generatedBy": "npm run evidence:f03",
+  "renderer": "Inkscape headless through document_render_preview",
+  "requestedWidthPx": 240,
+  "schemaVersion": 1,
+  "variants": [
+    {
+      "file": "f03-resize-source.png",
+      "heightPx": 180,
+      "mode": "source",
+      "name": "source",
+      "sha256": "ee6e8c72315bc87d227aff7aec07c2e3403d3c0054663d0c19fbd29cab0e711b",
+      "widthPx": 240
+    },
+    {
+      "file": "f03-resize-page-only.png",
+      "heightPx": 240,
+      "mode": "page_only",
+      "name": "page-only",
+      "sha256": "8e92620ab73929a4af0600b988ae59882b08a15aff682e35ae9479b7123b647d",
+      "widthPx": 240
+    },
+    {
+      "file": "f03-resize-contain.png",
+      "heightPx": 240,
+      "mode": "scale_content_contain",
+      "name": "contain",
+      "sha256": "94f298d42f2bcfe58379b19d21070e4d868fce00749c9be0f8fa57efc01e35a3",
+      "widthPx": 240
+    },
+    {
+      "file": "f03-resize-cover.png",
+      "heightPx": 240,
+      "mode": "scale_content_cover",
+      "name": "cover",
+      "sha256": "e028e8a2dd9ac562b58ba1de8811791badc0a96a4331e9e8bc5b8c692f18bcee",
+      "widthPx": 240
+    }
+  ]
+}

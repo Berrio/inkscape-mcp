@@ -31,6 +31,25 @@ async function temporaryDirectory(prefix: string): Promise<string> {
   return path;
 }
 
+async function waitForPid(path: string): Promise<number> {
+  const deadline = Date.now() + 1_000;
+  while (Date.now() < deadline) {
+    try {
+      const pid = Number((await readFile(path, "utf8")).trim());
+      if (Number.isInteger(pid) && pid > 0) return pid;
+    } catch {
+      // The fake is still creating its PID evidence.
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Timed out waiting for fake descendant PID evidence");
+}
+
+async function expectProcessesGone(pids: readonly number[]): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 100));
+  for (const pid of pids) expect(() => process.kill(pid, 0)).toThrow();
+}
+
 function request(cwd: string, argumentsList: readonly string[]) {
   return {
     args: [fakeInkscape, ...argumentsList],
@@ -99,6 +118,7 @@ describe("ProcessRunner", () => {
     expect(result.terminationReason).toBe("output-limit");
     expect(result.stdoutTruncated).toBe(true);
     expect(result.stdout.byteLength).toBe(256);
+    expect(runner.tracker.snapshot()).toEqual([]);
   });
 
   it("bounds stderr and terminates output floods", async () => {
@@ -113,6 +133,7 @@ describe("ProcessRunner", () => {
     expect(result.terminationReason).toBe("output-limit");
     expect(result.stderrTruncated).toBe(true);
     expect(result.stderr.byteLength).toBe(256);
+    expect(runner.tracker.snapshot()).toEqual([]);
   });
 
   it("honors timeout and frees the global concurrency slot", async () => {
@@ -164,6 +185,7 @@ describe("ProcessRunner", () => {
     await expect(execution).resolves.toMatchObject({
       terminationReason: "aborted",
     });
+    expect(runner.tracker.snapshot()).toEqual([]);
   });
 
   it("escalates termination when the process ignores the initial signal", async () => {
@@ -191,21 +213,58 @@ describe("ProcessRunner", () => {
   });
 
   it.runIf(process.platform === "win32")(
-    "terminates child trees on Windows",
+    "terminates child and grandchild trees on Windows timeout",
     async () => {
       const cwd = await temporaryDirectory("inkscape-mcp-runner-");
       const childPidPath = join(cwd, "child.pid");
+      const grandchildPidPath = join(cwd, "grandchild.pid");
       const runner = new ProcessRunner(1);
 
       const result = await runner.run(process.execPath, {
-        ...request(cwd, ["tree", "--child-pid", childPidPath]),
-        timeoutMs: 250,
+        ...request(cwd, [
+          "tree",
+          "--child-pid",
+          childPidPath,
+          "--grandchild-pid",
+          grandchildPidPath,
+        ]),
+        timeoutMs: 500,
       });
-      const childPid = Number((await readFile(childPidPath, "utf8")).trim());
+      const childPid = await waitForPid(childPidPath);
+      const grandchildPid = await waitForPid(grandchildPidPath);
 
       expect(result.terminationReason).toBe("timeout");
-      await new Promise<void>((resolve) => setTimeout(resolve, 100));
-      expect(() => process.kill(childPid, 0)).toThrow();
+      await expectProcessesGone([childPid, grandchildPid]);
+    },
+  );
+
+  it.runIf(process.platform === "win32")(
+    "terminates child and grandchild trees on Windows abort",
+    async () => {
+      const cwd = await temporaryDirectory("inkscape-mcp-runner-");
+      const childPidPath = join(cwd, "abort-child.pid");
+      const grandchildPidPath = join(cwd, "abort-grandchild.pid");
+      const controller = new AbortController();
+      const runner = new ProcessRunner(1);
+      const execution = runner.run(process.execPath, {
+        ...request(cwd, [
+          "tree",
+          "--child-pid",
+          childPidPath,
+          "--grandchild-pid",
+          grandchildPidPath,
+        ]),
+        signal: controller.signal,
+      });
+      const childPid = await waitForPid(childPidPath);
+      const grandchildPid = await waitForPid(grandchildPidPath);
+
+      controller.abort();
+
+      await expect(execution).resolves.toMatchObject({
+        terminationReason: "aborted",
+      });
+      await expectProcessesGone([childPid, grandchildPid]);
     },
   );
 });

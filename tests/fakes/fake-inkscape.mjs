@@ -42,15 +42,36 @@ if (mode === "success") {
   process.exit(0);
 } else if (mode === "tree") {
   const childPidPath = options.get("--child-pid");
-  if (!childPidPath) {
-    throw new Error("--child-pid is required for tree mode");
+  const grandchildPidPath = options.get("--grandchild-pid");
+  if (!childPidPath || !grandchildPidPath) {
+    throw new Error(
+      "--child-pid and --grandchild-pid are required for tree mode",
+    );
   }
 
-  const child = spawn(process.execPath, [import.meta.filename, "timeout"], {
-    stdio: "ignore",
-  });
+  const child = spawn(
+    process.execPath,
+    [import.meta.filename, "tree-child", "--grandchild-pid", grandchildPidPath],
+    { stdio: "ignore" },
+  );
   mkdirSync(dirname(childPidPath), { recursive: true });
   writeFileSync(childPidPath, String(child.pid), "utf8");
+  setInterval(() => undefined, 1000);
+} else if (mode === "tree-child") {
+  const grandchildPidPath = options.get("--grandchild-pid");
+  if (!grandchildPidPath) {
+    throw new Error("--grandchild-pid is required for tree-child mode");
+  }
+
+  const grandchild = spawn(
+    process.execPath,
+    [import.meta.filename, "timeout"],
+    {
+      stdio: "ignore",
+    },
+  );
+  mkdirSync(dirname(grandchildPidPath), { recursive: true });
+  writeFileSync(grandchildPidPath, String(grandchild.pid), "utf8");
   setInterval(() => undefined, 1000);
 } else if (mode === "echo") {
   process.stdout.write(`${options.get("--value") ?? ""}\n`);

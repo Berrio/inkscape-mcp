@@ -28,9 +28,12 @@ const server = {
 const isWithin = (actual, expected, tolerance = 0.6) =>
   Math.abs(actual - expected) <= tolerance;
 
-for (const versionNegotiation of [
-  { mode: { pin: "2026-07-28" } },
-  { mode: "legacy" },
+for (const { label, versionNegotiation } of [
+  {
+    label: "pinned-2026-07-28",
+    versionNegotiation: { mode: { pin: "2026-07-28" } },
+  },
+  { label: "legacy", versionNegotiation: { mode: "legacy" } },
 ]) {
   const client = new Client(
     { name: "inkscape-mcp-test-client", version: packageMetadata.version },
@@ -41,14 +44,16 @@ for (const versionNegotiation of [
     await client.connect(transport);
     const { tools } = await client.listTools();
     if (!tools.some((tool) => tool.name === "inkscape_status")) {
-      throw new Error("inkscape_status is not listed");
+      throw new Error(`${label}: inkscape_status is not listed`);
     }
     const result = await client.callTool({
       arguments: {},
       name: "inkscape_status",
     });
     if (result.isError || result.structuredContent === undefined) {
-      throw new Error("inkscape_status did not return structured content");
+      throw new Error(
+        `${label}: inkscape_status did not return structured content`,
+      );
     }
     const posture = result.structuredContent.securityPosture;
     if (
@@ -60,7 +65,7 @@ for (const versionNegotiation of [
       posture.residualRisks.length !== 2
     ) {
       throw new Error(
-        "inkscape_status did not expose the native parser security posture",
+        `${label}: inkscape_status did not expose the native parser security posture`,
       );
     }
   } finally {

@@ -1726,7 +1726,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [x] `F05-G01` A4 a 300 dpi produce 2480 × 3508 px según política documentada. — La prueba MCP crea un fixture A4 independiente, exporta página a 300 dpi y verifica IHDR 2480 × 3508 con Inkscape 1.4.4.
 - [x] `F05-G02` PNG transparente y con fondo validan dimensiones/píxeles esperados. — El smoke stdio `test:f05-g02` exporta un SVG con PNG transparente y sólido semitransparente, decodifica ambos para fijar 10 × 10 px, alfa de esquina, color de fondo y foreground rojo, y confirma que el SVG no cambia.
-- [ ] `F05-G03` PDF multipágina conserva el número y tamaños de páginas esperados.
+- [x] `F05-G03` PDF multipágina conserva el número y tamaños de páginas esperados. — El smoke stdio `test:f05-g03` exporta el fixture multipágina con Inkscape, comprueba respuesta MCP y PDF reabierto con `pdf-lib`: dos páginas, MediaBox/CropBox 284 × 142 y 142 × 142 pt dentro de 0,6 pt, y fuente sin cambios.
 - [ ] `F05-G04` SVG y plain SVG reabren en Inkscape y pasan validación estructural/visual.
 - [ ] `F05-G05` Parcialmente: la prueba MCP real fuerza una segunda variante inválida tras renderizar la primera y confirma que `all_or_nothing` no publica el archivo previo. Falta simular crash, marker/directorio final y limpieza al reiniciar.
 - [~] `F05-G06` Timeout/cancelación no dejan output parcial ni proceso huérfano. — `document_export_batch.timeoutMs` se propaga al runner nativo; `delivery=job` ofrece `job_get`/`job_cancel` owner-bound y su `AbortSignal` llega al proceso. Pruebas MCP reales cubren timeout y cancelación de un PNG A4 sin output publicado. Falta auditoría explícita de procesos huérfanos y persistencia/limpieza de jobs tras reinicio.

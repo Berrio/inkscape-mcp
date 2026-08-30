@@ -3978,6 +3978,35 @@ try {
     throw new Error(
       "document_export did not publish the verified versioned FXG adapter",
     );
+  const sifExport = await workspaceClient.callTool({
+    arguments: {
+      spec: {
+        area: { kind: "drawing" },
+        fidelityPolicy: "acknowledge-limited-fidelity",
+        format: "sif",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+        target: { kind: "file", overwrite: false, path: "a4-drawing.sif" },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export",
+  });
+  const sifExportText = await readFile(
+    join(workspaceRoot, "a4-drawing.sif"),
+    "utf8",
+  );
+  if (
+    sifExport.isError ||
+    sifExport.structuredContent?.adapter !== "inkscape-sif/v1" ||
+    sifExport.structuredContent?.format !== "sif" ||
+    !sifExport.structuredContent?.warnings?.includes(
+      "SIF_LIMITED_FIDELITY_ACKNOWLEDGED",
+    ) ||
+    !/<canvas\b/u.test(sifExportText)
+  )
+    throw new Error(
+      "document_export did not publish the verified versioned SIF adapter",
+    );
   const reimportedEmf = await workspaceClient.callTool({
     arguments: {
       expectedRevision: createHash("sha256")

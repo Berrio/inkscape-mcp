@@ -3,6 +3,7 @@ import {
   probeDxfExport,
   probeFxgExport,
   probeGplExport,
+  probeSifExport,
   probeHpglExport,
   probeJpegExport,
   probePngExport,
@@ -41,6 +42,7 @@ export type DoctorReport = {
   dxfExportProbe?: { available: boolean; reason?: string };
   fxgExportProbe?: { available: boolean; reason?: string };
   gplExportProbe?: { available: boolean; reason?: string };
+  sifExportProbe?: { available: boolean; reason?: string };
   hpglExportProbe?: { available: boolean; reason?: string };
   jpegExportProbe?: { available: boolean; reason?: string };
   tiffExportProbe?: { available: boolean; reason?: string };
@@ -91,6 +93,11 @@ export async function runDoctor(
       candidate.executablePath,
       config,
     );
+    const sifExportProbe = await probeSifExport(
+      runner,
+      candidate.executablePath,
+      config,
+    );
     const hpglExportProbe = await probeHpglExport(
       runner,
       candidate.executablePath,
@@ -130,6 +137,7 @@ export async function runDoctor(
       dxfExportProbe,
       fxgExportProbe,
       gplExportProbe,
+      sifExportProbe,
       hpglExportProbe,
       jpegExportProbe,
       tiffExportProbe,

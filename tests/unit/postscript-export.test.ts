@@ -57,7 +57,7 @@ describe("PostScript export policy and verification", () => {
     ).toThrow();
   });
 
-  it("requires explicit DXF/HPGL/FXG fidelity acknowledgement and fixes adapters", () => {
+  it("requires explicit DXF/HPGL/FXG/SIF fidelity acknowledgement and fixes adapters", () => {
     const common = {
       area: { kind: "drawing" as const },
       format: "dxf" as const,
@@ -87,6 +87,14 @@ describe("PostScript export policy and verification", () => {
         target: { kind: "file", overwrite: false, path: "out.fxg" },
       }),
     ).toMatchObject({ format: "fxg" });
+    expect(
+      parseExportSpec({
+        ...common,
+        fidelityPolicy: "acknowledge-limited-fidelity",
+        format: "sif",
+        target: { kind: "file", overwrite: false, path: "out.sif" },
+      }),
+    ).toMatchObject({ format: "sif" });
   });
 
   it("verifies PostScript signatures and requires a concrete EPS bounding box", async () => {

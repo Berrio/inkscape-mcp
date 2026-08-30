@@ -4,6 +4,7 @@ import {
   isAsciiDxf,
   isAsciiHpgl,
   probeFxgExport,
+  probeSifExport,
   probeGplExport,
   probeWebpExport,
 } from "../../src/capabilities/export-probe.js";
@@ -11,6 +12,7 @@ import { inspectDxf } from "../../src/export/dxf.js";
 import { inspectHpgl } from "../../src/export/hpgl.js";
 import { inspectGpl } from "../../src/export/gpl.js";
 import { inspectFxg } from "../../src/export/fxg.js";
+import { inspectSif } from "../../src/export/sif.js";
 
 it("recognizes a structural ASCII DXF even when it has a leading comment", () => {
   expect(
@@ -82,6 +84,53 @@ it("validates FXG XML without allowing active declarations", () => {
   expect(() =>
     inspectFxg(Buffer.from('<Graphic version="3.0"><Path/></Graphic>')),
   ).toThrow("unsupported version");
+});
+
+it("validates a non-active Synfig SIF canvas", () => {
+  expect(
+    inspectSif(
+      Buffer.from(
+        '<canvas version="1.2"><layer type="region"><param name="color"/></layer></canvas>',
+      ),
+    ),
+  ).toEqual({ byteLength: 81, layerCount: 1, version: "1.2" });
+  expect(() => inspectSif(Buffer.from('<canvas version="1.2"/>'))).toThrow(
+    "no canvas layers",
+  );
+  expect(() =>
+    inspectSif(
+      Buffer.from('<!DOCTYPE sif><canvas version="1.2"><layer/></canvas>'),
+    ),
+  ).toThrow("active XML declarations");
+});
+
+it("reports a missing SIF artifact without leaking its scratch path", async () => {
+  const result = await probeSifExport(
+    {
+      run: async () => ({
+        durationMs: 1,
+        exitCode: 0,
+        pid: 1,
+        signal: null,
+        stderr: Buffer.alloc(0),
+        stderrTruncated: false,
+        stdout: Buffer.alloc(0),
+        stdoutTruncated: false,
+        terminationReason: "completed" as const,
+      }),
+    },
+    process.execPath,
+    {
+      maxStderrBytes: 1024,
+      maxStdoutBytes: 1024,
+      processTimeoutMs: 1_000,
+      scratchRoot: "auto",
+    },
+  );
+  expect(result).toEqual({
+    available: false,
+    reason: "SIF output is missing or unreadable",
+  });
 });
 
 it("reports a missing FXG artifact without leaking its scratch path", async () => {

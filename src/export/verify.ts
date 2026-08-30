@@ -5,6 +5,7 @@ import { inspectDxf, type DxfMetadata } from "./dxf.js";
 import { inspectHpgl, type HpglMetadata } from "./hpgl.js";
 import { inspectGpl, type GplMetadata } from "./gpl.js";
 import { inspectFxg, type FxgMetadata } from "./fxg.js";
+import { inspectSif, type SifMetadata } from "./sif.js";
 import {
   inspectEmf,
   inspectWmf,
@@ -28,6 +29,7 @@ export type ExportVerification =
   | { format: "dxf"; metadata: DxfMetadata }
   | { format: "gpl"; metadata: GplMetadata }
   | { format: "fxg"; metadata: FxgMetadata }
+  | { format: "sif"; metadata: SifMetadata }
   | { format: "hpgl"; metadata: HpglMetadata }
   | { format: "plain-svg" | "svg"; metadata: Record<string, never> };
 
@@ -39,6 +41,7 @@ export async function verifyExportArtifact(
     | "dxf"
     | "eps"
     | "fxg"
+    | "sif"
     | "gpl"
     | "pdf"
     | "plain-svg"
@@ -67,6 +70,8 @@ export async function verifyExportArtifact(
     return { format, metadata: inspectGpl(await readFile(path)) };
   if (format === "fxg")
     return { format, metadata: inspectFxg(await readFile(path)) };
+  if (format === "sif")
+    return { format, metadata: inspectSif(await readFile(path)) };
   if (format === "hpgl")
     return { format, metadata: inspectHpgl(await readFile(path)) };
   if (format === "wmf")

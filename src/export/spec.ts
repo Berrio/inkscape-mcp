@@ -370,6 +370,16 @@ const fxgExportSchema = commonExportSchema
     format: z.literal("fxg"),
   })
   .strict();
+const sifExportSchema = commonExportSchema
+  .extend({
+    area: z.union([
+      z.object({ kind: z.literal("drawing") }).strict(),
+      selectionAreaSchema,
+    ]),
+    fidelityPolicy: z.literal("acknowledge-limited-fidelity"),
+    format: z.literal("sif"),
+  })
+  .strict();
 
 export const exportSpecSchema = z
   .discriminatedUnion("format", [
@@ -382,6 +392,7 @@ export const exportSpecSchema = z
     dxfExportSchema,
     hpglExportSchema,
     fxgExportSchema,
+    sifExportSchema,
   ])
   .superRefine((value, context) => {
     const selection = value.area.kind === "selection" ? value.area : undefined;

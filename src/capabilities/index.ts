@@ -3,6 +3,7 @@ export {
   probeDxfExport,
   probeFxgExport,
   probeGplExport,
+  probeSifExport,
   probeHpglExport,
   probeJpegExport,
   probePngExport,

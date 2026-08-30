@@ -8,6 +8,7 @@ import { inspectDxf } from "../export/dxf.js";
 import { inspectHpgl } from "../export/hpgl.js";
 import { inspectGpl } from "../export/gpl.js";
 import { inspectFxg } from "../export/fxg.js";
+import { inspectSif } from "../export/sif.js";
 import { inspectRasterImport } from "../import/raster-import.js";
 
 export type ExportProbe = { available: boolean; reason?: string };
@@ -246,6 +247,45 @@ export async function probeFxgExport(
     return { available: true };
   } catch {
     return { available: false, reason: "FXG output is missing or unreadable" };
+  } finally {
+    await rm(scratch, { force: true, recursive: true });
+  }
+}
+
+/** Probes the fixed Synfig SIF exporter without accepting an extension ID or options. */
+export async function probeSifExport(
+  runner: Pick<ProcessExecutor, "run">,
+  executable: string,
+  config: Pick<
+    ServerConfig,
+    "maxStderrBytes" | "maxStdoutBytes" | "processTimeoutMs" | "scratchRoot"
+  >,
+): Promise<ExportProbe> {
+  const root =
+    config.scratchRoot === "auto" ? tmpdir() : resolve(config.scratchRoot);
+  const scratch = await mkdtemp(join(root, "inkscape-mcp-probe-"));
+  const input = join(scratch, "probe.svg");
+  const output = join(scratch, "probe.sif");
+  try {
+    await writeFile(
+      input,
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect width="4" height="3" fill="#112233"/></svg>',
+      "utf8",
+    );
+    const result = await runner.run(executable, {
+      args: [input, "--export-type=sif", `--export-filename=${output}`],
+      cwd: scratch,
+      maxStderrBytes: config.maxStderrBytes,
+      maxStdoutBytes: config.maxStdoutBytes,
+      timeoutMs: config.processTimeoutMs,
+    });
+    if (result.exitCode !== 0 || result.terminationReason !== "completed") {
+      return { available: false, reason: "SIF export did not complete" };
+    }
+    inspectSif(await readFile(output));
+    return { available: true };
+  } catch {
+    return { available: false, reason: "SIF output is missing or unreadable" };
   } finally {
     await rm(scratch, { force: true, recursive: true });
   }

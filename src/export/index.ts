@@ -8,6 +8,7 @@ export {
 export { verifyPdf, type PdfMetadata } from "./pdf.js";
 export { inspectGpl, type GplMetadata } from "./gpl.js";
 export { FXG_EXPORT_ADAPTER, inspectFxg, type FxgMetadata } from "./fxg.js";
+export { SIF_EXPORT_ADAPTER, inspectSif, type SifMetadata } from "./sif.js";
 export { verifySvg, type SvgMetadata } from "./svg.js";
 export {
   buildExportArgv,

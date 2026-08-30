@@ -1517,7 +1517,7 @@ Evidencia específica adicional para WP de alto riesgo:
 #### Puerta F01
 
 - [x] `F01-G01` `doctor` encuentra Inkscape 1.4.4 MSIX mediante discovery automático o explica de forma accionable por qué requiere ruta explícita. — En Windows, la integración real y `--doctor --json` detectan automáticamente el paquete MSIX 1.4.4, informan su origen `msix` sin exponer la ruta y superan la sonda PNG.
-- [ ] `F01-G02` Se capturan versión y ≥1000 acciones en el baseline local sin colgarse ni abrir flujo GUI dependiente.
+- [w] `F01-G02` Se capturan versión y ≥1000 acciones en el baseline local sin colgarse ni abrir flujo GUI dependiente. — Decisión explícita del usuario el 2026-08-30: no instalar otro baseline; se acepta el conteo real de 189 acciones observadas en MSIX 1.4.4 como evidencia de la sonda headless. El catálogo continúa declarando sólo esas 189, sin aliases sintéticos ni promesa de cobertura adicional.
 - [x] `F01-G03` El fake demuestra timeout/cancelación/salida acotada sin procesos huérfanos. — El corpus del runner verifica tracker vacío después de timeout, aborto y límites independientes de stdout/stderr; en Windows inspecciona además que hijo y nieto reales ya no existen.
 - [ ] `F01-G04` Ninguna API pública acepta ejecutable, flags o comando arbitrarios.
 - [ ] `F01-G05` Tests, lint y typecheck pasan; evidencia en `docs/progress/F01.md`.

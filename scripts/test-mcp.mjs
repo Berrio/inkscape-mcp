@@ -3859,6 +3859,35 @@ try {
     throw new Error(
       "document_export did not publish the verified versioned DXF adapter",
     );
+  const hpglExport = await workspaceClient.callTool({
+    arguments: {
+      spec: {
+        area: { kind: "drawing" },
+        fidelityPolicy: "acknowledge-limited-fidelity",
+        format: "hpgl",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+        target: { kind: "file", overwrite: false, path: "a4-drawing.hpgl" },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export",
+  });
+  const hpglExportBytes = await readFile(
+    join(workspaceRoot, "a4-drawing.hpgl"),
+  );
+  if (
+    hpglExport.isError ||
+    hpglExport.structuredContent?.adapter !== "inkscape-hpgl/v1" ||
+    hpglExport.structuredContent?.format !== "hpgl" ||
+    !hpglExport.structuredContent?.warnings?.includes(
+      "HPGL_LIMITED_FIDELITY_ACKNOWLEDGED",
+    ) ||
+    !hpglExportBytes.toString("ascii").startsWith("IN;") ||
+    !/(?:PU|PD)[0-9,.-]*;/u.test(hpglExportBytes.toString("ascii"))
+  )
+    throw new Error(
+      "document_export did not publish the verified versioned HPGL adapter",
+    );
   const reimportedEmf = await workspaceClient.callTool({
     arguments: {
       expectedRevision: createHash("sha256")

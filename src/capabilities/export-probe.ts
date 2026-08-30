@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import type { ServerConfig } from "../config/index.js";
 import type { ProcessExecutor } from "../discovery/probe.js";
 import { inspectDxf } from "../export/dxf.js";
+import { inspectHpgl } from "../export/hpgl.js";
 
 export type ExportProbe = { available: boolean; reason?: string };
 
@@ -17,6 +18,16 @@ export type ExportProbe = { available: boolean; reason?: string };
 export function isAsciiDxf(bytes: Buffer): boolean {
   try {
     inspectDxf(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** HPGL is an ASCII command stream; require initialization and a pen command. */
+export function isAsciiHpgl(bytes: Buffer): boolean {
+  try {
+    inspectHpgl(bytes);
     return true;
   } catch {
     return false;
@@ -113,6 +124,53 @@ export async function probeDxfExport(
         error instanceof Error
           ? error.message
           : "unknown DXF export probe error",
+    };
+  } finally {
+    await rm(scratch, { force: true, recursive: true });
+  }
+}
+
+/** Probes only the fixed HPGL extension selected by Inkscape's output type. */
+export async function probeHpglExport(
+  runner: Pick<ProcessExecutor, "run">,
+  executable: string,
+  config: Pick<
+    ServerConfig,
+    "maxStderrBytes" | "maxStdoutBytes" | "processTimeoutMs" | "scratchRoot"
+  >,
+): Promise<ExportProbe> {
+  const root =
+    config.scratchRoot === "auto" ? tmpdir() : resolve(config.scratchRoot);
+  const scratch = await mkdtemp(join(root, "inkscape-mcp-probe-"));
+  const input = join(scratch, "probe.svg");
+  const output = join(scratch, "probe.hpgl");
+  try {
+    await writeFile(
+      input,
+      '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L1 1"/></svg>',
+      "utf8",
+    );
+    const result = await runner.run(executable, {
+      args: [input, "--export-type=hpgl", `--export-filename=${output}`],
+      cwd: scratch,
+      maxStderrBytes: config.maxStderrBytes,
+      maxStdoutBytes: config.maxStdoutBytes,
+      timeoutMs: config.processTimeoutMs,
+    });
+    if (result.exitCode !== 0 || result.terminationReason !== "completed") {
+      return { available: false, reason: "HPGL export did not complete" };
+    }
+    const hpgl = await readFile(output);
+    return isAsciiHpgl(hpgl)
+      ? { available: true }
+      : { available: false, reason: "output is not bounded ASCII HPGL" };
+  } catch (error: unknown) {
+    return {
+      available: false,
+      reason:
+        error instanceof Error
+          ? error.message
+          : "unknown HPGL export probe error",
     };
   } finally {
     await rm(scratch, { force: true, recursive: true });

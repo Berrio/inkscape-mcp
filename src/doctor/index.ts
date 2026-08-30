@@ -1,6 +1,7 @@
 import {
   CapabilityService,
   probeDxfExport,
+  probeHpglExport,
   probePngExport,
   type InkscapeCapabilities,
 } from "../capabilities/index.js";
@@ -33,6 +34,7 @@ export type DoctorReport = {
   };
   pngExportProbe?: { available: boolean; reason?: string };
   dxfExportProbe?: { available: boolean; reason?: string };
+  hpglExportProbe?: { available: boolean; reason?: string };
   securityPosture: NativeSecurityPosture;
   workspaceReady: boolean;
 };
@@ -69,6 +71,11 @@ export async function runDoctor(
       candidate.executablePath,
       config,
     );
+    const hpglExportProbe = await probeHpglExport(
+      runner,
+      candidate.executablePath,
+      config,
+    );
     return {
       capabilities: {
         actionCount: capabilities.actionCount,
@@ -86,6 +93,7 @@ export async function runDoctor(
       },
       pngExportProbe,
       dxfExportProbe,
+      hpglExportProbe,
       securityPosture: nativeSecurityPosture(config),
       workspaceReady: isWorkspaceReady(config),
     };

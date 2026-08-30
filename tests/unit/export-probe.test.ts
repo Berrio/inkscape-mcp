@@ -1,7 +1,11 @@
 import { expect, it } from "vitest";
 
-import { isAsciiDxf } from "../../src/capabilities/export-probe.js";
+import {
+  isAsciiDxf,
+  isAsciiHpgl,
+} from "../../src/capabilities/export-probe.js";
 import { inspectDxf } from "../../src/export/dxf.js";
+import { inspectHpgl } from "../../src/export/hpgl.js";
 
 it("recognizes a structural ASCII DXF even when it has a leading comment", () => {
   expect(
@@ -26,4 +30,14 @@ it("reports stable DXF metadata only for structurally complete output", () => {
     inspectDxf(Buffer.from("0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n")),
   ).toEqual({ byteLength: 36, sectionCount: 1 });
   expect(() => inspectDxf(Buffer.from("0\nEOF\n"))).toThrow("SECTION");
+});
+
+it("recognizes only bounded ASCII HPGL command streams", () => {
+  expect(isAsciiHpgl(Buffer.from("IN;PU0,0;PD1,1;", "ascii"))).toBe(true);
+  expect(isAsciiHpgl(Buffer.from("PU0,0;PD1,1;", "ascii"))).toBe(false);
+  expect(isAsciiHpgl(Buffer.from([0x49, 0x4e, 0, 0x3b]))).toBe(false);
+  expect(inspectHpgl(Buffer.from("IN;PU0,0;PD1,1;"))).toEqual({
+    byteLength: 15,
+    penCommandCount: 2,
+  });
 });

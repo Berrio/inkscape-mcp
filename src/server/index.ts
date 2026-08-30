@@ -156,6 +156,7 @@ import {
   executeExportBatch,
   expandExportPreset,
   inspectEmf,
+  HPGL_EXPORT_ADAPTER,
   type ExportSpec,
   exportPresetSchema,
   exportSpecSchema,
@@ -8343,7 +8344,7 @@ export function buildServer(
     "document_export",
     {
       description:
-        "Exports one PNG, PDF, SVG, plain SVG, PS, EPS, EMF, experimental WMF, or the versioned DXF adapter from a validated ExportSpec through the bounded Inkscape pipeline. Legacy vector formats require explicit acknowledgement of fidelity limits.",
+        "Exports one PNG, PDF, SVG, plain SVG, PS, EPS, EMF, experimental WMF, or a fixed versioned DXF/HPGL adapter from a validated ExportSpec through the bounded Inkscape pipeline. Legacy vector formats require explicit acknowledgement of fidelity limits.",
       inputSchema: z
         .object({
           spec: exportSpecSchema,
@@ -8351,11 +8352,12 @@ export function buildServer(
         })
         .strict(),
       outputSchema: z.object({
-        adapter: z.literal(DXF_EXPORT_ADAPTER).optional(),
+        adapter: z.enum([DXF_EXPORT_ADAPTER, HPGL_EXPORT_ADAPTER]).optional(),
         artifact: artifactSchema,
         format: z.enum([
           "emf",
           "dxf",
+          "hpgl",
           "eps",
           "pdf",
           "png",
@@ -8385,7 +8387,8 @@ export function buildServer(
         spec.format !== "eps" &&
         spec.format !== "emf" &&
         spec.format !== "wmf" &&
-        spec.format !== "dxf"
+        spec.format !== "dxf" &&
+        spec.format !== "hpgl"
       )
         throw new Error("Use the specialized export tool for this format");
       if (spec.format === "png" && spec.margin !== undefined)
@@ -8439,7 +8442,9 @@ export function buildServer(
                     ? /\.wmf$/iu
                     : spec.format === "dxf"
                       ? /\.dxf$/iu
-                      : /\.svg$/iu;
+                      : spec.format === "hpgl"
+                        ? /\.hpgl$/iu
+                        : /\.svg$/iu;
       if (!expectedExtension.test(output.relativePath))
         throw new Error(
           "Output extension does not match the requested export format",
@@ -8503,7 +8508,9 @@ export function buildServer(
                         ? "export.wmf"
                         : spec.format === "dxf"
                           ? "export.dxf"
-                          : "export.svg",
+                          : spec.format === "hpgl"
+                            ? "export.hpgl"
+                            : "export.svg",
           );
           const background =
             spec.format === "png" && spec.background.mode === "document"
@@ -8560,6 +8567,9 @@ export function buildServer(
               ...(spec.format === "dxf"
                 ? ["DXF_LIMITED_FIDELITY_ACKNOWLEDGED"]
                 : []),
+              ...(spec.format === "hpgl"
+                ? ["HPGL_LIMITED_FIDELITY_ACKNOWLEDGED"]
+                : []),
             ],
           };
         },
@@ -8583,6 +8593,7 @@ export function buildServer(
         throw new Error("Export output changed before artifact publication");
       const result = {
         ...(spec.format === "dxf" ? { adapter: DXF_EXPORT_ADAPTER } : {}),
+        ...(spec.format === "hpgl" ? { adapter: HPGL_EXPORT_ADAPTER } : {}),
         artifact,
         format: spec.format,
         outputPath: output.relativePath,

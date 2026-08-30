@@ -54,6 +54,7 @@ export {
 } from "./preset-resolver.js";
 export { verifyExportArtifact, type ExportVerification } from "./verify.js";
 export { DXF_EXPORT_ADAPTER, inspectDxf, type DxfMetadata } from "./dxf.js";
+export { HPGL_EXPORT_ADAPTER, inspectHpgl, type HpglMetadata } from "./hpgl.js";
 export {
   inspectEmf,
   inspectWmf,

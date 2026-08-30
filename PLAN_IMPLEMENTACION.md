@@ -144,7 +144,7 @@ Referencia de selección: [guía oficial de modelos GPT-5.6](https://developers.
 - [x] Ruta válida observada: `...\WindowsApps\25415Inkscape.Inkscape_1.4.40.0_x64__9waqn51p1ttv2\VFS\ProgramFilesX64\Inkscape\bin\inkscape.exe`.
 - [x] `inkscape.exe` funciona; `inkscape.com` existe en ese MSIX pero su ejecución directa devolvió acceso denegado en esta sesión.
 - [x] La instalación no está visible en el `PATH` heredado por esta sesión.
-- [x] La sonda local de `--action-list` devolvió 1075 acciones con Inkscape 1.4.4.
+- [x] La sonda local de `--action-list` termina headless con Inkscape 1.4.4. La revalidación de F01-G02 observó 189 acciones únicas; la cifra histórica de 1.075 no se reprodujo y no se usa para anunciar capabilities ni cerrar esa puerta.
 - [x] La ayuda local declara tipos de salida por CLI `svg,png,ps,eps,pdf,emf,wmf,xaml`; cada uno sigue sujeto a una sonda real antes de anunciarse.
 - [x] La ayuda local confirma opciones para área, páginas, DPI, anchura/altura, fondo, modos PNG, PDF 1.4/1.5 y texto a paths.
 

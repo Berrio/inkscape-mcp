@@ -11,6 +11,7 @@ export {
   type CommitFileBatchRequest,
   type CommitFileBatchResult,
   type MutationDocumentRef,
+  type AtomicFileStoreOptions,
 } from "./revisions.js";
 export {
   DEFAULT_STALE_SCRATCH_AGE_MS,

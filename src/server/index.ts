@@ -1100,7 +1100,9 @@ export type ServerRuntime = {
 
 /** Creates process-owned state shared by stateless HTTP server instances. */
 export function createServerRuntime(config: ServerConfig): ServerRuntime {
-  const fileStore = new AtomicFileStore();
+  const fileStore = new AtomicFileStore(undefined, undefined, {
+    workspaceRoots: config.workspaceRoots,
+  });
   const stateRoot =
     config.scratchRoot === "auto" ? tmpdir() : config.scratchRoot;
   return {

@@ -4,6 +4,7 @@ import {
   readdir,
   readFile,
   rm,
+  symlink,
   utimes,
   writeFile,
 } from "node:fs/promises";
@@ -372,6 +373,33 @@ describe("file revisions and atomic store", () => {
       }),
     ).rejects.toBeInstanceOf(RevisionConflictError);
     await expect(readFile(target)).rejects.toBeDefined();
+  });
+  it("rejects a junction swapped during staging before it can publish outside the workspace", async () => {
+    const root = await temporaryDirectory();
+    const outside = await temporaryDirectory();
+    const destination = join(root, "destination");
+    const source = join(root, "source.svg");
+    const target = join(destination, "result.png");
+    await mkdir(destination);
+    await writeFile(source, "source");
+    const store = new AtomicFileStore(
+      new CanonicalPathLocks(),
+      async (temporaryPath, contents) => {
+        await writeFile(temporaryPath, contents);
+        await rm(destination, { force: true, recursive: true });
+        await symlink(outside, destination, "junction");
+      },
+      { workspaceRoots: [root] },
+    );
+    await expect(
+      store.commit({
+        contents: Buffer.from("replacement"),
+        expectedRevision: await sha256File(source),
+        sourcePath: source,
+        targetPath: target,
+      }),
+    ).rejects.toThrow("authorized workspace");
+    await expect(readFile(join(outside, "result.png"))).rejects.toBeDefined();
   });
   it("serializes conflicting writers in a deterministic lock order", async () => {
     const locks = new CanonicalPathLocks();

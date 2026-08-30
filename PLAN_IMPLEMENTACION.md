@@ -1537,7 +1537,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F02-T02` Implementar resolver de input existente con pertenencia robusta.
 - [x] `F02-T03` Implementar resolver de output inexistente mediante parent canónico.
 - [x] `F02-T04` Rechazar absolute/UNC/drive-relative/NUL/ADS/`..` y escapes de case/separadores.
-- [ ] `F02-T05` Probar symlink/junction/reparse point y carrera antes del commit.
+- [x] `F02-T05` Probar symlink/junction/reparse point y carrera antes del commit. — `AtomicFileStore` congela los roots canónicos de runtime y vuelve a resolver los parents antes de staging y `rename`; una prueba Windows intercambia un directorio de salida por junction durante staging y confirma rechazo sin escribir fuera del workspace.
 - [x] `F02-T06` Implementar allowlist de extensiones y sniffing inicial.
 - [x] `F02-T07` Implementar paginación segura en `workspace_list_documents`.
 

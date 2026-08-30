@@ -1,7 +1,23 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, open, rename, rm, stat } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import {
+  copyFile,
+  lstat,
+  open,
+  realpath,
+  rename,
+  rm,
+  stat,
+} from "node:fs/promises";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 
 export type MutationDocumentRef = { expectedRevision: string; uri: string };
 
@@ -99,18 +115,33 @@ export type CommitFileBatchResult = {
   files: readonly CommitBatchFileResult[];
 };
 type TemporaryWriter = (path: string, contents: Uint8Array) => Promise<void>;
+export type AtomicFileStoreOptions = {
+  /**
+   * Workspace identities are captured at startup. Publication rechecks the
+   * live target parent so a swapped junction cannot redirect a staged output.
+   */
+  workspaceRoots?: readonly string[];
+};
 
 export class AtomicFileStore {
+  private readonly canonicalWorkspaceRoots: Promise<readonly string[]>;
+
   public constructor(
     private readonly locks = new CanonicalPathLocks(),
     private readonly writeTemporary: TemporaryWriter = writeDurableTemporary,
-  ) {}
+    options: AtomicFileStoreOptions = {},
+  ) {
+    this.canonicalWorkspaceRoots = Promise.all(
+      (options.workspaceRoots ?? []).map(async (root) => realpath(root)),
+    );
+  }
 
   public async commit(request: CommitFileRequest): Promise<CommitFileResult> {
     const target = resolve(request.targetPath);
     return this.locks.withLocks(
       [target, ...(request.sourcePath ? [request.sourcePath] : [])],
       async () => {
+        await this.assertPublishTargets([target]);
         if (request.sourcePath && request.expectedRevision)
           await assertRevision(request.sourcePath, request.expectedRevision);
         const exists = await fileExists(target);
@@ -129,6 +160,7 @@ export class AtomicFileStore {
           await this.writeTemporary(temporary, request.contents);
           if (request.sourcePath && request.expectedRevision)
             await assertRevision(request.sourcePath, request.expectedRevision);
+          await this.assertPublishTargets([target]);
           const finalExists = await fileExists(target);
           if (finalExists !== exists)
             throw new RevisionConflictError(
@@ -177,6 +209,7 @@ export class AtomicFileStore {
         ...(request.sourcePath ? [request.sourcePath] : []),
       ],
       async () => {
+        await this.assertPublishTargets(files.map((file) => file.targetPath));
         if (request.sourcePath && request.expectedRevision)
           await assertRevision(request.sourcePath, request.expectedRevision);
         const staged = await Promise.all(
@@ -209,6 +242,9 @@ export class AtomicFileStore {
             );
           if (request.sourcePath && request.expectedRevision)
             await assertRevision(request.sourcePath, request.expectedRevision);
+          await this.assertPublishTargets(
+            staged.map((file) => file.targetPath),
+          );
           for (const file of staged) {
             const finalExists = await fileExists(file.targetPath);
             if (finalExists !== file.exists)
@@ -262,6 +298,27 @@ export class AtomicFileStore {
       },
     );
   }
+
+  private async assertPublishTargets(paths: readonly string[]): Promise<void> {
+    const roots = await this.canonicalWorkspaceRoots;
+    if (roots.length === 0) return;
+    for (const target of paths) {
+      const parent = await realpath(dirname(target)).catch(() => {
+        throw new RevisionConflictError(
+          "Output parent is no longer available for publication",
+        );
+      });
+      if (!roots.some((root) => isInsideWorkspaceRoot(root, parent)))
+        throw new RevisionConflictError(
+          "Output parent no longer belongs to an authorized workspace",
+        );
+      const metadata = await lstat(target).catch(() => undefined);
+      if (metadata?.isSymbolicLink())
+        throw new RevisionConflictError(
+          "Refusing to publish through a symbolic-link output",
+        );
+    }
+  }
 }
 
 async function writeDurableTemporary(
@@ -286,4 +343,14 @@ async function fileExists(path: string): Promise<boolean> {
 }
 function uniqueBackupPath(target: string): string {
   return `${target}.bak-${new Date().toISOString().replace(/[:.]/gu, "-")}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+function isInsideWorkspaceRoot(root: string, candidate: string): boolean {
+  const difference = relative(root, candidate);
+  return (
+    difference === "" ||
+    (!difference.startsWith(`..${sep}`) &&
+      difference !== ".." &&
+      !isAbsolute(difference))
+  );
 }

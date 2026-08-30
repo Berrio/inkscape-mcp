@@ -3,12 +3,14 @@ import { expect, it } from "vitest";
 import {
   isAsciiDxf,
   isAsciiHpgl,
+  probeFxgExport,
   probeGplExport,
   probeWebpExport,
 } from "../../src/capabilities/export-probe.js";
 import { inspectDxf } from "../../src/export/dxf.js";
 import { inspectHpgl } from "../../src/export/hpgl.js";
 import { inspectGpl } from "../../src/export/gpl.js";
+import { inspectFxg } from "../../src/export/fxg.js";
 
 it("recognizes a structural ASCII DXF even when it has a leading comment", () => {
   expect(
@@ -62,6 +64,53 @@ it("validates a bounded GIMP palette and rejects malformed palette output", () =
       Buffer.from("GIMP Palette\nName: Invalid\nColumns: 33\n1 2 3\n"),
     ),
   ).toThrow("invalid palette columns");
+});
+
+it("validates FXG XML without allowing active declarations", () => {
+  expect(
+    inspectFxg(
+      Buffer.from(
+        '<Graphic version="2.0" xmlns="http://ns.adobe.com/fxg/2008"><Path data="M 0 0 L 1 1"/></Graphic>',
+      ),
+    ),
+  ).toEqual({ byteLength: 96, version: "2.0" });
+  expect(() =>
+    inspectFxg(
+      Buffer.from('<!DOCTYPE fxg><Graphic version="2.0"><Path/></Graphic>'),
+    ),
+  ).toThrow("active XML declarations");
+  expect(() =>
+    inspectFxg(Buffer.from('<Graphic version="3.0"><Path/></Graphic>')),
+  ).toThrow("unsupported version");
+});
+
+it("reports a missing FXG artifact without leaking its scratch path", async () => {
+  const result = await probeFxgExport(
+    {
+      run: async () => ({
+        durationMs: 1,
+        exitCode: 0,
+        pid: 1,
+        signal: null,
+        stderr: Buffer.alloc(0),
+        stderrTruncated: false,
+        stdout: Buffer.alloc(0),
+        stdoutTruncated: false,
+        terminationReason: "completed" as const,
+      }),
+    },
+    process.execPath,
+    {
+      maxStderrBytes: 1024,
+      maxStdoutBytes: 1024,
+      processTimeoutMs: 1_000,
+      scratchRoot: "auto",
+    },
+  );
+  expect(result).toEqual({
+    available: false,
+    reason: "FXG output is missing or unreadable",
+  });
 });
 
 it("reports a missing GPL artifact without leaking its scratch path", async () => {

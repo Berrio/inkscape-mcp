@@ -1,6 +1,7 @@
 import {
   CapabilityService,
   probeDxfExport,
+  probeFxgExport,
   probeGplExport,
   probeHpglExport,
   probeJpegExport,
@@ -38,6 +39,7 @@ export type DoctorReport = {
   };
   pngExportProbe?: { available: boolean; reason?: string };
   dxfExportProbe?: { available: boolean; reason?: string };
+  fxgExportProbe?: { available: boolean; reason?: string };
   gplExportProbe?: { available: boolean; reason?: string };
   hpglExportProbe?: { available: boolean; reason?: string };
   jpegExportProbe?: { available: boolean; reason?: string };
@@ -75,6 +77,11 @@ export async function runDoctor(
       config,
     );
     const dxfExportProbe = await probeDxfExport(
+      runner,
+      candidate.executablePath,
+      config,
+    );
+    const fxgExportProbe = await probeFxgExport(
       runner,
       candidate.executablePath,
       config,
@@ -121,6 +128,7 @@ export async function runDoctor(
       },
       pngExportProbe,
       dxfExportProbe,
+      fxgExportProbe,
       gplExportProbe,
       hpglExportProbe,
       jpegExportProbe,

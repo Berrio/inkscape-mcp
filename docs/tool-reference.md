@@ -140,17 +140,17 @@ exportación: inspección → `document_export_preset_plan` →
 
 ## Exportación, presets y jobs
 
-| Tool                          | Schema/operación                                                               | Ejemplo de uso                                                                             |
-| ----------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `document_export_preset_plan` | Documento/revisión, preset y directorio; devuelve preflight tipado.            | Revisar preflight de `print-pdf-300dpi` y conservar su token.                              |
-| `document_export_batch`       | `planToken` o specs tipados, modo `all_or_nothing`/`best_effort`.              | Ejecutar el plan y leer manifest/artefactos publicados.                                    |
-| `document_export`             | Un `ExportSpec` discriminado de PNG/PDF/SVG/plain SVG/PS/EPS/EMF/WMF/DXF/HPGL. | Exportar DXF o HPGL por adapter fijo, con acknowledgement explícito de fidelidad limitada. |
-| `export_png`                  | Documento/revisión, área, DPI/píxeles, fondo y output.                         | Generar PNG transparente a DPI físico o dimensiones exactas.                               |
-| `export_pdf`                  | Documento/revisión, PDF 1.4/1.5, texto/filtros/márgenes permitidos.            | Exportar PDF multipágina completo o subset controlado.                                     |
-| `export_pdf_pages`            | Documento/revisión, IDs de páginas y directorio.                               | Crear `page-NNN.pdf` por página seleccionada.                                              |
-| `export_svg`                  | Documento/revisión, SVG Inkscape o plain SVG y policy de recursos.             | Publicar SVG editable o plain SVG validado.                                                |
-| `job_get`                     | `jobId` owner-bound.                                                           | Consultar progreso/resultado de batch asíncrono.                                           |
-| `job_cancel`                  | `jobId` owner-bound.                                                           | Pedir cancelación; no publica output incompleto.                                           |
+| Tool                          | Schema/operación                                                                   | Ejemplo de uso                                                                                  |
+| ----------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `document_export_preset_plan` | Documento/revisión, preset y directorio; devuelve preflight tipado.                | Revisar preflight de `print-pdf-300dpi` y conservar su token.                                   |
+| `document_export_batch`       | `planToken` o specs tipados, modo `all_or_nothing`/`best_effort`.                  | Ejecutar el plan y leer manifest/artefactos publicados.                                         |
+| `document_export`             | Un `ExportSpec` discriminado de PNG/PDF/SVG/plain SVG/PS/EPS/EMF/WMF/DXF/HPGL/FXG. | Exportar DXF, HPGL o FXG por adapter fijo, con acknowledgement explícito de fidelidad limitada. |
+| `export_png`                  | Documento/revisión, área, DPI/píxeles, fondo y output.                             | Generar PNG transparente a DPI físico o dimensiones exactas.                                    |
+| `export_pdf`                  | Documento/revisión, PDF 1.4/1.5, texto/filtros/márgenes permitidos.                | Exportar PDF multipágina completo o subset controlado.                                          |
+| `export_pdf_pages`            | Documento/revisión, IDs de páginas y directorio.                                   | Crear `page-NNN.pdf` por página seleccionada.                                                   |
+| `export_svg`                  | Documento/revisión, SVG Inkscape o plain SVG y policy de recursos.                 | Publicar SVG editable o plain SVG validado.                                                     |
+| `job_get`                     | `jobId` owner-bound.                                                               | Consultar progreso/resultado de batch asíncrono.                                                |
+| `job_cancel`                  | `jobId` owner-bound.                                                               | Pedir cancelación; no publica output incompleto.                                                |
 
 ## Ejemplos de secuencias
 

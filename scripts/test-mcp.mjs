@@ -3949,6 +3949,35 @@ try {
     throw new Error(
       "document_export did not publish the verified versioned HPGL adapter",
     );
+  const fxgExport = await workspaceClient.callTool({
+    arguments: {
+      spec: {
+        area: { kind: "drawing" },
+        fidelityPolicy: "acknowledge-limited-fidelity",
+        format: "fxg",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+        target: { kind: "file", overwrite: false, path: "a4-drawing.fxg" },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export",
+  });
+  const fxgExportText = await readFile(
+    join(workspaceRoot, "a4-drawing.fxg"),
+    "utf8",
+  );
+  if (
+    fxgExport.isError ||
+    fxgExport.structuredContent?.adapter !== "inkscape-fxg/v1" ||
+    fxgExport.structuredContent?.format !== "fxg" ||
+    !fxgExport.structuredContent?.warnings?.includes(
+      "FXG_LIMITED_FIDELITY_ACKNOWLEDGED",
+    ) ||
+    !/<Graphic\b/u.test(fxgExportText)
+  )
+    throw new Error(
+      "document_export did not publish the verified versioned FXG adapter",
+    );
   const reimportedEmf = await workspaceClient.callTool({
     arguments: {
       expectedRevision: createHash("sha256")

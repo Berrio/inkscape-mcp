@@ -1573,6 +1573,246 @@ try {
   );
   await writeFile(join(workspaceRoot, "package-texture.png"), packageTexture);
   await writeFile(
+    join(workspaceRoot, "f06-gate.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30" viewBox="0 0 40 30"/>',
+  );
+  const f06GateInitialRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "f06-gate.svg")))
+    .digest("hex");
+  const f06GateCreated = await workspaceClient.callTool({
+    arguments: {
+      elements: [
+        { id: "gate_layer", kind: "layer", label: "Gate" },
+        {
+          height: 8,
+          id: "gate_rect",
+          kind: "rect",
+          parentId: "gate_layer",
+          style: { fill: "#cc0000" },
+          width: 10,
+          x: 2,
+          y: 3,
+        },
+        {
+          id: "gate_text",
+          kind: "text",
+          parentId: "gate_layer",
+          style: { fill: "#000000", fontSize: 5 },
+          text: "Gate",
+          x: 3,
+          y: 12,
+        },
+        {
+          assetPath: "package-texture.png",
+          embedding: "link",
+          height: 6,
+          id: "gate_image",
+          kind: "image",
+          parentId: "gate_layer",
+          width: 6,
+          x: 20,
+          y: 2,
+        },
+      ],
+      expectedRevision: f06GateInitialRevision,
+      path: "f06-gate.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_create",
+  });
+  const f06GateCreatedRevision = f06GateCreated.structuredContent?.revision;
+  if (
+    f06GateCreated.isError ||
+    f06GateCreated.structuredContent?.ids?.join(",") !==
+      "gate_layer,gate_rect,gate_text,gate_image" ||
+    typeof f06GateCreatedRevision !== "string"
+  )
+    throw new Error("F06 gate composition did not create typed content");
+  const f06GateUpdated = await workspaceClient.callTool({
+    arguments: {
+      elements: [
+        {
+          id: "gate_rect",
+          style: { classes: ["gate"], fill: "#00cc00" },
+        },
+      ],
+      expectedRevision: f06GateCreatedRevision,
+      path: "f06-gate.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_update",
+  });
+  const f06GateUpdatedRevision = f06GateUpdated.structuredContent?.revision;
+  if (f06GateUpdated.isError || typeof f06GateUpdatedRevision !== "string")
+    throw new Error("F06 gate composition did not apply a typed style");
+  const f06GateGrouped = await workspaceClient.callTool({
+    arguments: {
+      action: "group",
+      expectedRevision: f06GateUpdatedRevision,
+      groupId: "gate_group",
+      ids: ["gate_rect", "gate_text"],
+      path: "f06-gate.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_group",
+  });
+  const f06GateGroupedRevision = f06GateGrouped.structuredContent?.revision;
+  if (f06GateGrouped.isError || typeof f06GateGroupedRevision !== "string")
+    throw new Error("F06 gate composition did not group elements");
+  const f06GateTransformed = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: f06GateGroupedRevision,
+      ids: ["gate_group"],
+      path: "f06-gate.svg",
+      transform: { kind: "translate", x: 4, y: 5 },
+      workspaceId: workspace.id,
+    },
+    name: "elements_transform",
+  });
+  const f06GateRevision = f06GateTransformed.structuredContent?.revision;
+  if (f06GateTransformed.isError || typeof f06GateRevision !== "string")
+    throw new Error("F06 gate composition did not transform its group");
+  const f06GateBounds = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: f06GateRevision,
+      ids: ["gate_rect"],
+      includeBounds: true,
+      path: "f06-gate.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_query",
+  });
+  const gateRectBounds = f06GateBounds.structuredContent?.elements?.[0]?.bounds;
+  if (
+    f06GateBounds.isError ||
+    !gateRectBounds ||
+    !isWithin(gateRectBounds.x, 6) ||
+    !isWithin(gateRectBounds.y, 8) ||
+    !isWithin(gateRectBounds.width, 10) ||
+    !isWithin(gateRectBounds.height, 8)
+  )
+    throw new Error(
+      "F06 gate transform did not produce expected visual bounds",
+    );
+  await writeFile(
+    join(workspaceRoot, "f06-gate-reference.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="40" height="30" viewBox="0 0 40 30"><g id="gate_layer" inkscape:groupmode="layer" inkscape:label="Gate"><g id="gate_group" transform="translate(4 5)"><rect id="gate_rect" class="gate" x="2" y="3" width="10" height="8" fill="#00cc00"/><text id="gate_text" x="3" y="12" fill="#000000" font-size="5">Gate</text></g><image id="gate_image" href="package-texture.png" x="20" y="2" width="6" height="6"/></g></svg>',
+  );
+  const f06GateReferenceRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "f06-gate-reference.svg")))
+    .digest("hex");
+  const f06GatePreview = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: f06GateRevision,
+      outputPath: "f06-gate.png",
+      path: "f06-gate.svg",
+      width: 400,
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  const f06GateReferencePreview = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: f06GateReferenceRevision,
+      outputPath: "f06-gate-reference.png",
+      path: "f06-gate-reference.svg",
+      width: 400,
+      workspaceId: workspace.id,
+    },
+    name: "document_render_preview",
+  });
+  if (f06GatePreview.isError || f06GateReferencePreview.isError)
+    throw new Error("F06 gate could not render both visual fixtures");
+  const f06GateVisualDiff = comparePngVisual(
+    decodePngRgba(await readFile(join(workspaceRoot, "f06-gate.png"))),
+    decodePngRgba(
+      await readFile(join(workspaceRoot, "f06-gate-reference.png")),
+    ),
+    1,
+  );
+  if (f06GateVisualDiff.differingPixels !== 0)
+    throw new Error(
+      "F06 gate composition changed visual pixels from reference",
+    );
+  await writeFile(
+    join(workspaceRoot, "f06-layout-gate.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 20"><rect id="layout_a" x="0" y="0" width="10" height="10"/><rect id="layout_b" x="15" y="0" width="10" height="10"/><rect id="layout_c" x="40" y="0" width="10" height="10"/></svg>',
+  );
+  const f06LayoutInitialRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "f06-layout-gate.svg")))
+    .digest("hex");
+  const f06LayoutDistributed = await workspaceClient.callTool({
+    arguments: {
+      axis: "horizontal",
+      expectedRevision: f06LayoutInitialRevision,
+      ids: ["layout_a", "layout_b", "layout_c"],
+      mode: "gaps",
+      path: "f06-layout-gate.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_distribute",
+  });
+  const f06LayoutDistributedRevision =
+    f06LayoutDistributed.structuredContent?.revision;
+  if (
+    f06LayoutDistributed.isError ||
+    f06LayoutDistributed.structuredContent?.moves?.find(
+      (move) => move.id === "layout_b",
+    )?.x !== 5 ||
+    typeof f06LayoutDistributedRevision !== "string"
+  )
+    throw new Error("F06 gate distribution did not calculate the fixture gap");
+  const f06LayoutAligned = await workspaceClient.callTool({
+    arguments: {
+      alignment: "left",
+      anchor: { kind: "coordinate", x: 30, y: 0 },
+      expectedRevision: f06LayoutDistributedRevision,
+      ids: ["layout_b"],
+      path: "f06-layout-gate.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_align",
+  });
+  const f06LayoutAlignedRevision = f06LayoutAligned.structuredContent?.revision;
+  if (
+    f06LayoutAligned.isError ||
+    f06LayoutAligned.structuredContent?.moves?.[0]?.x !== 10 ||
+    typeof f06LayoutAlignedRevision !== "string"
+  )
+    throw new Error("F06 gate alignment did not calculate the fixture target");
+  const f06LayoutBounds = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: f06LayoutAlignedRevision,
+      ids: ["layout_a", "layout_b", "layout_c"],
+      includeBounds: true,
+      path: "f06-layout-gate.svg",
+      workspaceId: workspace.id,
+    },
+    name: "elements_query",
+  });
+  if (
+    f06LayoutBounds.isError ||
+    !isWithin(
+      f06LayoutBounds.structuredContent?.elements?.find(
+        (element) => element.id === "layout_a",
+      )?.bounds?.x ?? Number.NaN,
+      0,
+    ) ||
+    !isWithin(
+      f06LayoutBounds.structuredContent?.elements?.find(
+        (element) => element.id === "layout_b",
+      )?.bounds?.x ?? Number.NaN,
+      30,
+    ) ||
+    !isWithin(
+      f06LayoutBounds.structuredContent?.elements?.find(
+        (element) => element.id === "layout_c",
+      )?.bounds?.x ?? Number.NaN,
+      40,
+    )
+  )
+    throw new Error("F06 gate layout bounds did not match the fixture");
+  await writeFile(
     join(workspaceRoot, "package-source.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><image id="texture" href="package-texture.png" width="1" height="1"/></svg>',
   );
@@ -2406,6 +2646,9 @@ try {
     inspected.structuredContent?.viewBox?.width !== 148 ||
     inspected.structuredContent?.widthUnit !== "mm" ||
     (inspected.structuredContent?.inventory?.elementCount ?? 0) < 2 ||
+    (inspected.structuredContent?.inventory?.duplicateIds?.length ?? 1) !== 0 ||
+    (inspected.structuredContent?.inventory?.unresolvedReferences?.length ??
+      1) !== 0 ||
     inspected.structuredContent?.pages?.[0]?.id !== "page_front" ||
     inspected.structuredContent?.visualBounds?.fidelity !== "partial" ||
     inspected.structuredContent?.visualBounds?.source !==

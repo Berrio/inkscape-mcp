@@ -1804,12 +1804,12 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Puerta F06
 
-- [ ] `F06-G01` Un único workflow crea una composición con layer, formas, texto, imagen, estilos y grupos.
-- [ ] `F06-G02` Transform/align/distribute coincide con bounds esperados en fixtures.
-- [ ] `F06-G03` Una operación inválida en el medio revierte toda la transacción.
-- [ ] `F06-G04` IDs y referencias permanecen válidos tras duplicate/group/reparent/delete.
-- [ ] `F06-G05` Visual regression pasa en Inkscape 1.4.4 dentro de tolerancia.
-- [ ] `F06-G06` Evidencia en `docs/progress/F06.md`.
+- [x] `F06-G01` Un único workflow crea una composición con layer, formas, texto, imagen, estilos y grupos. — Recorrido MCP real construye `f06-gate.svg` con una capa, rectángulo, texto, imagen linked, patch de estilo, grupo y transformación.
+- [x] `F06-G02` Transform/align/distribute coincide con bounds esperados en fixtures. — El fixture de composición confirma el rectángulo transformado en `(6,8)` y el fixture de layout confirma distribución `0,20,40` seguida de alineación a `x=30`, mediante `--query-all` nativo.
+- [x] `F06-G03` Una operación inválida en el medio revierte toda la transacción. — La integración MCP inserta una creación seguida de delete inexistente; la solicitud falla y la siguiente mutación sólo acepta la revisión anterior.
+- [x] `F06-G04` IDs y referencias permanecen válidos tras duplicate/group/reparent/delete. — La integración cubre copy/use, copia profunda con `remappedIds`, group/reparent/delete y después inspecciona cero `duplicateIds` y cero `unresolvedReferences`.
+- [x] `F06-G05` Visual regression pasa en Inkscape 1.4.4 dentro de tolerancia. — Los PNG del workflow MCP y del SVG equivalente de referencia se comparan con tolerancia de un canal y cero píxeles distintos.
+- [x] `F06-G06` Evidencia en `docs/progress/F06.md`.
 
 ---
 
@@ -2678,7 +2678,7 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 - [~] F03 Tamaños/páginas.
 - [~] F04 Inspección/preflight/preview.
 - [~] F05 Exportación MVP.
-- [~] F06 Diseño básico.
+- [x] F06 Diseño básico.
 - [~] F07 Diseño avanzado.
 - [~] F08 Importación/formatos/presets.
 - [~] F09 MCP completo.

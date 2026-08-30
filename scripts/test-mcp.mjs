@@ -323,6 +323,100 @@ try {
     '<svg xmlns="http://www.w3.org/2000/svg"><path id="target" fill="none" stroke="#ff0000" d="M 0 5 H 10"/><path id="cutter" d="M 5 -2 V 12"/></svg>',
   );
   await writeFile(
+    join(workspaceRoot, "path-simplify.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="legacy:gradient"><stop offset="0" stop-color="#ff0000"/><stop offset="1" stop-color="#0000ff"/></linearGradient></defs><path id="target" fill="url(#legacy:gradient)" d="M 0 0 L 1 1 L 2 0 L 3 1 L 4 0 L 5 1 L 6 0"/></svg>',
+  );
+  const simplifyRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "path-simplify.svg")))
+    .digest("hex");
+  const simplified = await workspaceClient.callTool({
+    arguments: {
+      confirmIrreversible: true,
+      expectedRevision: simplifyRevision,
+      id: "target",
+      operation: "simplify",
+      path: "path-simplify.svg",
+      workspaceId: workspace.id,
+    },
+    name: "path_modify",
+  });
+  if (
+    simplified.isError ||
+    simplified.structuredContent?.warning !== "PATH_MODIFIED_IRREVERSIBLY" ||
+    simplified.structuredContent?.renamed?.find(
+      (rename) => rename.reason === "invalid",
+    ) === undefined
+  )
+    throw new Error("path_modify did not simplify and remap staged legacy IDs");
+  const unavailablePathModify = await workspaceClient.callTool({
+    arguments: {
+      confirmIrreversible: true,
+      expectedRevision: simplified.structuredContent.revision,
+      id: "target",
+      operation: "offset",
+      path: "path-simplify.svg",
+      workspaceId: workspace.id,
+    },
+    name: "path_modify",
+  });
+  if (!unavailablePathModify.isError)
+    throw new Error("path_modify advertised unavailable native path actions");
+  await writeFile(
+    join(workspaceRoot, "paths-flatten.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><path id="target" d="M 0 0 H 10 V 10 H 0 Z"/><path id="cutter" d="M 5 0 H 15 V 10 H 5 Z"/></svg>',
+  );
+  const flattenRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "paths-flatten.svg")))
+    .digest("hex");
+  const flattenedPaths = await workspaceClient.callTool({
+    arguments: {
+      confirmIrreversible: true,
+      expectedRevision: flattenRevision,
+      ids: ["target", "cutter"],
+      path: "paths-flatten.svg",
+      workspaceId: workspace.id,
+    },
+    name: "paths_flatten",
+  });
+  if (
+    flattenedPaths.isError ||
+    flattenedPaths.structuredContent?.warning !==
+      "PATHS_FLATTENED_IRREVERSIBLY" ||
+    typeof flattenedPaths.structuredContent?.revision !== "string"
+  )
+    throw new Error("paths_flatten did not run the verified native action");
+  await writeFile(
+    join(workspaceRoot, "directional-order.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg"><path id="cutter" d="M 5 0 H 15 V 10 H 5 Z"/><path id="target" d="M 0 0 H 10 V 10 H 0 Z"/></svg>',
+  );
+  const directionalOrderRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "directional-order.svg")))
+    .digest("hex");
+  const unorderedDifference = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: directionalOrderRevision,
+      ids: ["target", "cutter"],
+      operation: "difference",
+      path: "directional-order.svg",
+      workspaceId: workspace.id,
+    },
+    name: "paths_boolean",
+  });
+  if (!unorderedDifference.isError)
+    throw new Error("paths_boolean accepted an unsafe directional stack order");
+  await assertNativePathOperation(
+    "union",
+    '<svg xmlns="http://www.w3.org/2000/svg"><path id="target" fill-rule="evenodd" d="M 0 0 L 10 10 L 0 10 L 10 0 Z"/><path id="cutter" d="M 4 -1 H 6 V 11 H 4 Z"/></svg>',
+  );
+  await assertNativePathOperation(
+    "intersection",
+    '<svg xmlns="http://www.w3.org/2000/svg"><path id="target" fill-rule="nonzero" d="M 0 0 H 12 V 12 H 0 Z M 3 3 H 9 V 9 H 3 Z"/><path id="cutter" d="M 2 2 H 10 V 10 H 2 Z"/></svg>',
+  );
+  await assertNativePathOperation(
+    "exclusion",
+    '<svg xmlns="http://www.w3.org/2000/svg"><path id="target" transform="translate(2 0)" d="M 0 0 A 5 5 0 0 1 10 0 A 5 5 0 0 1 0 0 Z"/><path id="cutter" d="M 6 -2 H 14 V 8 H 6 Z"/></svg>',
+  );
+  await writeFile(
     join(workspaceRoot, "path-effects.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"><defs><inkscape:path-effect id="round" effect="fillet_chamfer"/><inkscape:path-effect id="bend" effect="bend_path"/></defs><path id="lpe_path" d="M 0 0 L 10 0" inkscape:path-effect="#round;#bend"/></svg>',
   );

@@ -51,6 +51,11 @@ export type NativeInputBundleOptions = {
   allowedRoot?: string | undefined;
   /** Internal seam for deterministic race tests; it is never exposed by MCP. */
   beforeFinalVerification?: (() => Promise<void>) | undefined;
+  /**
+   * Applies a trusted, deterministic rewrite before the staged input hash is
+   * recorded. It is internal-only and cannot be chosen by an MCP client.
+   */
+  transformSvg?: ((stagedSvg: string) => string) | undefined;
   maxDependencyBytes?: number | undefined;
   maximumSanitizeMode?: SanitizeMode | undefined;
 };
@@ -127,13 +132,23 @@ export async function createNativeInputBundle(
   );
   rewriteReferences(root, dependencies);
   const path = join(directory, "input.svg");
-  await writeFile(
-    path,
+  const stagedSvg =
     dependencies.length === 0
       ? source
-      : new XMLSerializer().serializeToString(document),
-    "utf8",
-  );
+      : new XMLSerializer().serializeToString(document);
+  const transformedSvg = options.transformSvg?.(stagedSvg);
+  if (transformedSvg !== undefined) {
+    const transformedSafety = sanitizeSvg(transformedSvg, {
+      maxElements: 100_000,
+      maxInputBytes: 50 * 1024 * 1024,
+      maximumMode: options.maximumSanitizeMode ?? "preserve-local",
+      mode:
+        options.maximumSanitizeMode === "strict" ? "strict" : "preserve-local",
+    });
+    if (transformedSafety.removed.length > 0)
+      throw new Error("Native input transform violates the SVG safety policy");
+    await writeFile(path, transformedSafety.svg, "utf8");
+  } else await writeFile(path, stagedSvg, "utf8");
   const bundleRevision = await sha256File(path);
   const manifest: NativeInputManifest = {
     dependencies: dependencies.map(({ revision, stagedPath, uri }) => ({

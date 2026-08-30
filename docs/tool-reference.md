@@ -83,7 +83,8 @@ exportación: inspección → `document_export_preset_plan` →
 | `objects_to_paths`     | Shapes/paths vectoriales, modo object/stroke y confirmación.                | Convertir un trazo en contorno editable.                 |
 | `paths_combine`        | Paths hermanos compatibles.                                                 | Unir dos formas sin invocar actions libres.              |
 | `paths_boolean`        | Dos paths y operación union/difference/intersection/exclusion/division/cut. | Recortar o dividir una silueta mediante Inkscape nativo. |
-| `path_modify`          | Un path, operación simplify/inset/outset/offset y confirmación.             | Simplificar o crear un offset editable.                  |
+| `path_modify`          | Simplify verificado; inset/outset/offset quedan gateados.                   | Simplificar un path con warning y backup.                |
+| `paths_flatten`        | Dos a 100 paths y confirmación irreversible.                                | Aplanar objetos superpuestos con staging nativo.         |
 | `path_break_apart`     | Path compuesto y nuevos IDs explícitos.                                     | Separar subpaths preservando referencias seguras.        |
 | `path_reverse`         | Path SVG tipado, incluidas curvas, smooth commands y arcos.                 | Invertir dirección sin aproximar geometría.              |
 | `path_node_move`       | Path, índice de segmento y punto finito tipado.                             | Mover un endpoint sin enviar `d` libre.                  |

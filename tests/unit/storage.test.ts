@@ -58,6 +58,28 @@ describe("file revisions and atomic store", () => {
       createNativeInputBundle(source, expectedRevision, staging),
     ).rejects.toBeInstanceOf(RevisionConflictError);
   });
+  it("hashes a trusted staged transform before native processing", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const staging = join(root, "staging");
+    await mkdir(staging);
+    await writeFile(source, '<svg><path id="legacy:target"/></svg>');
+    const bundle = await createNativeInputBundle(
+      source,
+      await sha256File(source),
+      staging,
+      {
+        transformSvg: (svg) => svg.replace("legacy:target", "safe_target"),
+      },
+    );
+    await expect(readFile(bundle.path, "utf8")).resolves.toContain(
+      'id="safe_target"',
+    );
+    await writeFile(bundle.path, "changed");
+    await expect(bundle.assertCurrent()).rejects.toBeInstanceOf(
+      RevisionConflictError,
+    );
+  });
   it("stages every local SVG dependency with rewritten URIs and a reproducible manifest", async () => {
     const root = await temporaryDirectory();
     const source = join(root, "source.svg");

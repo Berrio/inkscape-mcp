@@ -1033,6 +1033,11 @@ const semanticDiffSchema = z.object({
   changedIds: z.array(shapeIdSchema),
   removedIds: z.array(shapeIdSchema),
 });
+const idRenameSchema = z.object({
+  from: z.string().optional(),
+  reason: z.enum(["duplicate", "invalid", "missing"]),
+  to: shapeIdSchema,
+});
 const elementSummarySchema = z.object({
   attributes: z.record(z.string(), z.string()),
   bounds: z
@@ -5414,6 +5419,7 @@ export function buildServer(
           "division",
           "cut",
         ]),
+        renamed: z.array(idRenameSchema),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
       }),
       annotations: { destructiveHint: true },
@@ -5424,6 +5430,12 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const source = await readFile(document.absolutePath, "utf8");
+      assertNativePathTargets(source, ids, {
+        directional:
+          operation === "difference" ||
+          operation === "division" ||
+          operation === "cut",
+      });
       const result = await runNativePathBoolean({
         config,
         document,
@@ -5433,9 +5445,9 @@ export function buildServer(
         runner,
         scratch,
       });
-      const diff = summarizeSvgDiff(source, result);
+      const diff = summarizeSvgDiff(source, result.svg);
       const committed = await fileStore.commit({
-        contents: Buffer.from(result),
+        contents: Buffer.from(result.svg),
         expectedOutputRevision: expectedRevision,
         expectedRevision,
         sourcePath: document.absolutePath,
@@ -5445,6 +5457,7 @@ export function buildServer(
         backupCreated: committed.backupPath !== undefined,
         diff,
         operation,
+        renamed: result.renamed,
         revision: committed.revision,
       };
       return {
@@ -5458,7 +5471,7 @@ export function buildServer(
     "path_modify",
     {
       description:
-        "Irreversibly simplifies a path or creates an inset, outset, or dynamic offset through an allowlisted native Inkscape action in a staged copy.",
+        "Irreversibly simplifies one SVG path through the verified native action in a staged copy. Legacy inset, outset, and offset requests return a recoverable unavailable-capability error on the current baseline.",
       inputSchema: z
         .object({
           confirmIrreversible: z.literal(true),
@@ -5474,6 +5487,7 @@ export function buildServer(
         diff: semanticDiffSchema,
         id: shapeIdSchema,
         operation: z.enum(["simplify", "inset", "outset", "offset"]),
+        renamed: z.array(idRenameSchema),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
         warning: z.literal("PATH_MODIFIED_IRREVERSIBLY"),
       }),
@@ -5485,16 +5499,11 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const source = await readFile(document.absolutePath, "utf8");
-      const targets = querySvgElementTargets(source, {
-        ids: [id],
-        limit: 1,
-        offset: 0,
-      });
-      if (
-        targets.missingIds.length > 0 ||
-        targets.elements[0]?.summary.kind !== "path"
-      )
-        throw new Error("path_modify accepts exactly one SVG path ID");
+      assertNativePathTargets(source, [id]);
+      if (operation !== "simplify")
+        throw new Error(
+          `Native path ${operation} is unavailable in the current Inkscape baseline`,
+        );
       const result = await runNativePathBoolean({
         config,
         document,
@@ -5504,9 +5513,9 @@ export function buildServer(
         runner,
         scratch,
       });
-      const diff = summarizeSvgDiff(source, result);
+      const diff = summarizeSvgDiff(source, result.svg);
       const committed = await fileStore.commit({
-        contents: Buffer.from(result),
+        contents: Buffer.from(result.svg),
         expectedOutputRevision: expectedRevision,
         expectedRevision,
         sourcePath: document.absolutePath,
@@ -5517,8 +5526,79 @@ export function buildServer(
         diff,
         id,
         operation,
+        renamed: result.renamed,
         revision: committed.revision,
         warning: "PATH_MODIFIED_IRREVERSIBLY" as const,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
+  );
+
+  server.registerTool(
+    "paths_flatten",
+    {
+      description:
+        "Irreversibly flattens two to 100 explicitly selected overlapping SVG paths through the verified native Inkscape action in a staged copy.",
+      inputSchema: z
+        .object({
+          confirmIrreversible: z.literal(true),
+          expectedRevision: z.string().regex(/^[a-f0-9]{64}$/u),
+          ids: z
+            .array(shapeIdSchema)
+            .min(2)
+            .max(100)
+            .refine(
+              (ids) => new Set(ids).size === ids.length,
+              "Path flatten IDs must be distinct",
+            ),
+          path: z.string().min(1).max(1024),
+          workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+        })
+        .strict(),
+      outputSchema: z.object({
+        backupCreated: z.boolean(),
+        diff: semanticDiffSchema,
+        ids: z.array(shapeIdSchema),
+        renamed: z.array(idRenameSchema),
+        revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        warning: z.literal("PATHS_FLATTENED_IRREVERSIBLY"),
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ expectedRevision, ids, path, workspaceId }) => {
+      assertDocumentWorkspace(config);
+      const document = await (
+        await workspaces()
+      ).resolveExisting(workspaceId, path);
+      const source = await readFile(document.absolutePath, "utf8");
+      assertNativePathTargets(source, ids);
+      const result = await runNativePathBoolean({
+        config,
+        document,
+        expectedRevision,
+        ids,
+        operation: "flatten",
+        runner,
+        scratch,
+      });
+      const diff = summarizeSvgDiff(source, result.svg);
+      const committed = await fileStore.commit({
+        contents: Buffer.from(result.svg),
+        expectedOutputRevision: expectedRevision,
+        expectedRevision,
+        sourcePath: document.absolutePath,
+        targetPath: document.absolutePath,
+      });
+      const output = {
+        backupCreated: committed.backupPath !== undefined,
+        diff,
+        ids,
+        renamed: result.renamed,
+        revision: committed.revision,
+        warning: "PATHS_FLATTENED_IRREVERSIBLY" as const,
       };
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
@@ -9750,15 +9830,20 @@ async function runNativePathBoolean(request: {
     | "difference"
     | "division"
     | "exclusion"
-    | "inset"
+    | "flatten"
     | "intersection"
-    | "offset"
-    | "outset"
     | "simplify"
     | "union";
   runner: ProcessRunner;
   scratch: ScratchManager;
-}): Promise<string> {
+}): Promise<{
+  renamed: readonly {
+    from?: string | undefined;
+    reason: "duplicate" | "invalid" | "missing";
+    to: string;
+  }[];
+  svg: string;
+}> {
   const discovery = await locateInkscape({
     config: request.config,
     cwd: process.cwd(),
@@ -9774,6 +9859,11 @@ async function runNativePathBoolean(request: {
   if (!("version" in probe))
     throw new Error("Inkscape executable could not be validated");
   return request.scratch.withDirectory("staging", async (directory) => {
+    let renamed: readonly {
+      from?: string | undefined;
+      reason: "duplicate" | "invalid" | "missing";
+      to: string;
+    }[] = [];
     const nativeInput = await createNativeInputBundle(
       request.document.absolutePath,
       request.expectedRevision,
@@ -9782,6 +9872,13 @@ async function runNativePathBoolean(request: {
         allowedRoot: request.document.workspaceRoot,
         maxDependencyBytes: request.config.maxInputBytes,
         maximumSanitizeMode: request.config.maximumSanitizeMode,
+        transformSvg: (stagedSvg) => {
+          const normalized = normalizeSvgIds(stagedSvg, {
+            prefix: "inkscape_mcp_native",
+          });
+          renamed = normalized.renamed;
+          return normalized.svg;
+        },
       },
     );
     const outputPath = join(directory, "result.svg");
@@ -9812,8 +9909,35 @@ async function runNativePathBoolean(request: {
         "Inkscape path boolean result did not meet SVG safety policy",
       );
     await nativeInput.assertCurrent();
-    return sanitized.svg;
+    return { renamed, svg: sanitized.svg };
   });
+}
+
+function assertNativePathTargets(
+  source: string,
+  ids: readonly string[],
+  options: { directional?: boolean | undefined } = {},
+): void {
+  if (new Set(ids).size !== ids.length)
+    throw new Error("Native path operation IDs must be distinct");
+  const targets = querySvgElementTargets(source, {
+    ids,
+    limit: 101,
+    offset: 0,
+  });
+  if (
+    targets.missingIds.length > 0 ||
+    targets.total !== ids.length ||
+    targets.elements.length !== ids.length ||
+    targets.elements.some((target) => target.summary.kind !== "path")
+  )
+    throw new Error(
+      "Native path operation requires exactly the requested path IDs",
+    );
+  if (options.directional === true && targets.elements[0]?.nativeId !== ids[0])
+    throw new Error(
+      "Directional path operation requires ids[0] to be below ids[1] in document order",
+    );
 }
 
 async function queryNativeBounds(request: {

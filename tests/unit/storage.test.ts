@@ -241,6 +241,53 @@ describe("file revisions and atomic store", () => {
     expect(await readFile(target, "utf8")).toBe("next");
     expect(result.backupPath).toBeDefined();
   });
+  it("allows only one concurrent commit for the same source and output revisions", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const target = join(root, "target.svg");
+    await writeFile(source, "source");
+    await writeFile(target, "original");
+    const expectedRevision = await sha256File(source);
+    const expectedOutputRevision = await sha256File(target);
+    const store = new AtomicFileStore();
+
+    const outcomes = await Promise.allSettled([
+      store.commit({
+        contents: Buffer.from("first"),
+        expectedOutputRevision,
+        expectedRevision,
+        sourcePath: source,
+        targetPath: target,
+      }),
+      store.commit({
+        contents: Buffer.from("second"),
+        expectedOutputRevision,
+        expectedRevision,
+        sourcePath: source,
+        targetPath: target,
+      }),
+    ]);
+    const fulfilled = outcomes.filter(
+      (
+        outcome,
+      ): outcome is PromiseFulfilledResult<{
+        backupPath?: string;
+        revision: string;
+      }> => outcome.status === "fulfilled",
+    );
+    const rejected = outcomes.filter(
+      (outcome): outcome is PromiseRejectedResult =>
+        outcome.status === "rejected",
+    );
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]!.reason).toBeInstanceOf(RevisionConflictError);
+    expect(await readFile(target, "utf8")).toMatch(/^(first|second)$/u);
+    await expect(
+      readFile(fulfilled[0]!.value.backupPath!, "utf8"),
+    ).resolves.toBe("original");
+  });
   it("keeps the destination intact when temporary storage reports no space", async () => {
     const root = await temporaryDirectory();
     const source = join(root, "source.svg");
@@ -358,6 +405,49 @@ describe("file revisions and atomic store", () => {
     await expect(readFile(first)).rejects.toBeDefined();
     await expect(readFile(second)).rejects.toBeDefined();
     await expect(readFile(marker)).rejects.toBeDefined();
+  });
+  it("restores existing batch outputs when a later rename fails", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const first = join(root, "first.png");
+    const second = join(root, "second.png");
+    await writeFile(source, "source");
+    await writeFile(first, "first-original");
+    await writeFile(second, "second-original");
+    let moves = 0;
+    const store = new AtomicFileStore(
+      new CanonicalPathLocks(),
+      async (temporaryPath, contents) => writeFile(temporaryPath, contents),
+      {},
+      async (temporaryPath, targetPath) => {
+        moves += 1;
+        if (moves === 2) throw new Error("second output rename failed");
+        await rename(temporaryPath, targetPath);
+      },
+    );
+    await expect(
+      store.commitBatch({
+        expectedRevision: await sha256File(source),
+        files: [
+          {
+            contents: Buffer.from("first-replacement"),
+            expectedOutputRevision: await sha256File(first),
+            targetPath: first,
+          },
+          {
+            contents: Buffer.from("second-replacement"),
+            expectedOutputRevision: await sha256File(second),
+            targetPath: second,
+          },
+        ],
+        sourcePath: source,
+      }),
+    ).rejects.toThrow("second output rename failed");
+    await expect(readFile(first, "utf8")).resolves.toBe("first-original");
+    await expect(readFile(second, "utf8")).resolves.toBe("second-original");
+    expect(
+      (await readdir(root)).filter((name) => name.includes("inkscape-mcp")),
+    ).toEqual([]);
   });
   it("rejects a batch before publication when an existing sidecar lacks its revision", async () => {
     const root = await temporaryDirectory();

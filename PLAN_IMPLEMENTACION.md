@@ -1669,7 +1669,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F04-G01` Inspección de corpus cubre todos los inventarios con paginación estable. — El smoke stdio `test:f04-g01` cubre inventario deep de defs, imágenes, capas, fuentes, namespaces, referencias y tipos, comprueba que no filtra texto ni URIs, y verifica tres páginas `rect` estables con `nextOffset` acotado.
 - [x] `F04-G02` Preflight detecta fixtures deliberadamente defectuosos sin falsos éxitos críticos. — El smoke stdio `test:f04-g02` cubre SVG negativo web, impresión, intercambio y XML inválido; fija códigos, severidades, detalle tipado de bleed/DPI, ausencia de filtraciones y que los defectos críticos dejan `valid=false`.
 - [x] `F04-G03` Preview coincide en tamaño/área/transparencia y respeta límites. — El smoke stdio `test:f04-g03` decodifica previews de página, drawing y selección, fija sus dimensiones/colores/alfa, verifica cache hit reproducible y comprueba el rechazo de una dimensión mayor a 2048 px.
-- [ ] `F04-G04` Ninguna lectura modifica mtime/contenido del diseño.
+- [x] `F04-G04` Ninguna lectura modifica mtime/contenido del diseño. — El smoke stdio `test:f04-g04` fija y compara hash/mtime de un SVG antes y después de `document_inspect` deep con bounds nativos, `document_preflight` y `document_render_preview`; los tres preservan el original mientras preview publica sólo su derivado.
 - [ ] `F04-G05` Evidencia en `docs/progress/F04.md`.
 
 ---

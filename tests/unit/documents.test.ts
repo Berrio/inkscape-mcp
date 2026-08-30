@@ -288,6 +288,28 @@ describe("basic SVG documents", () => {
     expect(fitted.svg).toContain('id="keep" x="10" y="5" width="30"');
     expect(fitted.warnings).toContain("FIT_USED_VISUAL_BOUNDS");
   });
+  it("fits negative visual bounds with the normative four-sided margin", () => {
+    const source =
+      '<svg width="200mm" height="100mm" viewBox="0 0 200 100"><rect id="keep" x="-10" y="20" width="100" height="50"/></svg>';
+    const fitted = fitPageToBoundsSvg(
+      source,
+      { width: mm(200), height: mm(100) },
+      { x: -10, y: 20, width: 100, height: 50 },
+      { bottom: mm(3), left: mm(3), right: mm(3), top: mm(3) },
+      "mm",
+    );
+    expect(fitted.page.width.unit).toBe("mm");
+    expect(fitted.page.width.value).toBeCloseTo(106, 12);
+    expect(fitted.page.height.unit).toBe("mm");
+    expect(fitted.page.height.value).toBeCloseTo(56, 12);
+    expect(inspectSvgSettings(fitted.svg).viewBox).toEqual({
+      x: -13,
+      y: 17,
+      width: 106,
+      height: 56,
+    });
+    expect(fitted.warnings).toEqual(["FIT_USED_VISUAL_BOUNDS"]);
+  });
   it("crops, expands and swaps orientation without transforming objects", () => {
     const source =
       '<svg width="100px" height="100px" viewBox="0 0 100 100"><rect id="keep" x="10" y="10" width="20" height="20"/></svg>';
@@ -383,20 +405,35 @@ describe("basic SVG documents", () => {
     expect(result.svg).toContain(
       '<g transform="matrix(1.35 0 0 1.35 0 135)"><rect id="shape"',
     );
-    expect(
-      resizeContentSvg(
-        source,
-        {
-          width: { unit: "px", value: 800 },
-          height: { unit: "px", value: 600 },
-        },
-        {
-          width: { unit: "px", value: 1080 },
-          height: { unit: "px", value: 1080 },
-        },
-        "scale_content_cover",
-      ).warnings,
-    ).toContain("CONTENT_MAY_BE_CROPPED");
+    const covered = resizeContentSvg(
+      source,
+      {
+        width: { unit: "px", value: 800 },
+        height: { unit: "px", value: 600 },
+      },
+      {
+        width: { unit: "px", value: 1080 },
+        height: { unit: "px", value: 1080 },
+      },
+      "scale_content_cover",
+      "bottom_right",
+    );
+    expect(covered.svg).toContain("matrix(1.8 0 0 1.8 -360 0)");
+    expect(covered.warnings).toContain("CONTENT_MAY_BE_CROPPED");
+    const containedAtBottomRight = resizeContentSvg(
+      source,
+      {
+        width: { unit: "px", value: 800 },
+        height: { unit: "px", value: 600 },
+      },
+      {
+        width: { unit: "px", value: 1080 },
+        height: { unit: "px", value: 1080 },
+      },
+      "scale_content_contain",
+      "bottom_right",
+    );
+    expect(containedAtBottomRight.svg).toContain("matrix(1.35 0 0 1.35 0 270)");
     const stretched = resizeContentSvg(
       source,
       {

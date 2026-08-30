@@ -29,6 +29,7 @@ const server = {
 const isWithin = (actual, expected, tolerance = 0.6) =>
   Math.abs(actual - expected) <= tolerance;
 const A4_ROUND_TRIP_TOLERANCE_MM = 0.01;
+const GEOMETRY_TOLERANCE = 0.01;
 const toMillimeters = (viewportLength) => {
   const match = /^(\d+(?:\.\d+)?)(mm|cm|in|pt|pc|q|px)$/u.exec(viewportLength);
   if (!match) throw new Error(`Unsupported viewport length: ${viewportLength}`);
@@ -2618,9 +2619,77 @@ try {
     fitted.isError ||
     fitted.structuredContent?.boundsFidelity !== "partial" ||
     !fitted.structuredContent?.warnings?.includes("FIT_USED_VISUAL_BOUNDS") ||
+    !isWithin(
+      fitted.structuredContent?.bounds?.x ?? Number.NaN,
+      10,
+      GEOMETRY_TOLERANCE,
+    ) ||
+    !isWithin(
+      fitted.structuredContent?.bounds?.y ?? Number.NaN,
+      5,
+      GEOMETRY_TOLERANCE,
+    ) ||
+    !isWithin(
+      fitted.structuredContent?.bounds?.width ?? Number.NaN,
+      30,
+      GEOMETRY_TOLERANCE,
+    ) ||
+    !isWithin(
+      fitted.structuredContent?.bounds?.height ?? Number.NaN,
+      20,
+      GEOMETRY_TOLERANCE,
+    ) ||
+    fitted.structuredContent?.page?.width?.unit !== "mm" ||
+    !isWithin(
+      fitted.structuredContent?.page?.width?.value ?? Number.NaN,
+      40,
+      GEOMETRY_TOLERANCE,
+    ) ||
+    fitted.structuredContent?.page?.height?.unit !== "mm" ||
+    !isWithin(
+      fitted.structuredContent?.page?.height?.value ?? Number.NaN,
+      25,
+      GEOMETRY_TOLERANCE,
+    ) ||
     typeof fittedRevision !== "string"
   ) {
     throw new Error("document_fit_page did not fit selected visual bounds");
+  }
+  const fittedInspection = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: fittedRevision,
+      level: "summary",
+      path: "fit.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_inspect",
+  });
+  if (
+    fittedInspection.isError ||
+    !isWithin(
+      fittedInspection.structuredContent?.viewBox?.x ?? Number.NaN,
+      5,
+      GEOMETRY_TOLERANCE,
+    ) ||
+    !isWithin(
+      fittedInspection.structuredContent?.viewBox?.y ?? Number.NaN,
+      3,
+      GEOMETRY_TOLERANCE,
+    ) ||
+    !isWithin(
+      fittedInspection.structuredContent?.viewBox?.width ?? Number.NaN,
+      40,
+      GEOMETRY_TOLERANCE,
+    ) ||
+    !isWithin(
+      fittedInspection.structuredContent?.viewBox?.height ?? Number.NaN,
+      25,
+      GEOMETRY_TOLERANCE,
+    )
+  ) {
+    throw new Error(
+      "document_fit_page did not publish the expected page bounds",
+    );
   }
   const cropped = await workspaceClient.callTool({
     arguments: {
@@ -2715,6 +2784,69 @@ try {
     throw new Error(
       `A4 SVG round-trip did not preserve 210 × 297 mm within ${A4_ROUND_TRIP_TOLERANCE_MM} mm`,
     );
+  }
+  const contentResizeSource =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="800px" height="600px" viewBox="0 0 800 600"><rect id="shape" width="800" height="600"/></svg>';
+  await writeFile(
+    join(workspaceRoot, "anchored-contain.svg"),
+    contentResizeSource,
+  );
+  const anchoredContainRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "anchored-contain.svg")))
+    .digest("hex");
+  const anchoredContain = await workspaceClient.callTool({
+    arguments: {
+      anchor: "bottom_right",
+      expectedRevision: anchoredContainRevision,
+      height: 1080,
+      mode: "scale_content_contain",
+      path: "anchored-contain.svg",
+      unit: "px",
+      width: 1080,
+      workspaceId: workspace.id,
+    },
+    name: "document_resize",
+  });
+  if (
+    anchoredContain.isError ||
+    !(
+      await readFile(join(workspaceRoot, "anchored-contain.svg"), "utf8")
+    ).includes("matrix(1.35 0 0 1.35 0 270)")
+  ) {
+    throw new Error(
+      "document_resize contain did not honor bottom_right anchor",
+    );
+  }
+  await writeFile(
+    join(workspaceRoot, "anchored-cover.svg"),
+    contentResizeSource,
+  );
+  const anchoredCoverRevision = createHash("sha256")
+    .update(await readFile(join(workspaceRoot, "anchored-cover.svg")))
+    .digest("hex");
+  const anchoredCover = await workspaceClient.callTool({
+    arguments: {
+      anchor: "bottom_right",
+      expectedRevision: anchoredCoverRevision,
+      height: 1080,
+      mode: "scale_content_cover",
+      path: "anchored-cover.svg",
+      unit: "px",
+      width: 1080,
+      workspaceId: workspace.id,
+    },
+    name: "document_resize",
+  });
+  if (
+    anchoredCover.isError ||
+    !anchoredCover.structuredContent?.warnings?.includes(
+      "CONTENT_MAY_BE_CROPPED",
+    ) ||
+    !(
+      await readFile(join(workspaceRoot, "anchored-cover.svg"), "utf8")
+    ).includes("matrix(1.8 0 0 1.8 -360 0)")
+  ) {
+    throw new Error("document_resize cover did not honor bottom_right anchor");
   }
   const pageOnlyFixture =
     '<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297"><g id="nested" transform="translate(-8 5) scale(1.25)"><rect id="keep" x="10" y="20" width="30" height="40" rx="3" transform="rotate(15 25 40)"/><path id="curve" d="M 0 0 C 12 8 18 -4 30 10" transform="matrix(1 0.2 -0.1 1 4 -2)"/></g></svg>';

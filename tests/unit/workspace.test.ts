@@ -1,4 +1,11 @@
-import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -34,12 +41,45 @@ describe("workspace boundary", () => {
       "",
       "../x.svg",
       "C:\\x.svg",
+      "C:drive-relative.svg",
       "\\\\server\\share\\x.svg",
+      "//server/share/x.svg",
       "dir/file:stream.svg",
       "a/./b.svg",
+      "a//b.svg",
       "a\0b.svg",
     ])
       expect(() => assertSafeRelativePath(value)).toThrow(WorkspacePathError);
+  });
+  it("rejects traversal, UNC, ADS, and drive syntax without creating output", async () => {
+    const root = await temporaryDirectory();
+    const sentinel = join(root, "sentinel.txt");
+    await writeFile(sentinel, "keep", "utf8");
+    const service = await WorkspaceService.create([root]);
+    const workspace = service.list()[0]!;
+    const before = await readdir(root);
+
+    for (const path of [
+      "../escape.png",
+      "nested/../../escape.png",
+      "C:drive-relative.png",
+      "C:\\absolute.png",
+      "\\\\server\\share\\escape.png",
+      "//server/share/escape.png",
+      "output.png:alternate-stream",
+      "nested/./output.png",
+      "nested//output.png",
+    ]) {
+      await expect(
+        service.resolveNewOutput(workspace.id, path),
+      ).rejects.toMatchObject({ code: "PATH_INVALID" });
+      await expect(
+        service.ensureOutputDirectory(workspace.id, path),
+      ).rejects.toMatchObject({ code: "PATH_INVALID" });
+    }
+
+    expect(await readdir(root)).toEqual(before);
+    await expect(readFile(sentinel, "utf8")).resolves.toBe("keep");
   });
   it("resolves existing input and new output only inside a canonical root", async () => {
     const root = await temporaryDirectory();
@@ -78,6 +118,15 @@ describe("workspace boundary", () => {
         "linked-directory/secret.svg",
       ),
     ).rejects.toMatchObject({ code: "PATH_OUTSIDE_WORKSPACE" });
+    await expect(
+      service.resolveNewOutput(
+        service.list()[0]!.id,
+        "linked-directory/must-not-publish.png",
+      ),
+    ).rejects.toMatchObject({ code: "PATH_OUTSIDE_WORKSPACE" });
+    await expect(
+      readFile(join(outside, "must-not-publish.png")),
+    ).rejects.toBeDefined();
   });
   it("sniffs SVG and paginates only allowed document names", async () => {
     const root = await temporaryDirectory();

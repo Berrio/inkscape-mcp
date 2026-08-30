@@ -1570,7 +1570,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Puerta F02
 
-- [ ] `F02-G01` Toda prueba de traversal/symlink/UNC/ADS queda rechazada sin tocar destino.
+- [x] `F02-G01` Toda prueba de traversal/symlink/UNC/ADS queda rechazada sin tocar destino. — Los resolvedores de output rechazan traversal, drive-relative/absoluto, UNC, ADS, segmentos vacíos y `.` antes de IO; los tests verifican que el root no cambia y que un junction externo no recibe salida, además de la carrera de staging ya cubierta.
 - [ ] `F02-G02` Corpus SVG benigno cumple assertions/tolerancias por fixture del manifest; toda diferencia aceptada queda versionada con heatmap/razón.
 - [ ] `F02-G03` Corpus XML malicioso falla de forma acotada.
 - [ ] `F02-G04` Concurrencia/revisión/backup/commit atómico están probados.

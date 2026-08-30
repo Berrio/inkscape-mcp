@@ -1,5 +1,5 @@
 import type { ExportBatchMode } from "./batch.js";
-import type { ExportSpec } from "./spec.js";
+import type { ExportPreset, ExportSpec } from "./spec.js";
 
 export type ExportBatchManifest = {
   commitMarker?: string;
@@ -7,6 +7,7 @@ export type ExportBatchManifest = {
   failures: readonly { index: number; message: string }[];
   inkscapeVersion?: string;
   mode: ExportBatchMode;
+  presetMetadata?: ExportPreset["metadata"];
   publication: "file_commit_batch" | "file_commit_each" | "manifest_commit";
   source: ExportSpec["source"];
   variants: readonly {
@@ -38,6 +39,9 @@ export function createExportBatchManifest(
       ? {}
       : { inkscapeVersion: request.inkscapeVersion }),
     mode: request.mode,
+    ...(request.presetMetadata === undefined
+      ? {}
+      : { presetMetadata: { ...request.presetMetadata } }),
     publication: request.publication,
     source: { ...request.source },
     variants: request.variants.map((variant) => ({ ...variant })),

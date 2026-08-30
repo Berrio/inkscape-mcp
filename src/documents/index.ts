@@ -200,6 +200,7 @@ export {
 export {
   PAGE_SIZE_PRESETS,
   pageSizeFromPreset,
+  pagePresetReferenceSchema,
   type PageSizePreset,
 } from "./presets.js";
 export {

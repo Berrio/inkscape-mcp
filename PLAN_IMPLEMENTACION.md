@@ -1915,12 +1915,12 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Presets y workflows
 
-- [ ] `F08-T18` Schemas versionados para page/export/workflow presets.
-- [ ] `F08-T19` Resolver herencia sin ciclos y overrides estrictos.
+- [x] `F08-T18` Schemas versionados para page/export/workflow presets. — Export presets usan `inkscape-mcp-export-preset/v1`, las recetas conservan `inkscape-mcp-recipe/v1` y las definiciones reutilizables usan `inkscape-mcp-export-preset-definition/v1`; todos son objetos strict y acotados.
+- [x] `F08-T19` Resolver herencia sin ciclos y overrides estrictos. — El resolver de definiciones rechaza IDs duplicados, padre ausente y ciclos; sólo mezcla `text`, `widthPx` y `heightPx` tipados. Los presets publicados restringen texto a impresión y tamaño exacto a social.
 - [x] `F08-T20` Preset icon pack multi-size. — `icon-pack` expande PNG de 16, 24, 32, 48, 64, 128, 256 y 512 px con nombres deterministas; pruebas unitarias y smoke MCP real verifican las ocho variantes en un lote `all_or_nothing`.
 - [x] `F08-T21` Preset web asset (SVG plano + PNG 1x/2x/3x). — `web-asset-pack` expande a SVG plano y PNG transparentes de 1200, 2400 y 3600 px mediante el mismo lote verificado que las exportaciones explícitas.
-- [~] `F08-T22` Preset print PDF con filtro 300 dpi, texto configurable y preflight. — `print-pdf-300dpi` fija PDF con `filterRasterDpi: 300` y texto preservado; `document_export_preset_plan` ejecuta preflight `print`, devuelve sus warnings y bloquea errores antes de emitir token. Falta texto configurable.
-- [ ] `F08-T23` Presets sociales con metadata de fecha/fuente y custom override.
+- [x] `F08-T22` Preset print PDF con filtro 300 dpi, texto configurable y preflight. — `print-pdf-300dpi` fija PDF con `filterRasterDpi: 300`; el override tipado `text: preserve|paths` elige el tratamiento de texto y `document_export_preset_plan` ejecuta preflight `print`, devuelve sus warnings y bloquea errores antes de emitir token.
+- [x] `F08-T23` Presets sociales con metadata de fecha/fuente y custom override. — `social-square`, `social-landscape` y `social-story` producen PNG transparentes deterministas; requieren fecha ISO y etiqueta de fuente, permiten sólo pares acotados width/height y conservan la metadata en plan y manifest.
 - [x] `F08-T24` Implementar protocolo de dos pasos para presets: `document_export_preset_plan` hace preflight, devuelve `planToken`/digest ligado a sourceRevision, spec normalizado, capabilities observadas y TTL; `document_export_batch` exige y consume el token una sola vez, y vuelve a comprobar revisión fuente y huella de capabilities antes de renderizar.
 
 #### Packaging de assets

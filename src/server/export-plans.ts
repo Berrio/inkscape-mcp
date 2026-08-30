@@ -1,4 +1,4 @@
-import type { ExportSpec } from "../export/index.js";
+import type { ExportPreset, ExportSpec } from "../export/index.js";
 
 export type ExportPresetPlan = {
   capabilitiesFingerprint: string;
@@ -6,6 +6,7 @@ export type ExportPresetPlan = {
   expiresAt: number;
   outputDirectory: string;
   outputPaths: readonly string[];
+  presetMetadata?: ExportPreset["metadata"];
   specs: readonly ExportSpec[];
   token: string;
 };
@@ -22,6 +23,7 @@ export class ExportPlanStore {
       capabilitiesFingerprint: string;
       digest: string;
       outputDirectory: string;
+      presetMetadata?: ExportPreset["metadata"];
       specs: readonly ExportSpec[];
       ttlMs: number;
     },
@@ -41,6 +43,9 @@ export class ExportPlanStore {
         return spec.target.path;
       }),
       owner,
+      ...(request.presetMetadata === undefined
+        ? {}
+        : { presetMetadata: { ...request.presetMetadata } }),
       specs: request.specs,
       token,
     };
@@ -71,6 +76,9 @@ function publicPlan(plan: PlanRecord): ExportPresetPlan {
     expiresAt: plan.expiresAt,
     outputDirectory: plan.outputDirectory,
     outputPaths: [...plan.outputPaths],
+    ...(plan.presetMetadata === undefined
+      ? {}
+      : { presetMetadata: { ...plan.presetMetadata } }),
     specs: plan.specs,
     token: plan.token,
   };

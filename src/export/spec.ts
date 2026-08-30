@@ -120,8 +120,23 @@ const multiOutputTargetSchema = z
 const sourceSchema = z
   .object({ expectedRevision: revisionSchema, path: relativePathSchema })
   .strict();
+export const exportPresetOverrideSchema = z
+  .object({
+    heightPx: z.number().int().positive().max(100_000).optional(),
+    text: z.enum(["preserve", "paths"]).optional(),
+    widthPx: z.number().int().positive().max(100_000).optional(),
+  })
+  .strict();
+
 export const exportPresetSchema = z
   .object({
+    metadata: z
+      .object({
+        createdAt: z.string().datetime({ offset: true }),
+        sourceLabel: z.string().min(1).max(256),
+      })
+      .strict()
+      .optional(),
     name: z.enum([
       "print-a4-pdf",
       "print-pdf-300dpi",
@@ -129,11 +144,49 @@ export const exportPresetSchema = z
       "web-asset-pack",
       "plain-svg",
       "icon-pack",
+      "social-square",
+      "social-landscape",
+      "social-story",
     ]),
+    overrides: exportPresetOverrideSchema.default({}),
     outputDirectory: relativePathSchema,
+    schema: z
+      .literal("inkscape-mcp-export-preset/v1")
+      .default("inkscape-mcp-export-preset/v1"),
     source: sourceSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    const isPrint =
+      value.name === "print-a4-pdf" || value.name === "print-pdf-300dpi";
+    const isSocial = value.name.startsWith("social-");
+    if (value.overrides.text !== undefined && !isPrint)
+      context.addIssue({
+        code: "custom",
+        message: "text override is only supported by print presets",
+        path: ["overrides", "text"],
+      });
+    const hasCustomWidth = value.overrides.widthPx !== undefined;
+    const hasCustomHeight = value.overrides.heightPx !== undefined;
+    if ((hasCustomWidth || hasCustomHeight) && !isSocial)
+      context.addIssue({
+        code: "custom",
+        message: "pixel size overrides are only supported by social presets",
+        path: ["overrides"],
+      });
+    if (isSocial && hasCustomWidth !== hasCustomHeight)
+      context.addIssue({
+        code: "custom",
+        message: "social pixel overrides require both widthPx and heightPx",
+        path: ["overrides"],
+      });
+    if (isSocial && value.metadata === undefined)
+      context.addIssue({
+        code: "custom",
+        message: "social presets require source metadata and creation date",
+        path: ["metadata"],
+      });
+  });
 const commonExportSchema = z.object({
   source: sourceSchema,
   target: z.union([outputTargetSchema, multiOutputTargetSchema]),

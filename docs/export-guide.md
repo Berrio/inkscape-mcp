@@ -118,6 +118,15 @@ Los presets actuales son deterministas:
 | `plain-svg`        | `plain.svg`                                         | SVG plano, texto preservado y recursos locales preservados.               |
 | `icon-pack`        | PNG de 16 a 512 px                                  | PNG cuadrados; se permite deformación para garantizar cada tamaño exacto. |
 
+Los presets de exportación usan `inkscape-mcp-export-preset/v1`. Sólo sus
+overrides tipados se aceptan: los presets de impresión permiten `text:
+"preserve"|"paths"`; los sociales permiten una pareja completa `widthPx` /
+`heightPx` y requieren `metadata.createdAt` (ISO con zona) y
+`metadata.sourceLabel`. Esa metadata aparece en el plan y en el manifest del
+lote, no se inserta en el SVG fuente. Las definiciones locales reutilizables
+usan `inkscape-mcp-export-preset-definition/v1`; su herencia es determinista y
+rechaza padres desconocidos y ciclos.
+
 Antes de ejecutar una exportación autónoma, usa `--dry-run`. La salida JSON
 muestra digest, vencimiento y archivos planeados sin crear outputs. En una
 receta, añade primero una operación `preflight`; la ejecución valida todas

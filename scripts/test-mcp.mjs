@@ -4200,6 +4200,50 @@ try {
   ) {
     throw new Error("document_export_batch did not expand the web PNG preset");
   }
+  const socialPresetPlan = await workspaceClient.callTool({
+    arguments: {
+      preset: {
+        metadata: {
+          createdAt: "2026-08-29T00:00:00Z",
+          sourceLabel: "MCP smoke fixture",
+        },
+        name: "social-square",
+        outputDirectory: "preset-social",
+        overrides: { heightPx: 1024, widthPx: 1024 },
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export_preset_plan",
+  });
+  const socialPlanToken = socialPresetPlan.structuredContent?.planToken;
+  if (
+    socialPresetPlan.isError ||
+    typeof socialPlanToken !== "string" ||
+    socialPresetPlan.structuredContent?.presetMetadata?.sourceLabel !==
+      "MCP smoke fixture"
+  )
+    throw new Error(
+      "document_export_preset_plan did not retain social metadata",
+    );
+  const socialPresetBatch = await workspaceClient.callTool({
+    arguments: {
+      mode: "all_or_nothing",
+      planToken: socialPlanToken,
+      workspaceId: workspace.id,
+    },
+    name: "document_export_batch",
+  });
+  if (
+    socialPresetBatch.isError ||
+    socialPresetBatch.structuredContent?.successes?.[0]?.outputPath !==
+      "preset-social/social-square.png" ||
+    socialPresetBatch.structuredContent?.manifest?.presetMetadata
+      ?.sourceLabel !== "MCP smoke fixture"
+  )
+    throw new Error(
+      "social preset did not publish its metadata-bearing manifest",
+    );
   const printPresetPlan = await workspaceClient.callTool({
     arguments: {
       preset: {

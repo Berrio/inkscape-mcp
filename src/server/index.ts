@@ -7807,6 +7807,13 @@ export function buildServer(
         outputDirectory: z.string().min(1).max(1024),
         outputPaths: z.array(z.string().min(1).max(1024)).min(1).max(50),
         planToken: z.string().regex(/^plan_[a-f0-9]{32}$/u),
+        presetMetadata: z
+          .object({
+            createdAt: z.string().datetime({ offset: true }),
+            sourceLabel: z.string().min(1).max(256),
+          })
+          .strict()
+          .optional(),
         preflight: z.object({
           issues: z.array(
             z.object({
@@ -7904,6 +7911,9 @@ export function buildServer(
         capabilitiesFingerprint: observed.fingerprint,
         digest,
         outputDirectory: preset.outputDirectory,
+        ...(preset.metadata === undefined
+          ? {}
+          : { presetMetadata: preset.metadata }),
         specs,
         ttlMs,
       });
@@ -7913,6 +7923,9 @@ export function buildServer(
         outputDirectory: plan.outputDirectory,
         outputPaths: plan.outputPaths,
         planToken: plan.token,
+        ...(plan.presetMetadata === undefined
+          ? {}
+          : { presetMetadata: plan.presetMetadata }),
         preflight,
         variantCount: plan.specs.length,
       };
@@ -7971,6 +7984,13 @@ export function buildServer(
             ),
             inkscapeVersion: z.string().optional(),
             mode: z.enum(["all_or_nothing", "best_effort"]),
+            presetMetadata: z
+              .object({
+                createdAt: z.string().datetime({ offset: true }),
+                sourceLabel: z.string().min(1).max(256),
+              })
+              .strict()
+              .optional(),
             publication: z.enum([
               "file_commit_batch",
               "file_commit_each",
@@ -8035,6 +8055,7 @@ export function buildServer(
         const variants = planExportBatch(expandedSpecs);
         const outputDirectory =
           savedPlan?.outputDirectory ?? preset?.outputDirectory;
+        const presetMetadata = savedPlan?.presetMetadata ?? preset?.metadata;
         if (outputDirectory !== undefined)
           await (
             await workspaces()
@@ -8150,6 +8171,7 @@ export function buildServer(
               ? {}
               : { inkscapeVersion: staged.successes[0].value.inkscapeVersion }),
             mode,
+            ...(presetMetadata === undefined ? {} : { presetMetadata }),
             publication: "manifest_commit",
             source,
             variants: anticipatedSuccesses,
@@ -8211,6 +8233,7 @@ export function buildServer(
               ? {}
               : { inkscapeVersion: staged.successes[0].value.inkscapeVersion }),
             mode,
+            ...(presetMetadata === undefined ? {} : { presetMetadata }),
             publication: "file_commit_each",
             source,
             variants: successes.map((success) => ({

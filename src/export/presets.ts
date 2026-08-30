@@ -17,6 +17,7 @@ export function expandExportPreset(
     path: `${directory}/${name}`,
   });
   const source = preset.source;
+  const text = preset.overrides.text ?? "preserve";
 
   switch (preset.name) {
     case "print-a4-pdf":
@@ -27,7 +28,7 @@ export function expandExportPreset(
           format: "pdf",
           source,
           target: target("print-a4.pdf"),
-          text: "preserve",
+          text,
         },
       ];
     case "print-pdf-300dpi":
@@ -39,7 +40,7 @@ export function expandExportPreset(
           format: "pdf",
           source,
           target: target("print-300dpi.pdf"),
-          text: "preserve",
+          text,
         },
       ];
     case "web-png":
@@ -97,5 +98,29 @@ export function expandExportPreset(
         source,
         target: target(`icon-${size}.png`),
       }));
+    case "social-square":
+    case "social-landscape":
+    case "social-story": {
+      const defaultSize =
+        preset.name === "social-square"
+          ? { heightPx: 1080, widthPx: 1080 }
+          : preset.name === "social-landscape"
+            ? { heightPx: 630, widthPx: 1200 }
+            : { heightPx: 1920, widthPx: 1080 };
+      const size = {
+        heightPx: preset.overrides.heightPx ?? defaultSize.heightPx,
+        widthPx: preset.overrides.widthPx ?? defaultSize.widthPx,
+      };
+      return [
+        {
+          area: { kind: "drawing" },
+          background: { mode: "transparent" },
+          format: "png",
+          size: { allowDistortion: true, mode: "exact", ...size },
+          source,
+          target: target(`${preset.name}.png`),
+        },
+      ];
+    }
   }
 }

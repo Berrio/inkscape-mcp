@@ -36,6 +36,7 @@ export { createExportManifest, type ExportManifest } from "./manifest.js";
 export { runExportPipeline, type ExportPipeline } from "./pipeline.js";
 export {
   exportPresetSchema,
+  exportPresetOverrideSchema,
   exportSpecSchema,
   parseExportSpec,
   type ExportArea,
@@ -46,6 +47,11 @@ export {
   type OutputTarget,
 } from "./spec.js";
 export { expandExportPreset } from "./presets.js";
+export {
+  exportPresetDefinitionSchema,
+  resolveExportPresetDefinitions,
+  type ExportPresetDefinition,
+} from "./preset-resolver.js";
 export { verifyExportArtifact, type ExportVerification } from "./verify.js";
 export {
   inspectEmf,

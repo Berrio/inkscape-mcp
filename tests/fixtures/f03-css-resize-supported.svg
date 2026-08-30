@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800px" height="600px" viewBox="0 0 800 600">
+  <style>rect.card { fill: #2563eb; stroke: #0f172a; } #hero { fill: #7c3aed !important; } text.label { font-family: sans-serif; }</style>
+  <rect id="hero" class="card" x="80" y="120" width="640" height="360"/>
+  <text class="label" x="120" y="200">Resize CSS</text>
+</svg>

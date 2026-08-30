@@ -309,6 +309,34 @@ export type ComputedStyleResolver = (
   element: XmlElement,
 ) => NonNullable<ElementSummary["computedStyle"]>;
 
+export type ContentResizeCssFidelity = {
+  fidelity: "exact" | "unsupported";
+  limitations: readonly string[];
+};
+
+/**
+ * A content resize inserts a wrapper group below the SVG root. Only the same
+ * selector subset that is independent of that parent-child relationship can
+ * therefore be preserved exactly. This deliberately reports unsupported CSS
+ * instead of guessing how a browser or Inkscape will recascade it.
+ */
+export function inspectContentResizeCssFidelity(
+  source: string,
+): ContentResizeCssFidelity {
+  const document = new DOMParser().parseFromString(source, "image/svg+xml");
+  const parsed = parseSupportedStyles(document);
+  const limitations = new Set(parsed.limitations);
+  for (const element of Array.from(document.getElementsByTagName("*"))) {
+    const style = element.getAttribute("style") ?? "";
+    if (/\bvar\(|(?:^|;)\s*--[A-Za-z0-9_-]+\s*:/iu.test(style))
+      limitations.add("CSS_CUSTOM_PROPERTY");
+  }
+  return {
+    fidelity: limitations.size === 0 ? "exact" : "unsupported",
+    limitations: [...limitations].sort(),
+  };
+}
+
 /** Resolves the intentionally small, auditable CSS subset exposed by the API.
  * Unsupported selector programs and custom-property expressions are retained in
  * the source SVG but flagged instead of being represented as computed truth. */
@@ -401,10 +429,16 @@ function parseSupportedStyles(document: XmlDocument): {
   const rules: StyleRule[] = [];
   let order = 0;
   for (const style of Array.from(document.getElementsByTagName("style"))) {
-    const source = style.textContent ?? "";
+    const rawSource = style.textContent ?? "";
+    const source = rawSource.replace(/\/\*[\s\S]*?\*\//gu, "");
     if (/@(?:import|media|supports|keyframes|font-face)\b/iu.test(source))
       limitations.add("CSS_AT_RULE");
-    for (const match of source.matchAll(/([^{}]+)\{([^{}]*)\}/gu)) {
+    const matches = [...source.matchAll(/([^{}]+)\{([^{}]*)\}/gu)];
+    let consumed = 0;
+    for (const match of matches) {
+      if (source.slice(consumed, match.index).trim().length > 0)
+        limitations.add("CSS_SYNTAX_UNSUPPORTED");
+      consumed = (match.index ?? 0) + match[0].length;
       const declarations = parseStyleDeclarations(match[2]!);
       if (
         declarations.some((declaration) => /\bvar\(/iu.test(declaration.value))
@@ -428,6 +462,10 @@ function parseSupportedStyles(document: XmlDocument): {
         }
       }
     }
+    if (source.slice(consumed).trim().length > 0)
+      limitations.add("CSS_SYNTAX_UNSUPPORTED");
+    if (rawSource.includes("/*") && !rawSource.includes("*/"))
+      limitations.add("CSS_SYNTAX_UNSUPPORTED");
   }
   return { limitations: [...limitations].sort(), rules };
 }

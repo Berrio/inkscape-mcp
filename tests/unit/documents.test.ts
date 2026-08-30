@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DOMParser } from "@xmldom/xmldom";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   createSvgConnector,
   retargetSvgConnector,
@@ -22,6 +24,7 @@ import {
   deleteSvgPage,
   deleteSvgShapes,
   inspectSvgSettings,
+  inspectContentResizeFidelity,
   inspectDocumentDisplaySettings,
   inspectSvgInventory,
   listSvgPages,
@@ -39,6 +42,8 @@ import {
 } from "../../src/documents/index.js";
 import { preflightSvg } from "../../src/documents/index.js";
 const mm = (value: number) => ({ unit: "mm" as const, value });
+const fixture = (name: string) =>
+  readFileSync(resolve(process.cwd(), "tests", "fixtures", name), "utf8");
 
 function childElementAttributes(svg: string): Array<{
   attributes: readonly [string, string][];
@@ -453,6 +458,64 @@ describe("basic SVG documents", () => {
     );
     expect(stretched.svg).toContain("matrix(1.35 0 0 1.8 0 0)");
     expect(stretched.warnings).toContain("NON_UNIFORM_CONTENT_SCALE");
+  });
+  it("F03-G08 preserves the supported CSS subset exactly during content resize", () => {
+    const source = fixture("f03-css-resize-supported.svg");
+    const before = querySvgElements(source, {
+      ids: ["hero"],
+      includeComputedStyle: true,
+      limit: 1,
+      offset: 0,
+    }).elements[0]?.computedStyle;
+    const result = resizeContentSvg(
+      source,
+      { width: { unit: "px", value: 800 }, height: { unit: "px", value: 600 } },
+      { width: { unit: "px", value: 600 }, height: { unit: "px", value: 600 } },
+      "scale_content_contain",
+    );
+    expect(result.contentFidelity).toBe("exact");
+    expect(result.contentLimitations).toEqual([]);
+    expect(result.svg).toContain(
+      "rect.card { fill: #2563eb; stroke: #0f172a; } #hero { fill: #7c3aed !important; }",
+    );
+    expect(
+      querySvgElements(result.svg, {
+        ids: ["hero"],
+        includeComputedStyle: true,
+        limit: 1,
+        offset: 0,
+      }).elements[0]?.computedStyle,
+    ).toEqual(before);
+  });
+  it("F03-G08 rejects unsupported CSS before a content resize can publish", () => {
+    const source = fixture("f03-css-resize-rejected.svg");
+    expect(inspectContentResizeFidelity(source)).toEqual({
+      fidelity: "unsupported",
+      limitations: [
+        "CSS_CUSTOM_PROPERTY",
+        "CSS_SELECTOR_UNSUPPORTED",
+        "NON_SCALING_STROKE_UNSUPPORTED",
+        "OBJECT_BOUNDING_BOX_UNSUPPORTED",
+        "PERCENTAGE_LENGTH_UNSUPPORTED",
+      ],
+    });
+    expect(() =>
+      resizeContentSvg(
+        source,
+        {
+          width: { unit: "px", value: 800 },
+          height: { unit: "px", value: 600 },
+        },
+        {
+          width: { unit: "px", value: 600 },
+          height: { unit: "px", value: 600 },
+        },
+        "scale_content_contain",
+      ),
+    ).toThrow(
+      "CONTENT_RESIZE_FIDELITY_UNSUPPORTED: CSS_CUSTOM_PROPERTY,CSS_SELECTOR_UNSUPPORTED,NON_SCALING_STROKE_UNSUPPORTED,OBJECT_BOUNDING_BOX_UNSUPPORTED,PERCENTAGE_LENGTH_UNSUPPORTED",
+    );
+    expect(source).toBe(fixture("f03-css-resize-rejected.svg"));
   });
   it("reports active content and external resources without mutating SVG", () => {
     const result = preflightSvg(

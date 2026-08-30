@@ -7075,6 +7075,8 @@ export function buildServer(
       }),
       outputSchema: z.object({
         backupCreated: z.boolean(),
+        contentFidelity: z.enum(["exact", "not_applicable"]),
+        contentLimitations: z.array(z.string()),
         diff: semanticDiffSchema,
         dryRun: z.boolean(),
         predicted: z
@@ -7139,11 +7141,19 @@ export function buildServer(
         mode === "page_only"
           ? resizePageOnlySvg(source, currentPage, targetPage, anchor)
           : resizeContentSvg(source, currentPage, targetPage, mode, anchor);
+      const contentStatus =
+        mode === "page_only"
+          ? {
+              contentFidelity: "not_applicable" as const,
+              contentLimitations: [],
+            }
+          : { contentFidelity: "exact" as const, contentLimitations: [] };
       const diff = summarizeSvgDiff(source, resized.svg);
       if (dryRun) {
         const predictedSettings = inspectSvgSettings(resized.svg);
         const output = {
           backupCreated: false,
+          ...contentStatus,
           diff,
           dryRun: true,
           predicted: {
@@ -7175,6 +7185,7 @@ export function buildServer(
       });
       const output = {
         backupCreated: result.backupPath !== undefined,
+        ...contentStatus,
         diff,
         dryRun: false,
         revision: result.revision,

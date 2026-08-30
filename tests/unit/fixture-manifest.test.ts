@@ -53,9 +53,23 @@ describe("fixture manifest bootstrap", () => {
             origin: "first-party",
           },
         }),
+        expect.objectContaining({
+          id: "f03-css-resize-supported",
+          source: {
+            file: "f03-css-resize-supported.svg",
+            origin: "first-party",
+          },
+        }),
+        expect.objectContaining({
+          id: "f03-css-resize-rejected",
+          source: {
+            file: "f03-css-resize-rejected.svg",
+            origin: "first-party",
+          },
+        }),
       ]),
     );
-    expect(manifest.fixtures).toHaveLength(2);
+    expect(manifest.fixtures).toHaveLength(4);
     expect(manifest.$schema).toContain("fixture-manifest.schema.json");
     expect(schema.$schema).toContain("draft/2020-12/schema");
     expect(schema.required).toEqual(["schemaVersion", "fixtures"]);

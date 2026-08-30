@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800px" height="600px" viewBox="0 0 800 600">
+  <style>:root { --accent: #7c3aed; } svg > rect.card { fill: var(--accent); }</style>
+  <defs><clipPath id="crop" clipPathUnits="objectBoundingBox"><rect width="1" height="1"/></clipPath></defs>
+  <rect id="hero" class="card" x="80" y="120" width="50%" height="360" clip-path="url(#crop)" vector-effect="non-scaling-stroke"/>
+</svg>

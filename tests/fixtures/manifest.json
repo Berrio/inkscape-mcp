@@ -73,6 +73,51 @@
           }
         ]
       }
+    },
+    {
+      "id": "f03-css-resize-supported",
+      "source": {
+        "file": "f03-css-resize-supported.svg",
+        "origin": "first-party"
+      },
+      "license": {
+        "spdx": "MIT"
+      },
+      "applicability": {
+        "inkscape": "1.4.4",
+        "platforms": ["windows"],
+        "capabilities": ["document:resize-content-css"]
+      },
+      "assertions": {
+        "structural": [
+          "preserves simple type, ID and class CSS selectors after content wrapper insertion",
+          "preserves cascade and !important declarations"
+        ],
+        "numeric": [],
+        "visual": []
+      }
+    },
+    {
+      "id": "f03-css-resize-rejected",
+      "source": {
+        "file": "f03-css-resize-rejected.svg",
+        "origin": "first-party"
+      },
+      "license": {
+        "spdx": "MIT"
+      },
+      "applicability": {
+        "inkscape": "1.4.4",
+        "platforms": ["windows"],
+        "capabilities": ["document:resize-content-css"]
+      },
+      "assertions": {
+        "structural": [
+          "rejects root-child selectors and CSS custom properties before mutation"
+        ],
+        "numeric": [],
+        "visual": []
+      }
     }
   ]
 }

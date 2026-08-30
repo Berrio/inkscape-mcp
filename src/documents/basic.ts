@@ -12,6 +12,7 @@ import {
   toCssPixels,
 } from "../geometry/index.js";
 import { sanitizeSvg } from "../svg/index.js";
+import { inspectContentResizeCssFidelity } from "./elements.js";
 
 export type DocumentSpec = { page: PageSize; viewBox?: UserRect };
 export type PageMargins = {
@@ -42,6 +43,26 @@ export type DocumentSettings = {
   warnings: readonly DocumentViewportWarning[];
   width: string;
 };
+export type ContentResizeFidelity = {
+  fidelity: "exact" | "unsupported";
+  limitations: readonly string[];
+};
+const CONTENT_RESIZE_PERCENTAGE_ATTRIBUTES = new Set([
+  "cx",
+  "cy",
+  "height",
+  "r",
+  "rx",
+  "ry",
+  "stroke-width",
+  "width",
+  "x",
+  "x1",
+  "x2",
+  "y",
+  "y1",
+  "y2",
+]);
 
 export function parseViewportLength(value: string): PageSize["width"] {
   const match = value
@@ -179,11 +200,18 @@ export function resizeContentSvg(
   >,
   anchor?: ResizeAnchor,
 ): {
+  contentFidelity: "exact";
+  contentLimitations: readonly [];
   svg: string;
   transform: readonly [number, number, number, number, number, number];
   warnings: readonly string[];
 } {
   assertMutationSafe(source);
+  const fidelity = inspectContentResizeFidelity(source);
+  if (fidelity.fidelity !== "exact")
+    throw new Error(
+      `CONTENT_RESIZE_FIDELITY_UNSUPPORTED: ${fidelity.limitations.join(",")}`,
+    );
   const settings = inspectSvgSettings(source);
   assertResizableViewport(settings);
   const plan = planResize({
@@ -234,12 +262,52 @@ export function resizeContentSvg(
     `${plan.newViewBox.x} ${plan.newViewBox.y} ${plan.newViewBox.width} ${plan.newViewBox.height}`,
   );
   return {
+    contentFidelity: "exact",
+    contentLimitations: [],
     svg: new XMLSerializer().serializeToString(document),
     transform,
     warnings:
       renderable.length === 0
         ? [...settings.warnings, ...plan.warnings, "NO_RENDERABLE_CONTENT"]
         : [...settings.warnings, ...plan.warnings],
+  };
+}
+
+/** Reports every known feature whose meaning can change when content is wrapped. */
+export function inspectContentResizeFidelity(
+  source: string,
+): ContentResizeFidelity {
+  const css = inspectContentResizeCssFidelity(source);
+  const limitations = new Set(css.limitations);
+  const document = new DOMParser().parseFromString(source, "image/svg+xml");
+  for (const element of Array.from(document.getElementsByTagName("*"))) {
+    if (
+      /\bobjectBoundingBox\b/iu.test(
+        element.getAttribute("clipPathUnits") ?? "",
+      ) ||
+      /\bobjectBoundingBox\b/iu.test(
+        element.getAttribute("gradientUnits") ?? "",
+      ) ||
+      /\bobjectBoundingBox\b/iu.test(
+        element.getAttribute("maskContentUnits") ?? "",
+      ) ||
+      /\bobjectBoundingBox\b/iu.test(
+        element.getAttribute("patternContentUnits") ?? "",
+      )
+    )
+      limitations.add("OBJECT_BOUNDING_BOX_UNSUPPORTED");
+    if (
+      /^non-scaling-stroke$/iu.test(element.getAttribute("vector-effect") ?? "")
+    )
+      limitations.add("NON_SCALING_STROKE_UNSUPPORTED");
+    for (const attribute of CONTENT_RESIZE_PERCENTAGE_ATTRIBUTES) {
+      const value = element.getAttribute(attribute) ?? "";
+      if (/%/u.test(value)) limitations.add("PERCENTAGE_LENGTH_UNSUPPORTED");
+    }
+  }
+  return {
+    fidelity: limitations.size === 0 ? "exact" : "unsupported",
+    limitations: [...limitations].sort(),
   };
 }
 

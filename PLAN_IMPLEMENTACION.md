@@ -1628,7 +1628,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F03-G05` Mutaciones rechazan revisión obsoleta y producen backup/revision/diff. — `document_resize` devuelve siempre diff semántico acotado, tanto dry-run como mutación publicada; el smoke MCP confirma backup, revisión nueva, igualdad del diff previsto/publicado y rechazo de una revisión stale sin cambio de hash.
 - [x] `F03-G06` Evidencia y previews comparativos en `docs/progress/F03.md`. — `npm run evidence:f03` reproduce cuatro PNG mediante las tools MCP `document_resize` y `document_render_preview`; el manifiesto versionado fija dimensiones, modos y SHA-256.
 - [x] `F03-G07` Los cinco vectores normativos de la sección 10 pasan con tolerancias numéricas fijadas en el ADR. — ADR-010 fija comparación de 12 decimales para los modelos puros y conserva 0,01 unidades para observaciones nativas parciales; pruebas focalizadas cubren A4 user-scale/viewBox, contain, cover y fit negativo.
-- [ ] `F03-G08` Escalar contenido preserva el subconjunto CSS declarado o rechaza sin mutar; fixtures difíciles reportan fidelidad/pérdidas exactas.
+- [x] `F03-G08` Escalar contenido preserva el subconjunto CSS declarado o rechaza sin mutar; fixtures difíciles reportan fidelidad/pérdidas exactas. — `document_resize` informa `contentFidelity`/`contentLimitations`; CSS simple type/id/class conserva cascade, mientras combinadores, variables, porcentajes geométricos, `objectBoundingBox` y non-scaling stroke rechazan antes del commit.
 - [ ] `F03-G09` Settings de página round-trip y el modo de fondo PNG `document` usa esos valores sin confundir desk con página.
 
 ---

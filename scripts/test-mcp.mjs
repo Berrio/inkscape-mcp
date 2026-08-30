@@ -1779,6 +1779,31 @@ try {
       );
     }
   }
+  const maliciousSvg = "<!DOCTYPE svg><svg/>";
+  await writeFile(join(workspaceRoot, "malicious-doctype.svg"), maliciousSvg);
+  const maliciousRevision = createHash("sha256")
+    .update(maliciousSvg)
+    .digest("hex");
+  const maliciousImport = await workspaceClient.callTool({
+    arguments: {
+      expectedRevision: maliciousRevision,
+      outputPath: "malicious-doctype.must-not-publish.svg",
+      path: "malicious-doctype.svg",
+      workspaceId: workspace.id,
+    },
+    name: "document_import_svg",
+  });
+  if (
+    !maliciousImport.isError ||
+    !maliciousImport.content.some(
+      (item) => item.type === "text" && item.text.includes("DTD"),
+    ) ||
+    existsSync(join(workspaceRoot, "malicious-doctype.must-not-publish.svg"))
+  ) {
+    throw new Error(
+      "document_import_svg did not reject DTD before publishing output",
+    );
+  }
   await writeFile(
     join(workspaceRoot, "unsafe-import.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg"><script>throw new Error("x")</script><rect id="safe" onclick="alert(1)" width="5" height="5"/></svg>',

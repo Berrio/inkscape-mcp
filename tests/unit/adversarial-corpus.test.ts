@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { verifyPdf, verifyPng } from "../../src/export/index.js";
 import { inspectRasterImport } from "../../src/import/raster-import.js";
-import { sanitizeSvg } from "../../src/svg/index.js";
+import { sanitizeSvg, SvgSecurityError } from "../../src/svg/index.js";
 
 const paths: string[] = [];
 const svgLimits = {
@@ -35,24 +35,59 @@ async function writeCorpusFile(
 describe("adversarial input corpus", () => {
   it("rejects active, malformed and structurally excessive SVG deterministically", () => {
     const rejected = [
-      { id: "svg-doctype", source: "<!DOCTYPE svg><svg/>" },
-      { id: "svg-entity", source: '<!ENTITY x "boom"><svg/>' },
-      { id: "svg-cdata", source: "<svg><![CDATA[<script/>]]></svg>" },
-      { id: "svg-wrong-root", source: "<html/>" },
+      {
+        id: "svg-doctype",
+        message: "DTD, entities and CDATA are not allowed",
+        source: "<!DOCTYPE svg><svg/>",
+      },
+      {
+        id: "svg-entity",
+        message: "DTD, entities and CDATA are not allowed",
+        source: '<!ENTITY x "boom"><svg/>',
+      },
+      {
+        id: "svg-cdata",
+        message: "DTD, entities and CDATA are not allowed",
+        source: "<svg><![CDATA[<script/>]]></svg>",
+      },
+      {
+        id: "svg-malformed",
+        message: "Malformed SVG",
+        source: "<svg><g></svg>",
+      },
+      {
+        id: "svg-wrong-root",
+        message: "Root element must be svg",
+        source: "<html/>",
+      },
       {
         id: "svg-too-many-elements",
+        message: "SVG exceeds element limit",
         source: `<svg>${"<rect/>".repeat(20)}</svg>`,
       },
       {
         id: "svg-too-deep",
+        message: "SVG exceeds element nesting limit",
+        options: { ...svgLimits, maxElements: 1_000 },
         source: `<svg>${"<g>".repeat(257)}<rect/>${"</g>".repeat(257)}</svg>`,
       },
     ];
-    for (const fixture of rejected)
+    for (const fixture of rejected) {
       expect(
-        () => sanitizeSvg(fixture.source, svgLimits),
+        () => sanitizeSvg(fixture.source, fixture.options ?? svgLimits),
         fixture.id,
-      ).toThrow();
+      ).toThrow(SvgSecurityError);
+      expect(
+        () => sanitizeSvg(fixture.source, fixture.options ?? svgLimits),
+        fixture.id,
+      ).toThrow(fixture.message);
+    }
+
+    expect(() =>
+      sanitizeSvg(`<svg>${"x".repeat(svgLimits.maxInputBytes)}</svg>`, {
+        ...svgLimits,
+      }),
+    ).toThrow("SVG exceeds input size limit");
 
     const sanitized = sanitizeSvg(
       '<svg><style>@import url(https://evil.invalid/font.css)</style><image href="//evil.invalid/image.png" onerror="run()"/></svg>',

@@ -31,13 +31,21 @@ export function sanitizeSvg(
     throw new SvgSecurityError("SVG exceeds input size limit");
   if (/<!DOCTYPE|<!ENTITY|<!\[CDATA\[/iu.test(source))
     throw new SvgSecurityError("DTD, entities and CDATA are not allowed");
-  const document = new DOMParser({
+  const parser = new DOMParser({
     onError: (level, message) => {
       if (level !== "warning") {
         throw new SvgSecurityError(`Malformed SVG: ${message}`);
       }
     },
-  }).parseFromString(source, "image/svg+xml");
+  });
+  let document: ReturnType<typeof parser.parseFromString>;
+  try {
+    document = parser.parseFromString(source, "image/svg+xml");
+  } catch {
+    // xmldom may wrap onError exceptions in ParseError. Keep the public error
+    // stable and avoid exposing parser internals or document fragments.
+    throw new SvgSecurityError("Malformed SVG");
+  }
   const root = document.documentElement;
   if (!root || root.localName !== "svg")
     throw new SvgSecurityError("Root element must be svg");

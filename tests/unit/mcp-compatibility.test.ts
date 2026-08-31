@@ -149,7 +149,7 @@ describe("MCP compatibility contract", () => {
         .update(JSON.stringify(tools))
         .digest("hex");
       expect(fingerprint).toBe(
-        "edfc1b053bd0a19209f35d2eeaa53cfffb278cb5cfcc95dd14bd1bc4ec7e22e1",
+        "8aae2e2f54fb5f996811a9032c3ca395d842f8b3ed95f488b65895743269df07",
       );
     } finally {
       await client.close();

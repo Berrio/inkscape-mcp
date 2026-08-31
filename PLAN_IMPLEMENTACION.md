@@ -2024,12 +2024,12 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 #### Inkscape 1.4 y 1.5+
 
-- [ ] `F10-T08` Fijar y documentar soporte estable 1.4.4.
-- [ ] `F10-T09` Revalidar/endurecer el adapter `pages_v14` de F03 frente a la matriz de versiones/plataformas.
-- [ ] `F10-T10` Investigar/implementar `pages_v15` basado en `svg:view` solo contra release real.
-- [ ] `F10-T11` Crear migración/round-trip fixtures 1.4.4 ↔ 1.5 sin pérdida silenciosa.
-- [ ] `F10-T12` Gatear 1.5 como experimental hasta pasar toda matriz multipágina/exportación.
-- [ ] `F10-T13` Mantener parsers de flags/actions por versión y warnings de drift.
+- [x] `F10-T08` Fijar y documentar soporte estable 1.4.4. — La política interna sólo declara estable Windows + 1.4.4 y `pages_v14`; el doctor real observó MSIX 1.4.4, 189 acciones y flags críticos sin warnings.
+- [x] `F10-T09` Revalidar/endurecer el adapter `pages_v14` de F03 frente a la matriz de versiones/plataformas. — Lectura y CRUD conservan el modelo `sodipodi:namedview/inkscape:page`; cualquier `svg:view` se rechaza antes de leer o mutar para no ignorar una representación incompatible.
+- [-] `F10-T10` Investigar/implementar `pages_v15` basado en `svg:view` solo contra release real. — No hay release 1.5 instalada ni capability anunciada; el servidor no crea ni interpreta `svg:view` hasta contar con fixture y smoke reales.
+- [-] `F10-T11` Crear migración/round-trip fixtures 1.4.4 ↔ 1.5 sin pérdida silenciosa. — Sin una release 1.5 real no existe una migración verificable; la defensa actual rechaza esa representación en vez de alterar o eliminar páginas.
+- [x] `F10-T12` Gatear 1.5 como experimental hasta pasar toda matriz multipágina/exportación. — 1.5+ devuelve `INKSCAPE_1_5_EXPERIMENTAL` y `PAGES_V15_NOT_IMPLEMENTED`, sin adapter ni anuncio estable.
+- [x] `F10-T13` Mantener parsers de flags/actions por versión y warnings de drift. — Capabilities registra la política de versión, verifica flags base 1.4.4 y disponibilidad/lista no vacía de acciones; toda discrepancia se reporta como warning estable.
 
 #### Plataformas
 

@@ -731,6 +731,16 @@ describe("basic SVG documents", () => {
       addSvgPage(source, { height: 20, id: "page-new", width: 20, x: 0, y: 0 }),
     ).toThrow("SVG must be sanitized before changing its pages");
   });
+  it("rejects the unimplemented svg:view multipage representation without data loss", () => {
+    const source =
+      '<svg xmlns="http://www.w3.org/2000/svg"><view id="page-future" viewBox="0 0 100 80"/></svg>';
+    expect(() => listSvgPages(source)).toThrow(
+      "PAGES_V15_UNSUPPORTED: svg:view requires the pages_v15 adapter",
+    );
+    expect(() =>
+      addSvgPage(source, { height: 20, id: "page-new", width: 20, x: 0, y: 0 }),
+    ).toThrow("PAGES_V15_UNSUPPORTED");
+  });
   it("preserves page IDs and namedview references through full page CRUD", () => {
     const source =
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"><sodipodi:namedview inkscape:current-page="page_second"><sodipodi:guide position="4,5" orientation="1,0"/><inkscape:page id="page_first" x="0" y="0" width="100" height="80"/></sodipodi:namedview></svg>';

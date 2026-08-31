@@ -9,6 +9,10 @@ import { sanitizeSvg } from "../svg/index.js";
 
 const INKSCAPE_NAMESPACE = "http://www.inkscape.org/namespaces/inkscape";
 const SODIPODI_NAMESPACE = "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd";
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+
+/** The only multipage representation currently covered by real MCP smoke tests. */
+export const PAGES_V14_ADAPTER = "pages_v14" as const;
 
 export type SvgPage = {
   height: number;
@@ -143,6 +147,7 @@ function parseDocument(source: string): XmlDocument {
     throw new Error("SVG must be sanitized before changing its pages");
   const document = new DOMParser().parseFromString(source, "image/svg+xml");
   requireRoot(document);
+  assertSupportedPageRepresentation(document);
   return document;
 }
 
@@ -162,13 +167,22 @@ function parseReadDocument(source: string): XmlDocument {
     "image/svg+xml",
   );
   requireRoot(document);
+  assertSupportedPageRepresentation(document);
   return document;
 }
 
 function pageElements(document: XmlDocument): XmlElement[] {
+  assertSupportedPageRepresentation(document);
   return Array.from(
     document.getElementsByTagNameNS(INKSCAPE_NAMESPACE, "page"),
   );
+}
+
+function assertSupportedPageRepresentation(document: XmlDocument): void {
+  if (document.getElementsByTagNameNS(SVG_NAMESPACE, "view").length > 0)
+    throw new Error(
+      "PAGES_V15_UNSUPPORTED: svg:view requires the pages_v15 adapter",
+    );
 }
 function findPage(document: XmlDocument, id: string): XmlElement {
   const page = pageElements(document).find(

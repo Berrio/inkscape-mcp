@@ -101,6 +101,18 @@ for (const { label, versionNegotiation } of [
         `${label}: inkscape_status did not expose the native parser security posture`,
       );
     }
+    const inkscape = result.structuredContent.inkscape;
+    if (
+      inkscape?.version?.startsWith("1.4.4") &&
+      (inkscape.support !== "stable" ||
+        inkscape.pageAdapter !== "pages_v14" ||
+        !Array.isArray(inkscape.warnings) ||
+        inkscape.warnings.length !== 0)
+    ) {
+      throw new Error(
+        `${label}: inkscape_status did not recognize the verified 1.4.4 pages_v14 baseline`,
+      );
+    }
   } finally {
     await client.close();
   }

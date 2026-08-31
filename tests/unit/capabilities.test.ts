@@ -34,7 +34,7 @@ describe("Inkscape capabilities", () => {
             ? "zoom-in : Zoom\nexport-do : Export\n"
             : request.args[0] === "--list-input-types"
               ? "svg\npng\n"
-              : "--export-type\n--help-all\n";
+              : "--export-type\n--export-pdf-version\n--export-plain-svg\n--export-text-to-path\n--help-all\n";
         return {
           durationMs: 1,
           exitCode: 0,
@@ -86,7 +86,45 @@ describe("Inkscape capabilities", () => {
       name: "--export-png-color-mode",
     });
     expect(first.experimentalCapabilities).toEqual([]);
+    expect(first.versionSupport).toMatchObject({
+      pageAdapter: "pages_v14",
+      status: "stable",
+    });
+    expect(first.warnings).toEqual([]);
     expect(second).toBe(first);
     expect(calls).toBe(3);
+  });
+
+  it("reports flag and action drift instead of assuming a matching version is compatible", async () => {
+    const service = new CapabilityService();
+    const result = await service.inspect(
+      {
+        run: async () => ({
+          durationMs: 1,
+          exitCode: 0,
+          pid: 1,
+          signal: null,
+          stderr: Buffer.alloc(0),
+          stderrTruncated: false,
+          stdout: Buffer.alloc(0),
+          stdoutTruncated: false,
+          terminationReason: "completed" as const,
+        }),
+      },
+      {
+        executablePath: process.execPath,
+        installKind: "system",
+        sources: ["path"],
+      },
+      "1.4.4",
+      process.cwd(),
+    );
+
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        "INKSCAPE_ACTION_LIST_EMPTY",
+        "INKSCAPE_1_4_4_FLAG_DRIFT:--export-type",
+      ]),
+    );
   });
 });

@@ -217,6 +217,7 @@ export {
   addSvgPage,
   deleteSvgPage,
   listSvgPages,
+  PAGES_V14_ADAPTER,
   reorderSvgPages,
   updateSvgPage,
   validateSvgPageLayout,

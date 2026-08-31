@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   appPathsCandidates,
+  assessInkscapeVersion,
   locateInkscape,
   msixInstallLocationCandidates,
   parseInkscapeVersion,
@@ -45,6 +46,24 @@ describe("Inkscape discovery", () => {
       "1.4.4 (dcaf3e7, 2026-05-05)",
     );
     expect(parseInkscapeVersion("not inkscape")).toBeUndefined();
+  });
+
+  it("only treats the evidenced Windows 1.4.4 baseline as stable", () => {
+    expect(
+      assessInkscapeVersion("1.4.4 (dcaf3e7, 2026-05-05)", "win32"),
+    ).toEqual({ pageAdapter: "pages_v14", status: "stable", warnings: [] });
+    expect(assessInkscapeVersion("1.4.5", "win32")).toEqual({
+      status: "experimental",
+      warnings: ["INKSCAPE_1_4_PATCH_UNVERIFIED"],
+    });
+    expect(assessInkscapeVersion("1.5.0", "win32")).toEqual({
+      status: "experimental",
+      warnings: ["INKSCAPE_1_5_EXPERIMENTAL", "PAGES_V15_NOT_IMPLEMENTED"],
+    });
+    expect(assessInkscapeVersion("1.4.4", "linux")).toEqual({
+      status: "experimental",
+      warnings: ["INKSCAPE_PLATFORM_UNVERIFIED"],
+    });
   });
 
   it("builds cross-platform PATH and standard candidates without hardcoding a package version", () => {

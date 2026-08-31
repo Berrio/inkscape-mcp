@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-import type { InkscapeCandidate } from "../discovery/index.js";
+import {
+  assessInkscapeVersion,
+  type InkscapeCandidate,
+} from "../discovery/index.js";
 import type { ProcessExecutor } from "../discovery/probe.js";
 import { discoverInxExporters } from "../extensions/inx.js";
 
@@ -30,6 +33,12 @@ const TRACKED_FLAGS = [
   "--export-png-use-dithering",
   "--export-type",
   "--export-text-to-path",
+] as const;
+const BASELINE_1_4_4_REQUIRED_FLAGS = [
+  "--export-pdf-version",
+  "--export-plain-svg",
+  "--export-text-to-path",
+  "--export-type",
 ] as const;
 
 type CachedCapabilities = { expiresAt: number; value: InkscapeCapabilities };
@@ -69,6 +78,14 @@ export class CapabilityService {
     const helpOptions = helpAll.available
       ? parseHelpOptions(helpAll.output)
       : [];
+    const versionSupport = assessInkscapeVersion(version);
+    const warnings = capabilityWarnings(
+      versionSupport,
+      helpAll.available,
+      actionList.available,
+      actions,
+      helpOptions,
+    );
     const value: InkscapeCapabilities = {
       actionCount: actions.length,
       actionEvidence: actions.map((name) => ({ name, origin: "unknown" })),
@@ -90,6 +107,8 @@ export class CapabilityService {
         inputTypes: observation(inputTypes),
       },
       version,
+      versionSupport,
+      warnings,
     };
     this.cache.set(fingerprint, {
       expiresAt: Date.now() + CACHE_TTL_MS,
@@ -101,6 +120,26 @@ export class CapabilityService {
   public clear(): void {
     this.cache.clear();
   }
+}
+
+function capabilityWarnings(
+  versionSupport: InkscapeCapabilities["versionSupport"],
+  helpAvailable: boolean,
+  actionListAvailable: boolean,
+  actions: readonly string[],
+  helpOptions: readonly string[],
+): readonly string[] {
+  const warnings = [...versionSupport.warnings];
+  if (!helpAvailable) warnings.push("INKSCAPE_HELP_ALL_UNAVAILABLE");
+  if (!actionListAvailable) warnings.push("INKSCAPE_ACTION_LIST_UNAVAILABLE");
+  if (actionListAvailable && actions.length === 0)
+    warnings.push("INKSCAPE_ACTION_LIST_EMPTY");
+  if (versionSupport.status === "stable") {
+    for (const flag of BASELINE_1_4_4_REQUIRED_FLAGS)
+      if (!helpOptions.includes(flag))
+        warnings.push(`INKSCAPE_1_4_4_FLAG_DRIFT:${flag}`);
+  }
+  return warnings;
 }
 
 type CollectedCommand = CapabilityObservation & { output: string };

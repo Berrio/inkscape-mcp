@@ -30,7 +30,11 @@ export type DoctorReport = {
   capabilities?: Pick<
     InkscapeCapabilities,
     "actionCount" | "helpOptions" | "inputTypes" | "observations"
-  > & { extensionExporterCount?: number };
+  > & {
+    extensionExporterCount?: number;
+    versionSupport: InkscapeCapabilities["versionSupport"];
+    warnings: readonly string[];
+  };
   config: RedactedConfig;
   diagnostics: readonly string[];
   inkscape?: {
@@ -125,6 +129,8 @@ export async function runDoctor(
         helpOptions: capabilities.helpOptions,
         inputTypes: capabilities.inputTypes,
         observations: capabilities.observations,
+        versionSupport: capabilities.versionSupport,
+        warnings: capabilities.warnings,
       },
       config: redactConfig(config),
       diagnostics,
@@ -165,6 +171,11 @@ export function formatDoctor(report: DoctorReport): string {
   if (report.capabilities) {
     lines.push(
       `Capabilities: ${report.capabilities.actionCount} actions, ${report.capabilities.inputTypes.length} input types, ${report.capabilities.helpOptions.length} options`,
+    );
+  }
+  if (report.capabilities?.warnings.length) {
+    lines.push(
+      `Compatibility warnings: ${report.capabilities.warnings.join(", ")}`,
     );
   }
   if (report.pngExportProbe) {

@@ -44,4 +44,7 @@ export type InkscapeCapabilities = {
     inputTypes: CapabilityObservation;
   }>;
   version: string;
+  versionSupport: InkscapeVersionSupport;
+  warnings: readonly string[];
 };
+import type { InkscapeVersionSupport } from "../discovery/index.js";

@@ -25,6 +25,16 @@ entrada y sonda PNG sin revelar rutas. Las exportaciones que dependen de un
 flag vuelven a comprobar su disponibilidad para la instalación local; no se
 habilitan por esta tabla si el doctor discrepa.
 
+El unico baseline verificado es Windows + Inkscape 1.4.4 MSIX. Se informa como
+`support: "stable"` y `pageAdapter: "pages_v14"`. Tambien comprueba
+`--export-type`, `--export-pdf-version`, `--export-plain-svg`,
+`--export-text-to-path` y una `--action-list` disponible y no vacia; una
+deriva queda como warning en vez de heredar compatibilidad solo por el texto de
+version. Inkscape 1.5+ sigue experimental. Hasta tener un adapter
+`pages_v15` contra una release real y fixtures de migracion, una
+representacion de pagina SVG `view` se rechaza antes de leer o mutar paginas
+para prevenir perdida silenciosa.
+
 ## Plataforma y transporte
 
 | Área                              | Estado                      | Evidencia y límite                                                                                                                                                                          |

@@ -244,7 +244,10 @@ const statusSchema = z.object({
   inkscape: z
     .object({
       installKind: z.string(),
+      pageAdapter: z.literal("pages_v14").optional(),
+      support: z.enum(["experimental", "stable", "unsupported"]),
       version: z.string(),
+      warnings: z.array(z.string()),
     })
     .optional(),
   securityPosture: z.object({
@@ -1597,7 +1600,19 @@ export function buildServer(
           : {
               inkscape: {
                 installKind: report.inkscape.installKind,
+                ...(report.capabilities?.versionSupport.pageAdapter ===
+                undefined
+                  ? {}
+                  : {
+                      pageAdapter:
+                        report.capabilities.versionSupport.pageAdapter,
+                    }),
+                support:
+                  report.capabilities?.versionSupport.status ?? "unsupported",
                 version: report.inkscape.version,
+                warnings: report.capabilities?.warnings ?? [
+                  "INKSCAPE_CAPABILITIES_UNAVAILABLE",
+                ],
               },
             }),
         securityPosture: {

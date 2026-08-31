@@ -2037,7 +2037,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [x] `F10-T15` Integración real con Inkscape por plataforma/versiones declaradas. — `npm run test:f10-windows-baseline` conecta por stdio con la instalación MSIX local 1.4.4, comprueba status/version/páginas, fuentes/preflight y genera un PNG Unicode verificable. Windows 1.4.4 es la única plataforma/versión declarada estable.
 - [x] `F10-T16` Documentar formatos/extensiones variables por build. — La matriz de compatibilidad distingue la evidencia del baseline de una capability observada; `doctor` y cada tool vuelven a gatear formatos, flags y adaptadores antes de ejecutar.
 - [-] `F10-T17` En macOS 1.4.4, probar el problema conocido de extensiones lanzadas por CLI y deshabilitar capabilities afectadas. — No existe una instalación macOS 1.4.4 autorizada para ejecutarlo; macOS no se anuncia como estable ni como proveedor de extensiones. Se requiere una máquina macOS real antes de convertir esta evidencia en soporte.
-- [ ] `F10-T18` Probar fuentes, paths Unicode, separadores, case y permisos.
+- [x] `F10-T18` Probar fuentes, paths Unicode, separadores, case y permisos. — El smoke Windows usa un SVG Unicode de solo lectura a través de un path con case y separador distintos, verifica que el preflight/render no modifican su contenido/mtime y aplica una ACE temporal de denegación de escritura a un output controlado. La publicación falla sin residuos y la ACE se elimina antes de la limpieza.
 - [x] `F10-T19` No marcar plataforma como soportada solo porque compila. — La política de versión requiere Windows + 1.4.4 + adapter `pages_v14`; Linux/macOS y 1.5+ permanecen experimentales aunque la CI portable compile y ejecute unitarios.
 
 #### Puerta F10

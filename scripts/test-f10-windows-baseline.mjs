@@ -1,15 +1,45 @@
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { Buffer } from "node:buffer";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 if (process.platform !== "win32")
   throw new Error("F10 Windows baseline smoke requires Windows");
 
+const execFileAsync = promisify(execFile);
 const workspaceRoot = await mkdtemp(join(tmpdir(), "inkscape-mcp-f10-\u00f1-"));
+const currentUser = process.env.USERNAME;
+if (!currentUser)
+  throw new Error(
+    "F10 Windows baseline smoke requires USERNAME for its ACL test",
+  );
+
+async function denyDirectoryWrites(path) {
+  await execFileAsync("icacls.exe", [path, "/deny", `${currentUser}:(W)`], {
+    windowsHide: true,
+  });
+}
+
+async function restoreDirectoryWrites(path) {
+  await execFileAsync("icacls.exe", [path, "/remove:d", currentUser], {
+    windowsHide: true,
+  });
+}
+
 const client = new Client(
   { name: "inkscape-mcp-f10-windows-baseline", version: "0.1.0" },
   { versionNegotiation: { mode: { pin: "2026-07-28" } } },
@@ -20,6 +50,9 @@ const transport = new StdioClientTransport({
   cwd: process.cwd(),
   stderr: "pipe",
 });
+let restrictedDirectory;
+let directoryWritesDenied = false;
+let sourceAbsolutePath;
 
 try {
   await client.connect(transport);
@@ -62,15 +95,24 @@ try {
 
   const sourceDirectory = join(workspaceRoot, "Etiquetas");
   const outputDirectory = join(workspaceRoot, "Resultados");
-  await Promise.all([mkdir(sourceDirectory), mkdir(outputDirectory)]);
+  restrictedDirectory = join(workspaceRoot, "Sin escritura");
+  await Promise.all([
+    mkdir(sourceDirectory),
+    mkdir(outputDirectory),
+    mkdir(restrictedDirectory),
+  ]);
   const sourcePath = "Etiquetas/\u00d1and\u00fa etiqueta.svg";
+  const sourceClientPath = "etiquetas\\\u00f1AND\u00da ETIQUETA.svg";
   const source =
     '<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="10mm" viewBox="0 0 20 10"><text x="1" y="6" font-family="MissingTestFontForPreflight, serif">\u00d1and\u00fa</text><rect x="0" y="0" width="20" height="10" fill="none" stroke="#112233"/></svg>';
-  await writeFile(join(workspaceRoot, sourcePath), source, "utf8");
+  sourceAbsolutePath = join(workspaceRoot, sourcePath);
+  await writeFile(sourceAbsolutePath, source, "utf8");
+  await chmod(sourceAbsolutePath, 0o444);
+  const sourceBefore = await stat(sourceAbsolutePath);
   const revision = createHash("sha256").update(source).digest("hex");
 
   const fontPreflight = await client.callTool({
-    arguments: { path: sourcePath, workspaceId },
+    arguments: { path: sourceClientPath, workspaceId },
     name: "fonts_preflight",
   });
   if (
@@ -90,7 +132,7 @@ try {
       area: "page",
       expectedRevision: revision,
       outputPath,
-      path: sourcePath,
+      path: sourceClientPath,
       width: 128,
       workspaceId,
     },
@@ -132,6 +174,40 @@ try {
     );
   }
 
+  const sourceAfter = await stat(sourceAbsolutePath);
+  if (
+    sourceAfter.mtimeMs !== sourceBefore.mtimeMs ||
+    sourceAfter.size !== sourceBefore.size ||
+    (await readFile(sourceAbsolutePath, "utf8")) !== source
+  ) {
+    throw new Error(
+      "Read-only Unicode source was modified by preview rendering",
+    );
+  }
+
+  await denyDirectoryWrites(restrictedDirectory);
+  directoryWritesDenied = true;
+  const deniedOutput = await client.callTool({
+    arguments: {
+      area: "page",
+      expectedRevision: revision,
+      outputPath: "Sin escritura/blocked.png",
+      path: sourcePath,
+      width: 128,
+      workspaceId,
+    },
+    name: "document_render_preview",
+  });
+  await restoreDirectoryWrites(restrictedDirectory);
+  directoryWritesDenied = false;
+  if (
+    deniedOutput.isError !== true ||
+    (await readdir(restrictedDirectory)).length
+  )
+    throw new Error(
+      "Preview publication did not fail cleanly for a denied directory",
+    );
+
   const rejectedPath = await client.callTool({
     arguments: {
       path: "C:\\outside.svg",
@@ -144,6 +220,10 @@ try {
 
   process.stdout.write("F10 Windows Inkscape 1.4.4 baseline smoke passed.\n");
 } finally {
+  if (directoryWritesDenied && restrictedDirectory !== undefined)
+    await restoreDirectoryWrites(restrictedDirectory).catch(() => undefined);
+  if (sourceAbsolutePath !== undefined)
+    await chmod(sourceAbsolutePath, 0o666).catch(() => undefined);
   await client.close();
   await rm(workspaceRoot, { force: true, recursive: true });
 }

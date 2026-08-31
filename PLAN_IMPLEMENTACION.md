@@ -2033,7 +2033,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 #### Plataformas
 
-- [ ] `F10-T14` CI/unit en Windows, Linux y macOS con Node soportado.
+- [x] `F10-T14` CI/unit en Windows, Linux y macOS con Node soportado. — El workflow `Portable unit CI` fija Node 24.18.0 y ejecuta `npm ci` + `npm run check` en los tres runners; la ejecución #2 del commit `5376fb0` concluyó correctamente en Windows, Ubuntu y macOS.
 - [ ] `F10-T15` Integración real con Inkscape por plataforma/versiones declaradas.
 - [ ] `F10-T16` Documentar formatos/extensiones variables por build.
 - [ ] `F10-T17` En macOS 1.4.4, probar el problema conocido de extensiones lanzadas por CLI y deshabilitar capabilities afectadas.

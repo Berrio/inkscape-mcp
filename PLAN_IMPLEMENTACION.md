@@ -1946,7 +1946,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F08-G03` Los tres presets principales generan artefactos/manifests correctos. — `test:f08-g03` planifica y ejecuta `web-asset-pack`, `print-a4-pdf` y `social-landscape`: comprueba SVG/PNG/PDF reales, tamaños, reapertura del PDF, metadata social, variantes, revisiones, commit markers y manifests atómicos. El renderer batch permite las opciones PDF requeridas por presets y las gatea contra las capabilities observadas antes de Inkscape.
 - [x] `F08-G04` Package reabre sin referencias rotas dentro de entorno limpio. — `test:mcp` renderiza el SVG empaquetado por Inkscape con un PNG local copiado.
 - [x] `F08-G05` Evidencia en `docs/progress/F08.md`.
-- [~] `F08-G06` Preset execution rechaza planToken expirado, de otro workspace o ligado a sourceRevision/capabilities distintos. — El store comprueba TTL/owner/uso único y el batch vuelve a comprobar sourceRevision y fingerprint antes de renderizar; tests unitarios y MCP cubren owner y sourceRevision. Falta fixture que simule una huella de capabilities distinta.
+- [x] `F08-G06` Preset execution rechaza planToken expirado, de otro workspace o ligado a sourceRevision/capabilities distintos. — El store comprueba TTL/owner/uso único y el batch vuelve a comprobar sourceRevision y fingerprint antes de renderizar. `test:f08-g06` usa un perfil temporal, lo modifica entre plan y ejecución para cambiar la huella real, exige el rechazo antes de publicar y confirma que el token queda consumido.
 
 ---
 

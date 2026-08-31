@@ -59,6 +59,7 @@
     "test:f05-g11": "npm run build --silent && node scripts/test-f05-selection-visual.mjs",
     "test:f05-g12": "npm run build --silent && node scripts/test-f05-pdf-nonzero-viewbox.mjs",
     "test:f05-g13": "npm run build --silent && node scripts/test-f05-svg-viewbox-512.mjs",
+    "test:f08-g02": "npm run build --silent && node scripts/test-f08-absent-capabilities.mjs",
     "test:f09-wp01": "npm run build --silent && node scripts/test-f09-server-contract.mjs",
     "test:f09-wp02": "npm run build --silent && node scripts/test-f09-resources-prompts.mjs",
     "test:f09-wp03": "npm run build --silent && vitest run tests/unit/jobs.test.ts tests/unit/document-resources.test.ts && node scripts/test-f09-resources-prompts.mjs",

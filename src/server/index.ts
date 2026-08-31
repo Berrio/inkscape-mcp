@@ -119,6 +119,7 @@ import {
   updateSvgMarker,
   updateSvgFilter,
   updateSvgText,
+  PAGE_SIZE_PRESETS,
   convertSimpleSvgFlowedText,
   resizeContentSvg,
   resizePageOnlySvg,
@@ -186,6 +187,10 @@ import {
 import { ProcessRunner } from "../runner/index.js";
 import { PreviewCache } from "../preview/index.js";
 import { ExportPlanStore } from "./export-plans.js";
+import {
+  DocumentResourceStore,
+  ExportManifestResourceStore,
+} from "./document-resources.js";
 import { JobStore } from "./jobs.js";
 import {
   AtomicFileStore,
@@ -240,6 +245,16 @@ const artifactSchema = z.object({
   id: z.string().regex(/^art_[a-f0-9]{32}$/u),
   size: z.number().int().nonnegative(),
   uri: z.string().regex(/^inkscape:\/\/artifact\/art_[a-f0-9]{32}$/u),
+});
+const documentResourceLinksSchema = z.object({
+  id: z.string().regex(/^doc_[a-f0-9]{32}$/u),
+  metadataUri: z
+    .string()
+    .regex(/^inkscape:\/\/document\/doc_[a-f0-9]{32}\/metadata$/u),
+  summaryUri: z
+    .string()
+    .regex(/^inkscape:\/\/document\/doc_[a-f0-9]{32}\/summary$/u),
+  svgUri: z.string().regex(/^inkscape:\/\/document\/doc_[a-f0-9]{32}\/svg$/u),
 });
 const pageSchema = z.object({
   height: z.number().finite().positive(),
@@ -1175,6 +1190,8 @@ function pdfCapabilityLabel(flag: string): string {
 export type ServerRuntime = {
   artifacts: ArtifactStore;
   capabilities: CapabilityService;
+  documentResources: DocumentResourceStore;
+  exportManifestResources: ExportManifestResourceStore;
   exportPlans: ExportPlanStore;
   fileStore: AtomicFileStore;
   jobs: JobStore;
@@ -1197,6 +1214,8 @@ export function createServerRuntime(config: ServerConfig): ServerRuntime {
       config.maxArtifactBytes,
     ),
     capabilities: new CapabilityService(),
+    documentResources: new DocumentResourceStore(),
+    exportManifestResources: new ExportManifestResourceStore(),
     exportPlans: new ExportPlanStore(),
     fileStore,
     jobs: new JobStore(),
@@ -1230,6 +1249,8 @@ export function buildServer(
   const {
     artifacts,
     capabilities,
+    documentResources,
+    exportManifestResources,
     exportPlans,
     fileStore,
     jobs,
@@ -1292,6 +1313,241 @@ export function buildServer(
         uri.href,
         config.maxResourceReadBytes,
       ),
+  );
+  server.registerResource(
+    "server_capabilities",
+    "inkscape://server/capabilities",
+    {
+      description:
+        "Redacted local Inkscape capability summary for planning a supported workflow.",
+      mimeType: "application/json",
+      title: "Inkscape capabilities",
+    },
+    async (uri) => {
+      const report = await runDoctor(config, process.cwd());
+      return jsonResource(uri.href, {
+        actionCount: report.capabilities?.actionCount ?? 0,
+        inputTypes: report.capabilities?.inputTypes ?? [],
+        inkscapeAvailable: report.inkscape !== undefined,
+        securityLevel: "workspace-guarded-native-unsandboxed",
+      });
+    },
+  );
+  server.registerResource(
+    "page_size_presets",
+    "inkscape://server/presets/page-sizes",
+    {
+      description:
+        "Fixed physical page-size presets supported by document_create.",
+      mimeType: "application/json",
+      title: "Page size presets",
+    },
+    async (uri) =>
+      jsonResource(uri.href, {
+        presets: PAGE_SIZE_PRESETS,
+        schema: "inkscape-mcp-page-size-presets/v1",
+      }),
+  );
+  server.registerResource(
+    "export_presets",
+    "inkscape://server/presets/exports",
+    {
+      description:
+        "Named export preset definitions; source, output directory and revisions stay explicit tool arguments.",
+      mimeType: "application/json",
+      title: "Export presets",
+    },
+    async (uri) =>
+      jsonResource(uri.href, {
+        presets: [
+          "print-a4-pdf",
+          "print-pdf-300dpi",
+          "web-png",
+          "web-asset-pack",
+          "plain-svg",
+          "icon-pack",
+          "social-square",
+          "social-landscape",
+          "social-story",
+        ],
+        schema: "inkscape-mcp-export-preset-catalog/v1",
+      }),
+  );
+  for (const kind of ["metadata", "summary", "svg"] as const)
+    server.registerResource(
+      `document_${kind}`,
+      new ResourceTemplate(`inkscape://document/{id}/${kind}`, {
+        list: undefined,
+      }),
+      {
+        description:
+          kind === "svg"
+            ? "Explicit, revision-pinned SVG document content limited to one resource read."
+            : `Revision-pinned ${kind} for an opaque document resource capability.`,
+        mimeType: kind === "svg" ? "image/svg+xml" : "application/json",
+        title: `Inkscape document ${kind}`,
+      },
+      async (uri, variables) =>
+        documentResource(
+          documentResources,
+          resourceVariable(variables.id),
+          kind,
+          uri.href,
+          config.maxResourceReadBytes,
+        ),
+    );
+  server.registerResource(
+    "export_manifest",
+    new ResourceTemplate("inkscape://export/{id}/manifest", {
+      list: undefined,
+    }),
+    {
+      description:
+        "Completed export batch manifest addressed by an opaque, expiring resource capability.",
+      mimeType: "application/json",
+      title: "Export batch manifest",
+    },
+    async (uri, variables) =>
+      exportManifestResource(
+        exportManifestResources,
+        jobs,
+        resourceVariable(variables.id),
+        uri.href,
+      ),
+  );
+
+  server.registerPrompt(
+    "audit_document",
+    {
+      argsSchema: z.object({
+        profile: z
+          .enum(["basic", "interchange", "print", "web"])
+          .default("basic"),
+      }),
+      description:
+        "Visible read-only recipe for inspecting and preflighting a selected document.",
+      title: "Audit a document",
+    },
+    ({ profile }) =>
+      promptMessages([
+        "List workspaces, choose one document explicitly, then call document_inspect.",
+        `Run document_preflight with profile ${profile}. Explain warnings and errors before proposing a mutation or export.`,
+        "Do not read external resources, infer a document, or modify files while following this prompt.",
+      ]),
+  );
+  server.registerPrompt(
+    "prepare_web_export",
+    {
+      argsSchema: z.object({
+        preset: z.enum(["web-asset-pack", "web-png"]).default("web-png"),
+      }),
+      description:
+        "Visible no-side-effect checklist for a workspace-local web export.",
+      title: "Prepare web export",
+    },
+    ({ preset }) =>
+      promptMessages([
+        "Inspect the selected document and run the web preflight first.",
+        `If it is valid, prepare the ${preset} preset with an explicit expectedRevision and a new output directory.`,
+        "Ask for confirmation before executing document_export_batch; never overwrite an existing output.",
+      ]),
+  );
+  server.registerPrompt(
+    "prepare_print_pdf",
+    {
+      argsSchema: z.object({
+        preset: z
+          .enum(["print-a4-pdf", "print-pdf-300dpi"])
+          .default("print-a4-pdf"),
+      }),
+      description: "Visible no-side-effect checklist for a print PDF export.",
+      title: "Prepare print PDF",
+    },
+    ({ preset }) =>
+      promptMessages([
+        "Inspect page sizes and run print preflight, including bleed if the operator supplies it.",
+        `Plan ${preset} only after the selected document revision is explicit.`,
+        "Present preflight findings and request confirmation before any export publishes files.",
+      ]),
+  );
+  server.registerPrompt(
+    "create_asset_pack",
+    {
+      argsSchema: z.object({}),
+      description:
+        "Visible no-side-effect checklist for packaging approved local assets.",
+      title: "Create asset pack",
+    },
+    () =>
+      promptMessages([
+        "Inspect the document's local dependencies and collect an explicit license for each asset.",
+        "Use assets_package with a revision and a new output directory only after every dependency is accounted for.",
+        "Do not download, embed, or redistribute an asset whose license is unknown.",
+      ]),
+  );
+  server.registerPrompt(
+    "optimize_svg",
+    {
+      argsSchema: z.object({}),
+      description:
+        "Visible no-side-effect checklist for safe SVG optimization review.",
+      title: "Optimize SVG",
+    },
+    () =>
+      promptMessages([
+        "Inspect the source and explain which safe cleanup or conversion tools are available on this Inkscape build.",
+        "Keep an editable source and use a new output path or snapshot before a destructive operation.",
+        "Do not claim an external SVG optimizer is available unless its capability is observed and validated.",
+      ]),
+  );
+
+  server.registerTool(
+    "artifact_read_chunk",
+    {
+      description:
+        "Reads one owner-bound, bounded binary artifact chunk by opaque ID. Use resource links for ordinary artifact consumption.",
+      inputSchema: z.object({
+        artifactId: z.string().regex(/^art_[a-f0-9]{32}$/u),
+        length: z.number().int().min(1).max(config.maxResourceReadBytes),
+        offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+        workspaceId: z.string().regex(/^ws_[a-f0-9]{16}$/u),
+      }),
+      outputSchema: z.object({
+        artifactId: z.string().regex(/^art_[a-f0-9]{32}$/u),
+        bytesBase64: z
+          .string()
+          .max(Math.ceil((config.maxResourceReadBytes * 4) / 3) + 4),
+        hash: z.string().regex(/^[a-f0-9]{64}$/u),
+        length: z.number().int().nonnegative(),
+        mimeType: z.string(),
+        offset: z.number().int().nonnegative(),
+        size: z.number().int().nonnegative(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ artifactId, length, offset, workspaceId }) => {
+      await artifacts.removeExpired();
+      const chunk = await artifacts.readChunk(
+        artifactId,
+        workspaceId,
+        offset,
+        length,
+        config.maxResourceReadBytes,
+      );
+      const output = {
+        artifactId,
+        bytesBase64: chunk.bytes.toString("base64"),
+        hash: chunk.hash,
+        length: chunk.bytes.byteLength,
+        mimeType: "application/octet-stream",
+        offset,
+        size: chunk.size,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    },
   );
 
   server.registerTool(
@@ -6897,6 +7153,7 @@ export function buildServer(
         }),
         pages: z.array(pageSchema),
         revision: z.string().regex(/^[a-f0-9]{64}$/u),
+        resources: documentResourceLinksSchema,
         viewBox: z.object({
           height: z.number(),
           width: z.number(),
@@ -6985,9 +7242,31 @@ export function buildServer(
         ...(visualBounds === undefined ? {} : { visualBounds }),
         widthUnit: parseViewportLength(settings.width).unit,
       };
+      const resources = documentResources.register({
+        absolutePath: document.absolutePath,
+        metadata: {
+          height: output.height,
+          heightUnit: output.heightUnit,
+          normalization: output.normalization,
+          pages: output.pages,
+          revision: output.revision,
+          viewBox: output.viewBox,
+          width: output.width,
+          widthUnit: output.widthUnit,
+        },
+        owner: workspaceId,
+        revision,
+        summary: {
+          inspectionLevel: output.inspectionLevel,
+          pageCount: output.pages.length,
+          revision: output.revision,
+          warningCount: output.warnings.length,
+        },
+      });
+      const result = { ...output, resources };
       return {
-        content: [{ type: "text", text: JSON.stringify(output) }],
-        structuredContent: output,
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent: result,
       };
     },
   );
@@ -8177,6 +8456,9 @@ export function buildServer(
         }),
         z.object({
           jobId: z.string().regex(/^job_[a-f0-9]{32}$/u),
+          manifestUri: z
+            .string()
+            .regex(/^inkscape:\/\/export\/exp_[a-f0-9]{32}\/manifest$/u),
           status: z.enum(["queued", "running"]),
         }),
       ]),
@@ -8411,7 +8693,15 @@ export function buildServer(
           const response = await execute(options);
           return response.structuredContent;
         });
-        const result = { jobId: job.id, status: job.status };
+        const manifestResource = exportManifestResources.register(
+          job.id,
+          workspaceId,
+        );
+        const result = {
+          jobId: job.id,
+          manifestUri: manifestResource.uri,
+          status: job.status,
+        };
         return {
           content: [{ type: "text" as const, text: JSON.stringify(result) }],
           structuredContent: result,
@@ -10580,6 +10870,72 @@ async function artifactResource(
         blob: chunk.bytes.toString("base64"),
         mimeType: "application/octet-stream",
         uri,
+      },
+    ],
+  };
+}
+
+async function documentResource(
+  resources: DocumentResourceStore,
+  id: string | undefined,
+  kind: "metadata" | "summary" | "svg",
+  uri: string,
+  maximumReadBytes: number,
+): Promise<{
+  contents: Array<{ mimeType: string; text: string; uri: string }>;
+}> {
+  if (id === undefined || !/^doc_[a-f0-9]{32}$/u.test(id))
+    throw new Error("Document resource URI is invalid");
+  await resources.removeExpired();
+  const resource = await resources.readCapability(id, kind, maximumReadBytes);
+  return {
+    contents: [{ mimeType: resource.mimeType, text: resource.text, uri }],
+  };
+}
+
+async function exportManifestResource(
+  resources: ExportManifestResourceStore,
+  jobs: JobStore,
+  id: string | undefined,
+  uri: string,
+): Promise<{
+  contents: Array<{ mimeType: string; text: string; uri: string }>;
+}> {
+  if (id === undefined || !/^exp_[a-f0-9]{32}$/u.test(id))
+    throw new Error("Export manifest resource URI is invalid");
+  await resources.removeExpired();
+  const reference = await resources.resolve(id);
+  const job = jobs.get<{ manifest?: unknown }>(
+    reference.jobId,
+    reference.owner,
+  );
+  if (job.status !== "completed" || job.result?.manifest === undefined)
+    throw new Error("Export manifest resource is not available");
+  return jsonResource(uri, job.result.manifest);
+}
+
+function jsonResource(
+  uri: string,
+  value: unknown,
+): { contents: Array<{ mimeType: string; text: string; uri: string }> } {
+  return {
+    contents: [
+      { mimeType: "application/json", text: JSON.stringify(value), uri },
+    ],
+  };
+}
+
+function promptMessages(lines: readonly string[]): {
+  messages: Array<{
+    content: { text: string; type: "text" };
+    role: "user";
+  }>;
+} {
+  return {
+    messages: [
+      {
+        content: { text: lines.join("\n"), type: "text" },
+        role: "user",
       },
     ],
   };

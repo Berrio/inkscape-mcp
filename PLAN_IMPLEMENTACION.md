@@ -1967,11 +1967,11 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 #### Resources y prompts
 
-- [ ] `F09-T07` Consolidar el registry opaco existente para document/artifact/job URIs con TTL/autorización uniforme.
-- [ ] `F09-T08` Registrar capabilities, presets, metadata, summary, svg opt-in, artifacts y manifests.
-- [ ] `F09-T09` Implementar `resource_link`, template de chunks y `artifact_read_chunk` para artefactos grandes, con MIME, owner, hash, offset/length y `maxResourceReadBytes`; probar que stdio nunca carga/transmite el blob completo por accidente.
-- [ ] `F09-T10` Implementar prompts audit/web/print/asset/optimize sin side effects ocultos.
-- [ ] `F09-T11` Probar URI enumeration, acceso cruzado y expiración.
+- [x] `F09-T07` Consolidar el registry opaco existente para document/artifact/job URIs con TTL/autorización uniforme. — Documentos, artefactos y manifests de jobs usan capabilities aleatorias sin rutas; los documentos revalidan revisión en cada lectura, los chunks siguen owner-bound y los manifests conservan owner internamente hasta expirar.
+- [x] `F09-T08` Registrar capabilities, presets, metadata, summary, svg opt-in, artifacts y manifests. — Resources estáticos redaccionados publican capabilities y catálogos de presets; `document_inspect` emite links opacos de metadata/summary/SVG limitado y los jobs devuelven su manifest resource opaco.
+- [x] `F09-T09` Implementar `resource_link`, template de chunks y `artifact_read_chunk` para artefactos grandes, con MIME, owner, hash, offset/length y `maxResourceReadBytes`; probar que stdio nunca carga/transmite el blob completo por accidente. — Los templates de artifact/document/export no se enumeran; `artifact_read_chunk` requiere owner y limita cada buffer a `maxResourceReadBytes`, devolviendo sólo hash, offset, longitud y chunk acotado.
+- [x] `F09-T10` Implementar prompts audit/web/print/asset/optimize sin side effects ocultos. — Los cinco prompts son mensajes de receta explícitos con argumentos enum cerrados y no invocan tools ni filesystem.
+- [x] `F09-T11` Probar URI enumeration, acceso cruzado y expiración. — Las pruebas unitarias cubren owner distinto, URI opaca, revisión stale, límite y TTL; el smoke stdio comprueba que documentos no se enumeran, los roots no se filtran, chunks de otro workspace fallan y los manifests expiran por capability.
 
 #### Progreso, cancelación y jobs
 

@@ -18,6 +18,19 @@ un cliente antiguo: consulta `tools/list` después de actualizar el paquete.
 - Las tools con `action` o `mode` son uniones discriminadas: usa sólo los
   valores que anuncie su schema. Campos desconocidos se rechazan.
 
+## Resources y prompts
+
+`resources/list` anuncia únicamente `inkscape://server/capabilities` y los
+catálogos de presets. `document_inspect` devuelve enlaces opacos a metadata,
+summary y SVG explícitamente solicitado; estos expiran y dejan de funcionar si
+la revisión cambia. Los artefactos se leen por `resource_link`/chunks o con
+`artifact_read_chunk`, que exige el workspace dueño, hash, offset y longitud
+acotada. Las URIs no contienen rutas de Windows ni se enumeran por documento.
+
+Los prompts `audit_document`, `prepare_web_export`, `prepare_print_pdf`,
+`create_asset_pack` y `optimize_svg` sólo devuelven una receta visible: no leen,
+mutan ni exportan archivos por sí mismos.
+
 Flujo base para una edición: `workspace_list` → `workspace_list_documents` →
 `document_inspect` → mutación con revisión → volver a inspeccionar. Para una
 exportación: inspección → `document_export_preset_plan` →
@@ -123,6 +136,7 @@ exportación: inspección → `document_export_preset_plan` →
 | `images_trace`             | Preset `default`, máximo 4 MP y confirmación.          | Vectorizar un bitmap local mediante Inkscape.                     |
 | `images_inspect_dpi`       | Documento y selección opcional de imágenes.            | Comprobar DPI X/Y efectivo antes de imprenta.                     |
 | `resources_inspect_remote` | Documento; sólo inspección.                            | Localizar URLs sin descargarlas.                                  |
+| `artifact_read_chunk`      | ID opaco, owner workspace, offset y longitud acotados. | Leer una parte verificable de un artefacto grande sin path local. |
 | `accessibility_inspect`    | Documento, fondo opaco conocido y límites de análisis. | Revisar orden y contraste heurístico, no auditoría WCAG completa. |
 
 ## Importación y empaquetado

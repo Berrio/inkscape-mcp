@@ -166,7 +166,13 @@ async function run() {
       name: "document_render_preview",
     });
     const artifact = preview.structuredContent?.artifact;
-    if (preview.isError || typeof artifact?.id !== "string")
+    if (
+      preview.isError ||
+      typeof artifact?.id !== "string" ||
+      !preview.content.some(
+        (item) => item.type === "image" && item.mimeType === "image/png",
+      )
+    )
       throw new Error("preview did not publish an artifact resource");
     const chunk = await client.callTool({
       arguments: {
@@ -283,7 +289,7 @@ async function run() {
     )
       throw new Error("batch job did not publish an opaque manifest resource");
     let completed = false;
-    for (let attempt = 0; attempt < 80; attempt += 1) {
+    for (let attempt = 0; attempt < 160; attempt += 1) {
       const status = await client.callTool({
         arguments: { jobId, workspaceId: workspace.id },
         name: "job_get",
@@ -348,7 +354,7 @@ async function run() {
     if (cancelled.isError)
       throw new Error("could not cancel an owned export job");
     let cancellationFinished = false;
-    for (let attempt = 0; attempt < 80; attempt += 1) {
+    for (let attempt = 0; attempt < 160; attempt += 1) {
       const status = await client.callTool({
         arguments: { jobId: cancelledJobId, workspaceId: workspace.id },
         name: "job_get",

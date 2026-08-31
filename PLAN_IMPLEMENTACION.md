@@ -1984,12 +1984,12 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 #### Compatibilidad y test MCP
 
-- [ ] `F09-T18` Pruebas del handler en proceso con cliente SDK fijado y negociación moderna exacta `2026-07-28`, aunque HTTP público llegue en F10.
-- [ ] `F09-T19` InMemoryTransport con una versión legacy explícita soportada por la matriz; no inferir era por usar SDK v2 ni aceptar versiones desconocidas silenciosamente.
-- [ ] `F09-T20` Stdio real con `StdioClientTransport`: casos moderno y legacy fijados, más rechazo/negociación correcta de una versión no soportada.
-- [ ] `F09-T21` Probar structuredContent, texto compatible, images, resource links y errores.
-- [ ] `F09-T22` Probar catálogo y schemas por snapshot determinista.
-- [ ] `F09-T23` Ejecutar Inspector oficial fijado en lockfile por stdio mediante `npm run inspect`; no descargar `latest` durante la prueba.
+- [x] `F09-T18` Pruebas del handler en proceso con cliente SDK fijado y negociación moderna exacta `2026-07-28`, aunque HTTP público llegue en F10. — El test in-process inicia únicamente un listener loopback efímero, negocia el handler con el cliente SDK fijado y comprueba era/version moderna antes de cerrarlo.
+- [x] `F09-T19` InMemoryTransport con una versión legacy explícita soportada por la matriz; no inferir era por usar SDK v2 ni aceptar versiones desconocidas silenciosamente. — `InMemoryTransport` cubre el handshake legacy `2025-11-25` y afirma la era negociada; un intento pinned `2099-01-01` recibe el error tipado de versión no soportada.
+- [x] `F09-T20` Stdio real con `StdioClientTransport`: casos moderno y legacy fijados, más rechazo/negociación correcta de una versión no soportada. — El smoke stdio compara dos catálogos modernos, enumera el catálogo legacy y exige el mismo conjunto de tools; la sonda pinned desconocida falla explícitamente.
+- [x] `F09-T21` Probar structuredContent, texto compatible, images, resource links y errores. — Las pruebas comprueban texto/structuredContent equivalente, error recuperable, preview inline `image/png` y preview grande como `resource_link` opaco sin root.
+- [x] `F09-T22` Probar catálogo y schemas por snapshot determinista. — La huella SHA-256 del catálogo ordenado (nombre, descripción, annotations, schemas de entrada/salida) se fija en prueba in-process y falla ante cualquier cambio contractual.
+- [x] `F09-T23` Ejecutar Inspector oficial fijado en lockfile por stdio mediante `npm run inspect`; no descargar `latest` durante la prueba. — `test:f09-wp04` usa el launcher Inspector 2.3.0 ya fijado en `node_modules`, en modo CLI `tools/list`, sin red ni `latest`; exige el catálogo tipado esperado. `npm run inspect` conserva la apertura manual del Inspector.
 
 #### Logging/telemetría
 

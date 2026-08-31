@@ -97,13 +97,16 @@ function assertToolAnnotationsAndOutputSchemas(tools) {
   }
 }
 
-async function inspectCatalog(label) {
+async function inspectCatalog(
+  label,
+  versionNegotiation = { mode: { pin: "2026-07-28" } },
+) {
   const client = new Client(
     {
       name: `inkscape-mcp-f09-contract-${label}`,
       version: packageMetadata.version,
     },
-    { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+    { versionNegotiation },
   );
   const transport = new StdioClientTransport(server);
   try {
@@ -153,6 +156,28 @@ async function inspectCatalog(label) {
   } finally {
     await client.close();
   }
+}
+
+async function assertUnsupportedPinnedVersionIsRejected() {
+  const client = new Client(
+    {
+      name: "inkscape-mcp-f09-unsupported-version",
+      version: packageMetadata.version,
+    },
+    { versionNegotiation: { mode: { pin: "2099-01-01" } } },
+  );
+  const transport = new StdioClientTransport(server);
+  try {
+    await client.connect(transport);
+  } catch (error) {
+    if (!String(error).includes("Unsupported protocol version")) throw error;
+    return;
+  } finally {
+    await client.close();
+  }
+  throw new Error(
+    "stdio server silently accepted an unsupported protocol version",
+  );
 }
 
 async function assertInvalidProtocolReturnsJsonRpcError() {
@@ -297,7 +322,14 @@ async function assertJobProgressIsObservable() {
     const jobId = submitted.structuredContent?.jobId;
     if (submitted.isError || typeof jobId !== "string")
       throw new Error("document_export_batch did not create a job");
-    const stageOrder = { publishing: 2, rendering: 1 };
+    const stageOrder = {
+      completed: 6,
+      publishing: 5,
+      rendering: 3,
+      staging: 2,
+      validated: 1,
+      verifying: 4,
+    };
     let previous = 0;
     let observed = false;
     for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -333,6 +365,17 @@ const firstCatalog = await inspectCatalog("first");
 const secondCatalog = await inspectCatalog("second");
 if (firstCatalog !== secondCatalog)
   throw new Error("two fresh stdio servers emitted different tool catalogs");
+const legacyCatalog = await inspectCatalog("legacy", { mode: "legacy" });
+const toolNames = (catalog) =>
+  JSON.parse(catalog)
+    .map((tool) => tool.name)
+    .sort();
+if (
+  JSON.stringify(toolNames(legacyCatalog)) !==
+  JSON.stringify(toolNames(firstCatalog))
+)
+  throw new Error("legacy stdio negotiation changed the advertised tool names");
+await assertUnsupportedPinnedVersionIsRejected();
 await assertInvalidProtocolReturnsJsonRpcError();
 await assertJobProgressIsObservable();
 

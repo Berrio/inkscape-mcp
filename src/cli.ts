@@ -22,6 +22,7 @@ import { formatDoctor, runDoctor } from "./doctor/index.js";
 import { readHttpBearerToken, startHttpMcpServer } from "./http.js";
 import { buildServer } from "./server/index.js";
 import { writeStdioLog } from "./server/stdio-logging.js";
+import { InternalTelemetry } from "./server/telemetry.js";
 import { recoverStaleScratch } from "./storage/index.js";
 
 const usage = `inkscape-mcp ${packageMetadata.version}
@@ -118,11 +119,12 @@ if (argument === "--help" || argument === "-h") {
       process.once("SIGINT", stop);
       process.once("SIGTERM", stop);
     } else {
-      writeStdioLog("stdio_listening");
+      const telemetry = new InternalTelemetry();
+      writeStdioLog("stdio_listening", { telemetry });
       serveStdio(() => buildServer(config), {
         legacy: "serve",
         onerror: (error) =>
-          writeStdioLog("stdio_error", { error: error.message }),
+          writeStdioLog("stdio_error", { error: error.message, telemetry }),
       });
     }
   } catch (error: unknown) {

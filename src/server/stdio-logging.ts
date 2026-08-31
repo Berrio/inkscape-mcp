@@ -1,4 +1,5 @@
 import { redactDiagnostic } from "../config/index.js";
+import { type InternalTelemetry } from "./telemetry.js";
 
 export type StdioLogEvent = "stdio_error" | "stdio_listening";
 
@@ -7,9 +8,11 @@ export function writeStdioLog(
   event: StdioLogEvent,
   options: {
     error?: string;
+    telemetry?: InternalTelemetry;
     write?: (line: string) => void;
   } = {},
 ): void {
+  const finishSpan = options.telemetry?.start(event);
   const record = {
     component: "inkscape-mcp",
     ...(options.error === undefined
@@ -21,4 +24,5 @@ export function writeStdioLog(
   (options.write ?? process.stderr.write.bind(process.stderr))(
     `${JSON.stringify(record)}\n`,
   );
+  finishSpan?.(event === "stdio_error" ? "error" : "ok");
 }

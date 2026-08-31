@@ -1994,8 +1994,8 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 #### Logging/telemetría
 
 - [x] `F09-T24` Logger estructurado a stderr en stdio; prohibir `console.log` por lint/test. — `stdio-logging` emite eventos JSON redaccionados para arranque/error y ESLint rechaza `console` en source/test TypeScript; una prueba verifica que el logger no filtra token ni ruta Windows.
-- [ ] `F09-T25` No basar diseño nuevo en MCP logging, deprecado en la revisión 2026-07-28.
-- [ ] `F09-T26` Añadir metrics/traces internas sin filtrar documentos/paths.
+- [x] `F09-T25` No basar diseño nuevo en MCP logging, deprecado en la revisión 2026-07-28. — El diagnóstico sigue siendo stderr local y la telemetría es una clase interna sin tool, resource, notification ni llamada `logging/*` MCP.
+- [x] `F09-T26` Añadir metrics/traces internas sin filtrar documentos/paths. — `InternalTelemetry` sólo acepta dos nombres allowlisted de ciclo stdio, conserva contador/duración/resultado y un máximo de 100 spans; no admite labels, payloads, exporters ni persistencia.
 
 #### Puerta F09
 

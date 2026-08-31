@@ -139,6 +139,7 @@ import {
   planAlignment,
   planDistribution,
   planRemoveOverlaps,
+  toCssPixels,
   unionLayoutBounds,
   type LayoutBounds,
   type LayoutMove,
@@ -182,6 +183,7 @@ import {
 } from "../export/index.js";
 import {
   parseInkscapeQueryAll,
+  queryBoundsToSvgUserUnits,
   type InkscapeBounds,
 } from "../inkscape/index.js";
 import { ProcessRunner } from "../runner/index.js";
@@ -10841,7 +10843,11 @@ function isLikelyEncryptedPdf(bytes: Uint8Array): boolean {
       index = skipPdfLiteralString(bytes, index);
       continue;
     }
-    if (byte === 0x3c && bytes[index + 1] !== 0x3c) {
+    if (byte === 0x3c && bytes[index + 1] === 0x3c) {
+      index += 1;
+      continue;
+    }
+    if (byte === 0x3c) {
       while (index < bytes.length && bytes[index] !== 0x3e) index += 1;
       continue;
     }
@@ -11550,13 +11556,32 @@ async function queryNativeBounds(request: {
     if (result.exitCode !== 0 || result.terminationReason !== "completed")
       throw new Error("Inkscape bounds query failed");
     await nativeInput.assertCurrent();
+    const settings = inspectSvgSettings(
+      await readFile(nativeInput.path, "utf8"),
+    );
+    const viewport =
+      settings.normalization.width.source === "explicit" &&
+      settings.normalization.height.source === "explicit"
+        ? {
+            heightPx: toCssPixels(parseViewportLength(settings.height)),
+            viewBox: settings.viewBox,
+            widthPx: toCssPixels(parseViewportLength(settings.width)),
+          }
+        : undefined;
     return new Map(
       [...parseInkscapeQueryAll(result.stdout.toString("utf8"))].flatMap(
         ([nativeId, bounds]) => {
           const originalId = remapped.originalIdByNativeId.get(nativeId);
           return originalId === undefined
             ? []
-            : [[originalId, bounds] as const];
+            : [
+                [
+                  originalId,
+                  viewport === undefined
+                    ? bounds
+                    : queryBoundsToSvgUserUnits(bounds, viewport),
+                ] as const,
+              ];
         },
       ),
     );

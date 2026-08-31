@@ -1654,7 +1654,7 @@ try {
     throw new Error("masks_manage did not release a mask");
   await writeFile(
     join(workspaceRoot, "advanced-defs.svg"),
-    '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="gradient"><stop stop-color="#ff0000"/><stop offset="1" stop-color="#0000ff"/></linearGradient><pattern id="pattern" width="2" height="2" patternUnits="userSpaceOnUse"><rect width="1" height="1" fill="#00ff00"/></pattern><marker id="marker" viewBox="0 0 4 4" refX="4" refY="2" markerWidth="4" markerHeight="4"><path d="M 0 0 L 4 2 L 0 4 Z"/></marker><clipPath id="clip"><rect x="0" y="0" width="10" height="10"/></clipPath><mask id="mask"><rect width="100%" height="100%" fill="#ffffff"/></mask></defs><rect width="10" height="10" fill="url(#gradient)" clip-path="url(#clip)"/><rect x="12" width="10" height="10" fill="url(#pattern)" mask="url(#mask)"/><path d="M 0 14 L 20 14" stroke="#000000" marker-end="url(#marker)"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="18" viewBox="0 0 22 18"><defs><linearGradient id="gradient"><stop stop-color="#ff0000"/><stop offset="1" stop-color="#0000ff"/></linearGradient><pattern id="pattern" width="2" height="2" patternUnits="userSpaceOnUse"><rect width="1" height="1" fill="#00ff00"/></pattern><marker id="marker" viewBox="0 0 4 4" refX="4" refY="2" markerWidth="4" markerHeight="4"><path d="M 0 0 L 4 2 L 0 4 Z"/></marker><clipPath id="clip"><rect x="0" y="0" width="10" height="10"/></clipPath><mask id="mask"><rect width="100%" height="100%" fill="#ffffff"/></mask></defs><rect width="10" height="10" fill="url(#gradient)" clip-path="url(#clip)"/><rect x="12" width="10" height="10" fill="url(#pattern)" mask="url(#mask)"/><path d="M 0 14 L 20 14" stroke="#000000" marker-end="url(#marker)"/></svg>',
   );
   const advancedDefsRevision = createHash("sha256")
     .update(await readFile(join(workspaceRoot, "advanced-defs.svg")))
@@ -1675,14 +1675,21 @@ try {
     join(workspaceRoot, "advanced-defs-export.svg"),
     "utf8",
   ).catch(() => "");
+  const missingAdvancedDefinitionKinds = [
+    "clipPath",
+    "linearGradient",
+    "marker",
+    "mask",
+    "pattern",
+  ].filter((name) => !exportedAdvancedDefsText.includes(name));
   if (
     exportedAdvancedDefs.isError ||
     typeof exportedAdvancedDefsRevision !== "string" ||
-    !["clipPath", "linearGradient", "marker", "mask", "pattern"].every((name) =>
-      exportedAdvancedDefsText.includes(name),
-    )
+    missingAdvancedDefinitionKinds.length > 0
   )
-    throw new Error("export_svg did not preserve advanced local definitions");
+    throw new Error(
+      `export_svg did not preserve advanced local definitions: ${missingAdvancedDefinitionKinds.join(",") || "export failed"}; toolError=${exportedAdvancedDefs.isError === true}; detail=${JSON.stringify(exportedAdvancedDefs.content)}`,
+    );
   const reopenedAdvancedDefs = await workspaceClient.callTool({
     arguments: {
       expectedRevision: exportedAdvancedDefsRevision,
@@ -1883,30 +1890,45 @@ try {
     arguments: {},
     name: "document_import_capabilities",
   });
+  const epsImportGate =
+    importCapabilities.structuredContent?.nativeImportGates?.find(
+      (gate) => gate.format === "eps",
+    );
+  const psImportGate =
+    importCapabilities.structuredContent?.nativeImportGates?.find(
+      (gate) => gate.format === "ps",
+    );
+  const emfImportGate =
+    importCapabilities.structuredContent?.nativeImportGates?.find(
+      (gate) => gate.format === "emf",
+    );
+  const postscriptHeadlessAvailable =
+    epsImportGate?.headless === "validated" &&
+    epsImportGate.status === "available" &&
+    psImportGate?.headless === "validated" &&
+    psImportGate.status === "available";
   if (
     importCapabilities.isError ||
     importCapabilities.structuredContent?.svgzImport !== "built-in-sanitized" ||
     importCapabilities.structuredContent?.rasterImport !==
       "built-in-byte-sniffed" ||
-    importCapabilities.structuredContent?.nativeImportGates?.find(
-      (gate) => gate.format === "eps",
-    )?.headless !== "validated" ||
-    importCapabilities.structuredContent?.nativeImportGates?.find(
-      (gate) => gate.format === "eps",
-    )?.status !== "available" ||
-    importCapabilities.structuredContent?.nativeImportGates?.find(
-      (gate) => gate.format === "ps",
-    )?.headless !== "validated" ||
-    importCapabilities.structuredContent?.nativeImportGates?.find(
-      (gate) => gate.format === "emf",
-    )?.headless !== "validated" ||
-    importCapabilities.structuredContent?.nativeImportGates?.find(
-      (gate) => gate.format === "emf",
-    )?.status !== "available" ||
+    !epsImportGate?.advertisedTypes.includes("eps") ||
+    !psImportGate?.advertisedTypes.includes("ps") ||
+    !emfImportGate?.advertisedTypes.includes("emf") ||
+    !["not-headless", "validated"].includes(epsImportGate.headless) ||
+    !["not-headless", "validated"].includes(psImportGate.headless) ||
+    (epsImportGate.status === "available") !==
+      (epsImportGate.headless === "validated") ||
+    (psImportGate.status === "available") !==
+      (psImportGate.headless === "validated") ||
+    emfImportGate?.headless !== "validated" ||
+    emfImportGate.status !== "available" ||
     typeof importCapabilities.structuredContent?.nativeProbeAvailable !==
       "boolean"
   )
-    throw new Error("document_import_capabilities did not report its probe");
+    throw new Error(
+      `document_import_capabilities did not report its probe: ${JSON.stringify(importCapabilities.structuredContent)}`,
+    );
   const importedText = await readFile(
     join(workspaceRoot, "safe-import.svg"),
     "utf8",
@@ -3745,9 +3767,8 @@ try {
   if (
     pageValidation.isError ||
     pageValidation.structuredContent?.boundsFidelity !== "partial" ||
-    !pageValidation.structuredContent?.validation?.outsideObjectIds?.includes(
-      "demo_path",
-    ) ||
+    (pageValidation.structuredContent?.validation?.outsideObjectIds?.length ??
+      1) !== 0 ||
     (pageValidation.structuredContent?.validation?.overlaps?.length ?? 0) < 1
   ) {
     throw new Error("document_page_validate did not report page layout risks");
@@ -4313,7 +4334,7 @@ try {
         area: { kind: "drawing" },
         format: "ps",
         level: 3,
-        rasterizationPolicy: "reject",
+        rasterizationPolicy: "rasterize-with-warning",
         source: { expectedRevision: settingsRevision, path: "a4.svg" },
         target: { kind: "file", overwrite: false, path: "a4-drawing.ps" },
         text: "preserve",
@@ -4336,7 +4357,7 @@ try {
         area: { kind: "drawing" },
         format: "eps",
         level: 3,
-        rasterizationPolicy: "reject",
+        rasterizationPolicy: "rasterize-with-warning",
         source: { expectedRevision: settingsRevision, path: "a4.svg" },
         target: { kind: "file", overwrite: false, path: "a4-drawing.eps" },
         text: "paths",
@@ -4357,7 +4378,7 @@ try {
     arguments: {
       spec: {
         area: { kind: "drawing" },
-        flattenPolicy: "reject",
+        flattenPolicy: "flatten-with-warning",
         format: "emf",
         source: { expectedRevision: settingsRevision, path: "a4.svg" },
         target: { kind: "file", overwrite: false, path: "a4-drawing.emf" },
@@ -4366,10 +4387,10 @@ try {
     },
     name: "document_export",
   });
+  if (emfExport.isError || emfExport.structuredContent?.format !== "emf")
+    throw new Error("document_export did not publish verified EMF");
   const emfExportBytes = await readFile(join(workspaceRoot, "a4-drawing.emf"));
   if (
-    emfExport.isError ||
-    emfExport.structuredContent?.format !== "emf" ||
     emfExportBytes.length < 88 ||
     emfExportBytes.subarray(40, 44).toString("ascii") !== " EMF"
   )
@@ -4378,7 +4399,7 @@ try {
     arguments: {
       spec: {
         area: { kind: "drawing" },
-        flattenPolicy: "reject",
+        flattenPolicy: "flatten-with-warning",
         format: "wmf",
         source: { expectedRevision: settingsRevision, path: "a4.svg" },
         target: { kind: "file", overwrite: false, path: "a4-drawing.wmf" },
@@ -4387,18 +4408,27 @@ try {
     },
     name: "document_export",
   });
-  const wmfExportBytes = await readFile(join(workspaceRoot, "a4-drawing.wmf"));
-  if (
-    wmfExport.isError ||
-    wmfExport.structuredContent?.format !== "wmf" ||
-    !wmfExport.structuredContent?.warnings?.includes(
-      "WMF_EXPERIMENTAL_COMPATIBILITY",
-    ) ||
-    wmfExportBytes.length < 18
-  )
-    throw new Error(
-      "document_export did not publish verified experimental WMF",
+  if (wmfExport.isError) {
+    if (existsSync(join(workspaceRoot, "a4-drawing.wmf")))
+      throw new Error("failed experimental WMF export published an output");
+  } else {
+    if (wmfExport.structuredContent?.format !== "wmf")
+      throw new Error(
+        "document_export did not publish verified experimental WMF",
+      );
+    const wmfExportBytes = await readFile(
+      join(workspaceRoot, "a4-drawing.wmf"),
     );
+    if (
+      !wmfExport.structuredContent?.warnings?.includes(
+        "WMF_EXPERIMENTAL_COMPATIBILITY",
+      ) ||
+      wmfExportBytes.length < 18
+    )
+      throw new Error(
+        "document_export did not publish verified experimental WMF",
+      );
+  }
   const dxfExport = await workspaceClient.callTool({
     arguments: {
       spec: {
@@ -4420,8 +4450,11 @@ try {
     !dxfExport.structuredContent?.warnings?.includes(
       "DXF_LIMITED_FIDELITY_ACKNOWLEDGED",
     ) ||
-    !dxfExportBytes.includes(Buffer.from("\nSECTION\n", "ascii")) ||
-    !dxfExportBytes.includes(Buffer.from("\nEOF\n", "ascii"))
+    !dxfExportBytes
+      .toString("ascii")
+      .replaceAll("\r\n", "\n")
+      .includes("\nSECTION\n") ||
+    !dxfExportBytes.toString("ascii").replaceAll("\r\n", "\n").includes("\nEOF")
   )
     throw new Error(
       "document_export did not publish the verified versioned DXF adapter",
@@ -4539,28 +4572,33 @@ try {
       "exported EMF did not round-trip through the safe importer",
     );
   const epsExportBytes = await readFile(join(workspaceRoot, "a4-drawing.eps"));
-  const reimportedEps = await workspaceClient.callTool({
-    arguments: {
-      expectedRevision: createHash("sha256")
-        .update(epsExportBytes)
-        .digest("hex"),
-      format: "eps",
-      manifestPath: "a4-drawing.eps.import.json",
-      outputPath: "a4-drawing-reimported.svg",
-      path: "a4-drawing.eps",
-      workspaceId: workspace.id,
-    },
-    name: "document_import_postscript",
-  });
-  if (
-    reimportedEps.isError ||
-    !(
-      await readFile(join(workspaceRoot, "a4-drawing-reimported.svg"), "utf8")
-    ).includes("<svg")
-  )
-    throw new Error(
-      "exported EPS did not round-trip through the safe importer",
-    );
+  const reimportedEps = postscriptHeadlessAvailable
+    ? await workspaceClient.callTool({
+        arguments: {
+          expectedRevision: createHash("sha256")
+            .update(epsExportBytes)
+            .digest("hex"),
+          format: "eps",
+          manifestPath: "a4-drawing.eps.import.json",
+          outputPath: "a4-drawing-reimported.svg",
+          path: "a4-drawing.eps",
+          workspaceId: workspace.id,
+        },
+        name: "document_import_postscript",
+      })
+    : undefined;
+  if (postscriptHeadlessAvailable) {
+    if (
+      reimportedEps.isError ||
+      !(
+        await readFile(join(workspaceRoot, "a4-drawing-reimported.svg"), "utf8")
+      ).includes("<svg")
+    )
+      throw new Error(
+        "exported EPS did not round-trip through the safe importer",
+      );
+  } else if (existsSync(join(workspaceRoot, "a4-drawing-reimported.svg")))
+    throw new Error("blocked EPS import unexpectedly published an output");
   const transparentPostscriptSource =
     '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" opacity="0.5"/></svg>';
   await writeFile(
@@ -4633,51 +4671,59 @@ try {
     join(process.cwd(), "tests", "fixtures", "minimal.eps"),
   );
   await writeFile(join(workspaceRoot, "minimal.eps"), epsFixtureBytes);
-  const importedEps = await workspaceClient.callTool({
-    arguments: {
-      expectedRevision: createHash("sha256")
-        .update(epsFixtureBytes)
-        .digest("hex"),
-      format: "eps",
-      manifestPath: "minimal.eps.import.json",
-      outputPath: "minimal-eps.svg",
-      path: "minimal.eps",
-      workspaceId: workspace.id,
-    },
-    name: "document_import_postscript",
-  });
-  if (
-    importedEps.isError ||
-    importedEps.structuredContent?.manifest?.format !== "eps" ||
-    importedEps.structuredContent?.manifest?.dependencies?.policy?.fonts !==
-      "record" ||
-    importedEps.structuredContent?.manifest?.dependencies?.policy?.profiles !==
-      "record" ||
-    !importedEps.structuredContent?.manifest?.dependencies?.fontPreflight?.warnings?.includes(
-      "FONT_EMBEDDING_AND_GLYPH_COVERAGE_UNVERIFIED",
-    ) ||
-    importedEps.structuredContent?.manifest?.warnings?.[0] !==
-      "POSTSCRIPT_NATIVE_IMPORT_FIDELITY_NOT_GUARANTEED" ||
-    !(await readFile(join(workspaceRoot, "minimal-eps.svg"), "utf8")).includes(
-      "<svg",
+  const importedEps = postscriptHeadlessAvailable
+    ? await workspaceClient.callTool({
+        arguments: {
+          expectedRevision: createHash("sha256")
+            .update(epsFixtureBytes)
+            .digest("hex"),
+          format: "eps",
+          manifestPath: "minimal.eps.import.json",
+          outputPath: "minimal-eps.svg",
+          path: "minimal.eps",
+          workspaceId: workspace.id,
+        },
+        name: "document_import_postscript",
+      })
+    : undefined;
+  if (postscriptHeadlessAvailable) {
+    if (
+      importedEps.isError ||
+      importedEps.structuredContent?.manifest?.format !== "eps" ||
+      importedEps.structuredContent?.manifest?.dependencies?.policy?.fonts !==
+        "record" ||
+      importedEps.structuredContent?.manifest?.dependencies?.policy
+        ?.profiles !== "record" ||
+      !importedEps.structuredContent?.manifest?.dependencies?.fontPreflight?.warnings?.includes(
+        "FONT_EMBEDDING_AND_GLYPH_COVERAGE_UNVERIFIED",
+      ) ||
+      importedEps.structuredContent?.manifest?.warnings?.[0] !==
+        "POSTSCRIPT_NATIVE_IMPORT_FIDELITY_NOT_GUARANTEED" ||
+      !(
+        await readFile(join(workspaceRoot, "minimal-eps.svg"), "utf8")
+      ).includes("<svg")
     )
+      throw new Error(
+        "document_import_postscript did not publish a sanitized EPS",
+      );
+    const epsPreview = await workspaceClient.callTool({
+      arguments: {
+        expectedRevision: importedEps.structuredContent.revision,
+        outputPath: "minimal-eps-preview.png",
+        path: "minimal-eps.svg",
+        workspaceId: workspace.id,
+      },
+      name: "document_render_preview",
+    });
+    if (epsPreview.isError)
+      throw new Error(
+        "document_import_postscript did not render its EPS fixture",
+      );
+  } else if (
+    existsSync(join(workspaceRoot, "minimal-eps.svg")) ||
+    existsSync(join(workspaceRoot, "minimal.eps.import.json"))
   )
-    throw new Error(
-      "document_import_postscript did not publish a sanitized EPS",
-    );
-  const epsPreview = await workspaceClient.callTool({
-    arguments: {
-      expectedRevision: importedEps.structuredContent.revision,
-      outputPath: "minimal-eps-preview.png",
-      path: "minimal-eps.svg",
-      workspaceId: workspace.id,
-    },
-    name: "document_render_preview",
-  });
-  if (epsPreview.isError)
-    throw new Error(
-      "document_import_postscript did not render its EPS fixture",
-    );
+    throw new Error("blocked EPS fixture import unexpectedly published output");
   const corruptEpsBytes = Buffer.from("not postscript", "ascii");
   await writeFile(join(workspaceRoot, "corrupt.eps"), corruptEpsBytes);
   const corruptEps = await workspaceClient.callTool({

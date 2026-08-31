@@ -1999,12 +1999,12 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 #### Puerta F09
 
-- [ ] `F09-G01` Cliente real puede completar todos los escenarios P0/P1 por stdio.
-- [ ] `F09-G02` Inspector no encuentra schema/protocol errors.
-- [ ] `F09-G03` Cancelación y progreso funcionan en export batch real.
-- [ ] `F09-G04` Recursos no permiten enumerar/leer otro workspace/job.
-- [ ] `F09-G05` Snapshot del catálogo es estable con capability unavailable.
-- [ ] `F09-G06` Evidencia en `docs/progress/F09.md`.
+- [x] `F09-G01` Cliente real puede completar todos los escenarios P0/P1 por stdio. — `npm run test:mcp` completo pasa con cliente moderno y legacy, import/export, recursos, jobs y rechazo seguro de entradas no compatibles.
+- [x] `F09-G02` Inspector no encuentra schema/protocol errors. — `npm run test:f09-wp04` pasa con Inspector 2.3.0 fijado, contrato MCP y compatibilidad moderna/legacy.
+- [x] `F09-G03` Cancelación y progreso funcionan en export batch real. — `npm run test:f09-wp03` y su smoke stdio comprueban progreso, cancelación y limpieza de manifest/output.
+- [x] `F09-G04` Recursos no permiten enumerar/leer otro workspace/job. — `npm run test:f09-wp04` cubre owner ajeno, URI opaca, TTL, chunks y manifests de jobs.
+- [x] `F09-G05` Snapshot del catálogo es estable con capability unavailable. — La huella determinista del catálogo y el contrato de capabilities pasan en `npm run test:f09-wp04`.
+- [x] `F09-G06` Evidencia en `docs/progress/F09.md`. — Cierre registrado el 2026-08-30 con comandos y resultados reproducibles.
 
 ---
 

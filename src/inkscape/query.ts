@@ -5,6 +5,12 @@ export type InkscapeBounds = {
   y: number;
 };
 
+export type InkscapeQueryViewport = {
+  heightPx: number;
+  viewBox: { height: number; width: number; x: number; y: number };
+  widthPx: number;
+};
+
 /** Parses the allowlisted `--query-all` output without treating IDs as CSV fields. */
 export function parseInkscapeQueryAll(
   output: string,
@@ -38,4 +44,30 @@ export function parseInkscapeQueryAll(
     });
   }
   return bounds;
+}
+
+/**
+ * Inkscape 1.4 reports `--query-all` coordinates in rendered CSS pixels,
+ * while document operations use SVG viewBox user units. Convert the result
+ * back into the source coordinate system before it reaches the domain layer.
+ */
+export function queryBoundsToSvgUserUnits(
+  bounds: InkscapeBounds,
+  viewport: InkscapeQueryViewport,
+): InkscapeBounds {
+  const scaleX = viewport.widthPx / viewport.viewBox.width;
+  const scaleY = viewport.heightPx / viewport.viewBox.height;
+  if (
+    !Number.isFinite(scaleX) ||
+    !Number.isFinite(scaleY) ||
+    scaleX <= 0 ||
+    scaleY <= 0
+  )
+    throw new Error("Inkscape query viewport has an invalid scale");
+  return {
+    height: bounds.height / scaleY,
+    width: bounds.width / scaleX,
+    x: bounds.x / scaleX + viewport.viewBox.x,
+    y: bounds.y / scaleY + viewport.viewBox.y,
+  };
 }

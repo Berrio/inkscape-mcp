@@ -1,1 +1,6 @@
-export { parseInkscapeQueryAll, type InkscapeBounds } from "./query.js";
+export {
+  parseInkscapeQueryAll,
+  queryBoundsToSvgUserUnits,
+  type InkscapeBounds,
+  type InkscapeQueryViewport,
+} from "./query.js";

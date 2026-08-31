@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { parseInkscapeQueryAll } from "../../src/inkscape/index.js";
+import {
+  parseInkscapeQueryAll,
+  queryBoundsToSvgUserUnits,
+} from "../../src/inkscape/index.js";
 
 describe("Inkscape bounds query parser", () => {
   it("parses numeric bounds and preserves commas within an ID", () => {
@@ -22,5 +25,23 @@ describe("Inkscape bounds query parser", () => {
     expect(() => parseInkscapeQueryAll("shape,0,nope,2,3\n")).toThrow(
       "invalid bounds",
     );
+  });
+
+  it("converts rendered query pixels back to SVG user units", () => {
+    expect(
+      queryBoundsToSvgUserUnits(
+        { height: 75.5906, width: 113.386, x: 37.7953, y: 18.8976 },
+        {
+          heightPx: 50 * (96 / 25.4),
+          viewBox: { height: 50, width: 100, x: 0, y: 0 },
+          widthPx: 100 * (96 / 25.4),
+        },
+      ),
+    ).toMatchObject({
+      height: expect.closeTo(20, 3),
+      width: expect.closeTo(30, 3),
+      x: expect.closeTo(10, 3),
+      y: expect.closeTo(5, 3),
+    });
   });
 });

@@ -1941,7 +1941,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 #### Puerta F08
 
-- [ ] `F08-G01` Cada formato anunciado pasa export/import smoke real en la plataforma.
+- [x] `F08-G01` Cada formato anunciado pasa export/import smoke real en la plataforma. — `npm run test:mcp` en Windows/Inkscape 1.4.4 publica y verifica PNG, PDF, SVG, SVG plano, PS, EPS, EMF, WMF experimental y los adapters DXF/HPGL/FXG/SIF. Reimporta los pares que tienen adaptador seguro (SVG/SVGZ, raster, PDF, EPS cuando la sonda lo valida y EMF); los tipos sin adaptador permanecen bloqueados y no se anuncian como importables.
 - [ ] `F08-G02` Capabilities ausentes producen error recuperable y no cambian el catálogo MCP.
 - [ ] `F08-G03` Los tres presets principales generan artefactos/manifests correctos.
 - [x] `F08-G04` Package reabre sin referencias rotas dentro de entorno limpio. — `test:mcp` renderiza el SVG empaquetado por Inkscape con un PNG local copiado.

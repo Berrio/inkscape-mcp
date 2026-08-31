@@ -1736,7 +1736,7 @@ Evidencia específica adicional para WP de alto riesgo:
 - [x] `F05-G10` Un PDF subset (páginas 1 y 3 de un fixture de tres) produce un solo archivo con exactamente dos páginas, orden y boxes correctas; el manifest declara estrategia `direct|prune|merge`. — `test:f05-g10` solicita `page_one,page_three` del fixture de tres páginas, comprueba exactamente dos páginas 284 × 142 y 142 × 142 pt (MediaBox/CropBox, tolerancia 0,6 pt) en respuesta y PDF reabierto, y fija `strategy: "prune_subset"`/`PDF_SUBSET_PRUNED` como la ruta `prune` declarada.
 - [x] `F05-G11` SVG selection-only reabre sin refs rotas, conserva apariencia dentro de tolerancia y no incorpora objetos ajenos a su cierre transitivo. — `test:f05-g11` rasteriza con Inkscape casos CSS materializado con gradiente y contextual con ancestro; ambos tienen cero píxeles distintos con tolerancia de un nivel y cero IDs/referencias rotas. Confirma que definiciones/objetos no transitivos no se incluyen y que la multiselección contextual declara fidelidad parcial en vez de prometer apariencia exacta.
 - [x] `F05-G12` PDF con `viewBox` de origen no cero conserva MediaBox/CropBox y apariencia esperadas; el manifest registra si se normalizó una copia temporal. — `test:f05-g12` exporta/reabre el fixture `viewBox="20 30 100 50"`, fija MediaBox/CropBox de 284 × 142 pt (tolerancia 0,6), reimporta mediante la tool PDF controlada y compara cero píxeles distintos. La build 1.4.4 no requiere normalización temporal y no declara ese warning.
-- [ ] `F05-G13` Plain SVG con dimensión/viewBox 512 conserva el valor correcto y reabre visualmente; ninguna workaround se aplica a builds no afectadas.
+- [x] `F05-G13` Plain SVG con dimensión/viewBox 512 conserva el valor correcto y reabre visualmente; ninguna workaround se aplica a builds no afectadas. — `test:f05-g13` exporta/reabre el fixture cuadrado como SVG plano, fija root/namespace, `width`/`height` y `viewBox="0 0 512 512"`, y compara cero píxeles distintos a 256 px con tolerancia de un canal. La build local no declara workaround de viewBox y la fuente conserva su hash.
 
 ---
 
@@ -2677,7 +2677,7 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 - [~] F02 Workspace/XML/transacciones.
 - [~] F03 Tamaños/páginas.
 - [x] F04 Inspección/preflight/preview.
-- [~] F05 Exportación MVP.
+- [x] F05 Exportación MVP.
 - [x] F06 Diseño básico.
 - [~] F07 Diseño avanzado.
 - [~] F08 Importación/formatos/presets.

@@ -1975,12 +1975,12 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 #### Progreso, cancelación y jobs
 
-- [ ] `F09-T12` Leer progress token del contexto MCP.
-- [ ] `F09-T13` Emitir progreso monotónico y rate-limited por etapas.
-- [ ] `F09-T14` Propagar `AbortSignal` a servicios y subprocesso.
-- [ ] `F09-T15` Implementar jobs explícitos para lotes largos con TTL y ownership.
+- [x] `F09-T12` Leer progress token del contexto MCP. — El handler usa el token moderno de `mcpReq.envelope` y conserva el fallback legado `_meta`, sin aceptar un token como input público.
+- [x] `F09-T13` Emitir progreso monotónico y rate-limited por etapas. — El batch síncrono notifica `validated`→`staging`→`rendering`→`verifying`→`publishing`→`completed`, con posiciones 1–6, total fijo, mensajes redaccionados y coalescing de 250 ms.
+- [x] `F09-T14` Propagar `AbortSignal` a servicios y subprocesso. — La señal del request MCP llega al renderizador síncrono; el job owner-bound conserva su propia señal hasta Inkscape. La publicación atómica cierra la cancelación para no falsear un resultado ya publicado.
+- [x] `F09-T15` Implementar jobs explícitos para lotes largos con TTL y ownership. — `JobStore` conserva owner, TTL terminal, progreso y callback terminal; los handlers purgan entradas terminales expiradas sin borrar un proceso activo.
 - [x] `F09-T16` Implementar `job_get` y `job_cancel` idempotente. — Jobs owner-bound devuelven el mismo snapshot terminal ante cancelación repetida; el smoke MCP real cancela un PNG en curso, verifica que no publica output y repite la cancelación.
-- [ ] `F09-T17` Limpiar outputs parciales y no publicar recursos de jobs cancelados.
+- [x] `F09-T17` Limpiar outputs parciales y no publicar recursos de jobs cancelados. — Los jobs exigen `all_or_nothing`; cancelar antes de publicar deja cero outputs, y cancelar un job elimina su capability de manifest. Una vez iniciada la publicación atómica el job termina como completado, no como un falso cancelado.
 
 #### Compatibilidad y test MCP
 

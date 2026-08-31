@@ -214,6 +214,23 @@ import {
  */
 const z = { ...baseZ, object: baseZ.strictObject };
 
+type ProgressRequestContext = {
+  mcpReq: {
+    envelope?: { progressToken?: number | string | undefined };
+    _meta?: { progressToken?: number | string | undefined };
+    notify: (notification: {
+      method: "notifications/progress";
+      params: {
+        message?: string;
+        progress: number;
+        progressToken: number | string;
+        total: number;
+      };
+    }) => Promise<void>;
+    signal: AbortSignal;
+  };
+};
+
 const SERVER_INSTRUCTIONS =
   "Use workspace_list before selecting a document, then inspect or preflight it before mutating or exporting. Every document operation requires an explicit workspaceId and relative path; mutations also require expectedRevision. New outputs never overwrite existing files, and overwrite requires expectedOutputRevision. Check inkscape_status and capability tools before relying on version- or extension-gated features. Keep artifact URIs opaque and use only the typed tools; paths, shell commands, Inkscape flags, actions, and raw SVG/XML are not accepted as tool inputs.";
 
@@ -8464,26 +8481,31 @@ export function buildServer(
       ]),
       annotations: { destructiveHint: false },
     },
-    async ({
-      delivery,
-      mode,
-      planToken,
-      preset,
-      specs,
-      timeoutMs,
-      workspaceId,
-    }) => {
+    async (
+      { delivery, mode, planToken, preset, specs, timeoutMs, workspaceId },
+      context,
+    ) => {
+      const requestProgress = createProgressReporter(context);
       const savedPlan =
         planToken === undefined
           ? undefined
           : exportPlans.consume(planToken, workspaceId);
       const execute = async (execution?: {
+        beginPublication?: () => void;
         onProgress: (progress: { detail?: string; stage: string }) => void;
         signal: AbortSignal;
       }) => {
-        if (execution?.signal.aborted)
+        const activeExecution =
+          execution ??
+          ({
+            beginPublication: undefined,
+            onProgress: requestProgress.report,
+            signal: context.mcpReq.signal,
+          } as const);
+        if (activeExecution.signal.aborted)
           throw new Error("Export batch was cancelled");
         assertDocumentWorkspace(config);
+        activeExecution.onProgress({ stage: "validated" });
         const startedAt = Date.now();
         const expandedSpecs =
           savedPlan !== undefined
@@ -8548,11 +8570,12 @@ export function buildServer(
             workspace.resolveNewOutput(workspaceId, variant.outputPath),
           ),
         );
+        activeExecution.onProgress({ stage: "staging" });
         const staged = await executeExportBatch({
           mode,
           variants,
           execute: async (variant) => {
-            execution?.onProgress({
+            activeExecution.onProgress({
               detail: `variant:${variant.index}`,
               stage: "rendering",
             });
@@ -8567,7 +8590,7 @@ export function buildServer(
                 { format: "pdf" | "plain-svg" | "png" | "svg" }
               >,
               ...(timeoutMs === undefined ? {} : { timeoutMs }),
-              ...(execution === undefined ? {} : { signal: execution.signal }),
+              signal: activeExecution.signal,
             });
             return { ...rendered, variant };
           },
@@ -8576,16 +8599,18 @@ export function buildServer(
           throw new Error(
             `Batch rendering failed at variant ${staged.failures[0]!.index}`,
           );
+        activeExecution.onProgress({ stage: "verifying" });
         const successes = [] as {
           index: number;
           outputPath: string;
           revision: string;
         }[];
-        if (execution?.signal.aborted)
+        if (activeExecution.signal.aborted)
           throw new Error("Export batch was cancelled");
-        execution?.onProgress({ stage: "publishing" });
+        activeExecution.onProgress({ stage: "publishing" });
         let manifest;
         if (mode === "all_or_nothing") {
+          activeExecution.beginPublication?.();
           const commitDirectory = ".inkscape-mcp-commits";
           await workspace.ensureOutputDirectory(workspaceId, commitDirectory);
           const marker = await workspace.resolveNewOutput(
@@ -8683,16 +8708,30 @@ export function buildServer(
             })),
           });
         const result = { failures: staged.failures, manifest, mode, successes };
+        activeExecution.onProgress({ stage: "completed" });
         return {
           content: [{ type: "text" as const, text: JSON.stringify(result) }],
           structuredContent: result,
         };
       };
       if (delivery === "job") {
-        const job = jobs.create(workspaceId, async (options) => {
-          const response = await execute(options);
-          return response.structuredContent;
-        });
+        if (mode !== "all_or_nothing")
+          throw new Error(
+            "Asynchronous export jobs require mode all_or_nothing",
+          );
+        const job = jobs.create(
+          workspaceId,
+          async (options) => {
+            const response = await execute(options);
+            return response.structuredContent;
+          },
+          {
+            onTerminal: (snapshot) => {
+              if (snapshot.status !== "completed")
+                exportManifestResources.removeForJob(snapshot.id, workspaceId);
+            },
+          },
+        );
         const manifestResource = exportManifestResources.register(
           job.id,
           workspaceId,
@@ -8707,7 +8746,11 @@ export function buildServer(
           structuredContent: result,
         };
       }
-      return await execute();
+      try {
+        return await execute();
+      } finally {
+        await requestProgress.flush();
+      }
     },
   );
 
@@ -8740,6 +8783,8 @@ export function buildServer(
       annotations: { readOnlyHint: true },
     },
     async ({ jobId, workspaceId }) => {
+      jobs.removeExpired();
+      await exportManifestResources.removeExpired();
       const result = jobs.get(jobId, workspaceId);
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
@@ -8777,6 +8822,8 @@ export function buildServer(
       annotations: { destructiveHint: false },
     },
     async ({ jobId, workspaceId }) => {
+      jobs.removeExpired();
+      await exportManifestResources.removeExpired();
       const result = jobs.cancel(jobId, workspaceId);
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
@@ -10939,6 +10986,54 @@ function promptMessages(lines: readonly string[]): {
       },
     ],
   };
+}
+
+function createProgressReporter(context: ProgressRequestContext): {
+  flush: () => Promise<void>;
+  report: (progress: { detail?: string; stage: string }) => void;
+} {
+  const token =
+    context.mcpReq.envelope?.progressToken ??
+    context.mcpReq._meta?.progressToken;
+  const positions: Readonly<Record<string, number>> = {
+    completed: 6,
+    publishing: 5,
+    rendering: 3,
+    staging: 2,
+    validated: 1,
+    verifying: 4,
+  };
+  let latestStage = 0;
+  let lastSentAt = 0;
+  let pending = Promise.resolve();
+  const report = (progress: { detail?: string; stage: string }) => {
+    if (typeof token !== "number" && typeof token !== "string") return;
+    const position = positions[progress.stage];
+    if (position === undefined || position < latestStage) return;
+    const now = Date.now();
+    if (position === latestStage && now - lastSentAt < 250) return;
+    latestStage = position;
+    lastSentAt = now;
+    const detail = progress.detail;
+    const message =
+      detail !== undefined && /^[A-Za-z0-9:_-]{1,80}$/u.test(detail)
+        ? `${progress.stage}:${detail}`
+        : progress.stage;
+    pending = pending
+      .then(() =>
+        context.mcpReq.notify({
+          method: "notifications/progress",
+          params: {
+            message,
+            progress: position,
+            progressToken: token,
+            total: 6,
+          },
+        }),
+      )
+      .catch(() => undefined);
+  };
+  return { flush: async () => pending, report };
 }
 
 function parseArtifactOffset(value: string | undefined): number {

@@ -157,6 +157,16 @@ export class ExportManifestResourceStore {
     return { jobId: record.jobId, owner: record.owner };
   }
 
+  public removeForJob(jobId: string, owner: string): number {
+    let removed = 0;
+    for (const [id, record] of this.records)
+      if (record.jobId === jobId && record.owner === owner) {
+        this.records.delete(id);
+        removed += 1;
+      }
+    return removed;
+  }
+
   public async removeExpired(): Promise<number> {
     let removed = 0;
     for (const [id, record] of this.records)

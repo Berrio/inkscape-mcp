@@ -197,6 +197,60 @@ async function run() {
         "artifact chunk read allowed a different workspace owner",
       );
 
+    const progress = [];
+    const synchronousBatch = await client.callTool(
+      {
+        arguments: {
+          delivery: "sync",
+          mode: "all_or_nothing",
+          specs: [
+            {
+              area: { kind: "page" },
+              background: { mode: "transparent" },
+              format: "png",
+              size: { mode: "width", widthPx: 32 },
+              source: { expectedRevision: currentRevision, path },
+              target: {
+                kind: "file",
+                overwrite: false,
+                path: "resource-progress.png",
+              },
+            },
+          ],
+          workspaceId: workspace.id,
+        },
+        name: "document_export_batch",
+      },
+      {
+        onprogress: (update) => progress.push(update),
+        resetTimeoutOnProgress: true,
+        timeout: 30_000,
+      },
+    );
+    const positions = progress.map((update) => update.progress);
+    if (
+      synchronousBatch.isError ||
+      positions.length < 6 ||
+      positions.some(
+        (position, index) =>
+          !Number.isInteger(position) ||
+          position < 1 ||
+          position > 6 ||
+          (index > 0 && position < positions[index - 1]),
+      ) ||
+      ![1, 2, 3, 4, 5, 6].every((position) => positions.includes(position)) ||
+      progress.some(
+        (update) =>
+          update.total !== 6 ||
+          typeof update.message !== "string" ||
+          update.message.includes(path) ||
+          update.message.includes(workspaceRoot),
+      )
+    )
+      throw new Error(
+        "MCP progress token did not produce safe staged progress",
+      );
+
     const batch = await client.callTool({
       arguments: {
         delivery: "job",
@@ -256,6 +310,88 @@ async function run() {
       manifest.contents[0]?.text.includes(workspaceRoot)
     )
       throw new Error("export manifest resource is missing or leaked a root");
+
+    const cancellable = await client.callTool({
+      arguments: {
+        delivery: "job",
+        mode: "all_or_nothing",
+        specs: [
+          {
+            area: { kind: "page" },
+            background: { mode: "transparent" },
+            format: "png",
+            size: { dpi: 300, mode: "dpi" },
+            source: { expectedRevision: currentRevision, path },
+            target: {
+              kind: "file",
+              overwrite: false,
+              path: "resource-cancelled.png",
+            },
+          },
+        ],
+        workspaceId: workspace.id,
+      },
+      name: "document_export_batch",
+    });
+    const cancelledJobId = cancellable.structuredContent?.jobId;
+    const cancelledManifestUri = cancellable.structuredContent?.manifestUri;
+    if (
+      cancellable.isError ||
+      typeof cancelledJobId !== "string" ||
+      typeof cancelledManifestUri !== "string"
+    )
+      throw new Error("could not create a cancellable export job");
+    const cancelled = await client.callTool({
+      arguments: { jobId: cancelledJobId, workspaceId: workspace.id },
+      name: "job_cancel",
+    });
+    if (cancelled.isError)
+      throw new Error("could not cancel an owned export job");
+    let cancellationFinished = false;
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const status = await client.callTool({
+        arguments: { jobId: cancelledJobId, workspaceId: workspace.id },
+        name: "job_get",
+      });
+      if (status.isError) throw new Error("cancelled job became unavailable");
+      if (status.structuredContent?.status === "cancelled") {
+        cancellationFinished = true;
+        break;
+      }
+      await delay(25);
+    }
+    if (!cancellationFinished)
+      throw new Error("export job did not reach cancelled state");
+    await expectResourceFailure(
+      client,
+      cancelledManifestUri,
+      "cancelled job left its manifest resource readable",
+    );
+
+    const asynchronousBestEffort = await client.callTool({
+      arguments: {
+        delivery: "job",
+        mode: "best_effort",
+        specs: [
+          {
+            area: { kind: "page" },
+            background: { mode: "transparent" },
+            format: "png",
+            size: { mode: "width", widthPx: 32 },
+            source: { expectedRevision: currentRevision, path },
+            target: {
+              kind: "file",
+              overwrite: false,
+              path: "resource-best-effort-job.png",
+            },
+          },
+        ],
+        workspaceId: workspace.id,
+      },
+      name: "document_export_batch",
+    });
+    if (!asynchronousBestEffort.isError)
+      throw new Error("asynchronous best-effort export bypassed atomic policy");
   } finally {
     await client.close();
     await rm(workspaceRoot, { force: true, recursive: true });

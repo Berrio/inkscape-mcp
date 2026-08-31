@@ -117,4 +117,19 @@ describe("DocumentResourceStore", () => {
     );
     await expect(resources.removeExpired()).resolves.toBeGreaterThanOrEqual(1);
   });
+
+  it("removes manifest capabilities of a cancelled job without affecting others", async () => {
+    const resources = new ExportManifestResourceStore();
+    const cancelled = resources.register("job_cancelled", "ws_owner");
+    const completed = resources.register("job_completed", "ws_owner");
+    expect(resources.removeForJob("job_cancelled", "ws_other")).toBe(0);
+    expect(resources.removeForJob("job_cancelled", "ws_owner")).toBe(1);
+    await expect(resources.resolve(cancelled.id)).rejects.toBeInstanceOf(
+      RevisionConflictError,
+    );
+    await expect(resources.resolve(completed.id)).resolves.toEqual({
+      jobId: "job_completed",
+      owner: "ws_owner",
+    });
+  });
 });

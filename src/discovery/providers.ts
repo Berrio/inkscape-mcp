@@ -1,4 +1,4 @@
-import { delimiter, join } from "node:path";
+import { delimiter, join, win32 } from "node:path";
 
 import type { ProcessRunner } from "../runner/index.js";
 
@@ -30,12 +30,15 @@ export function pathCandidates(
     platform === "win32"
       ? ["inkscape.exe", "inkscape.com", "inkscape"]
       : ["inkscape"];
+  const joinForPlatform = platform === "win32" ? win32.join : join;
 
   return pathValue
     .split(separator)
     .filter((entry) => entry.length > 0)
     .flatMap((entry) =>
-      names.map((name) => candidate(join(entry, name), "path", "path")),
+      names.map((name) =>
+        candidate(joinForPlatform(entry, name), "path", "path"),
+      ),
     );
 }
 
@@ -95,9 +98,11 @@ export function parseRegistryCandidates(
 
     if (label === "InstallLocation") {
       discovered.push(
-        candidate(join(value, "bin", "inkscape.exe"), "system", source),
+        candidate(win32.join(value, "bin", "inkscape.exe"), "system", source),
       );
-      discovered.push(candidate(join(value, "inkscape.exe"), "system", source));
+      discovered.push(
+        candidate(win32.join(value, "inkscape.exe"), "system", source),
+      );
     } else {
       discovered.push(candidate(value, "system", source));
     }
@@ -133,7 +138,7 @@ export function msixInstallLocationCandidates(
   ];
 
   return relativePaths.map((parts) =>
-    candidate(join(installLocation, ...parts), "msix", "msix"),
+    candidate(win32.join(installLocation, ...parts), "msix", "msix"),
   );
 }
 
@@ -234,14 +239,14 @@ function windowsStandardCandidates(
   for (const root of roots) {
     candidates.push(
       candidate(
-        join(root, "Inkscape", "bin", "inkscape.exe"),
+        win32.join(root, "Inkscape", "bin", "inkscape.exe"),
         "system",
         "standard",
       ),
     );
     candidates.push(
       candidate(
-        join(root, "Programs", "Inkscape", "bin", "inkscape.exe"),
+        win32.join(root, "Programs", "Inkscape", "bin", "inkscape.exe"),
         "system",
         "standard",
       ),

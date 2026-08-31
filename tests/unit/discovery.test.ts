@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -16,7 +16,6 @@ import {
   probeInkscapeCandidate,
   standardCandidates,
 } from "../../src/discovery/index.js";
-import { ProcessRunner } from "../../src/runner/index.js";
 
 const fakeInkscape = resolve(
   process.cwd(),
@@ -136,7 +135,19 @@ describe("Inkscape discovery", () => {
     const cwd = await temporaryDirectory();
     const executable = join(cwd, "inkscape.exe");
     await writeFile(executable, "placeholder", "utf8");
-    const runner = new ProcessRunner(1);
+    const runner = {
+      run: async () => ({
+        durationMs: 1,
+        exitCode: 1,
+        pid: 1,
+        signal: null,
+        stderr: Buffer.alloc(0),
+        stderrTruncated: false,
+        stdout: Buffer.alloc(0),
+        stdoutTruncated: false,
+        terminationReason: "completed" as const,
+      }),
+    };
     const report = await locateInkscape({
       config: { inkscapeBin: executable },
       cwd,
@@ -146,7 +157,9 @@ describe("Inkscape discovery", () => {
 
     expect(report.candidates).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ executablePath: executable }),
+        expect.objectContaining({
+          executablePath: await realpath(executable),
+        }),
       ]),
     );
     expect(report.rejections).not.toContainEqual(

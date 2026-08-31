@@ -86,11 +86,19 @@ describe("Inkscape capabilities", () => {
       name: "--export-png-color-mode",
     });
     expect(first.experimentalCapabilities).toEqual([]);
-    expect(first.versionSupport).toMatchObject({
-      pageAdapter: "pages_v14",
-      status: "stable",
-    });
-    expect(first.warnings).toEqual([]);
+    if (process.platform === "win32") {
+      expect(first.versionSupport).toMatchObject({
+        pageAdapter: "pages_v14",
+        status: "stable",
+      });
+      expect(first.warnings).toEqual([]);
+    } else {
+      expect(first.versionSupport).toEqual({
+        status: "experimental",
+        warnings: ["INKSCAPE_PLATFORM_UNVERIFIED"],
+      });
+      expect(first.warnings).toEqual(["INKSCAPE_PLATFORM_UNVERIFIED"]);
+    }
     expect(second).toBe(first);
     expect(calls).toBe(3);
   });
@@ -120,11 +128,11 @@ describe("Inkscape capabilities", () => {
       process.cwd(),
     );
 
-    expect(result.warnings).toEqual(
-      expect.arrayContaining([
-        "INKSCAPE_ACTION_LIST_EMPTY",
+    expect(result.warnings).toContain("INKSCAPE_ACTION_LIST_EMPTY");
+    if (process.platform === "win32")
+      expect(result.warnings).toContain(
         "INKSCAPE_1_4_4_FLAG_DRIFT:--export-type",
-      ]),
-    );
+      );
+    else expect(result.warnings).toContain("INKSCAPE_PLATFORM_UNVERIFIED");
   });
 });

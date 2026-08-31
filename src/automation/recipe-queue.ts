@@ -84,6 +84,8 @@ export class DurableRecipeQueueError extends Error {
 
 /** A workspace-local queue. Jobs are JSON receipts, never shell commands. */
 export class DurableRecipeQueue {
+  private lastTimestampMs = 0;
+
   private constructor(private readonly root: string) {}
 
   public static async open(
@@ -105,7 +107,7 @@ export class DurableRecipeQueue {
   }
 
   public async enqueue(recipe: AutonomousRecipe): Promise<DurableRecipeJob> {
-    const now = new Date().toISOString();
+    const now = this.timestamp();
     const job: DurableRecipeJob = {
       attempt: 0,
       createdAt: now,
@@ -156,13 +158,13 @@ export class DurableRecipeQueue {
     const job = await this.read(id);
     if (job.status === "queued") {
       job.status = "cancelled";
-      job.updatedAt = new Date().toISOString();
+      job.updatedAt = this.timestamp();
       await this.write(job);
       return publicJob(job);
     }
     if (job.status === "running") {
       if (job.cancellationRequestedAt === undefined) {
-        job.cancellationRequestedAt = new Date().toISOString();
+        job.cancellationRequestedAt = this.timestamp();
         job.updatedAt = job.cancellationRequestedAt;
         await this.write(job);
       }
@@ -188,7 +190,7 @@ export class DurableRecipeQueue {
     delete job.receipt;
     delete job.startedAt;
     job.status = "queued";
-    job.updatedAt = new Date().toISOString();
+    job.updatedAt = this.timestamp();
     await this.write(job);
     return publicJob(job);
   }
@@ -222,7 +224,7 @@ export class DurableRecipeQueue {
         if (processed >= maxJobs) break;
         processed += 1;
         job.status = "running";
-        job.startedAt = new Date().toISOString();
+        job.startedAt = this.timestamp();
         job.updatedAt = job.startedAt;
         await this.write(job);
         try {
@@ -263,7 +265,7 @@ export class DurableRecipeQueue {
             failed += 1;
           }
         }
-        job.updatedAt = new Date().toISOString();
+        job.updatedAt = this.timestamp();
         await this.write(job);
       }
       return { cancelled, completed, failed, processed };
@@ -293,7 +295,7 @@ export class DurableRecipeQueue {
       job.error =
         "QUEUE_WORKER_INTERRUPTED: retry explicitly after checking published artifacts";
       job.status = "failed";
-      job.updatedAt = new Date().toISOString();
+      job.updatedAt = this.timestamp();
       await this.write(job);
     }
   }
@@ -366,6 +368,11 @@ export class DurableRecipeQueue {
 
   private pathFor(id: string): string {
     return join(this.root, `${id}.json`);
+  }
+
+  private timestamp(): string {
+    this.lastTimestampMs = Math.max(Date.now(), this.lastTimestampMs + 1);
+    return new Date(this.lastTimestampMs).toISOString();
   }
 
   private async acquireLock(): Promise<() => Promise<void>> {

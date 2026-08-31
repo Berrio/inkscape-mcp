@@ -19,7 +19,7 @@ describe("portable unit CI workflow", () => {
     expect(workflow).toContain("macos-latest");
     expect(workflow).toContain("node-version: 24.18.0");
     expect(workflow).toContain(
-      "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+      "actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8",
     );
     expect(workflow).toContain(
       "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e",

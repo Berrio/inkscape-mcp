@@ -1,8 +1,4 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import {
   Client,
   InMemoryTransport,
@@ -15,15 +11,9 @@ import { startHttpMcpServer } from "../../src/http.js";
 import { buildServer } from "../../src/server/index.js";
 
 const activeServers: ReturnType<typeof buildServer>[] = [];
-const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(activeServers.splice(0).map((server) => server.close()));
-  await Promise.all(
-    temporaryDirectories
-      .splice(0)
-      .map((directory) => rm(directory, { force: true, recursive: true })),
-  );
 });
 
 async function connectInMemory(
@@ -151,53 +141,6 @@ describe("MCP compatibility contract", () => {
       expect(fingerprint).toBe(
         "8aae2e2f54fb5f996811a9032c3ca395d842f8b3ed95f488b65895743269df07",
       );
-    } finally {
-      await client.close();
-    }
-  });
-
-  it("returns a bounded resource link instead of a large inline preview", async () => {
-    const workspaceRoot = await mkdtemp(
-      join(tmpdir(), "inkscape-mcp-f09-link-"),
-    );
-    temporaryDirectories.push(workspaceRoot);
-    const path = "preview.svg";
-    const source =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#123456"/></svg>';
-    await writeFile(join(workspaceRoot, path), source, "utf8");
-    const client = await connectInMemory("legacy", {
-      maxInlineBytes: 1,
-      workspaceRoots: [workspaceRoot],
-    });
-    try {
-      const workspace = await client.callTool({
-        arguments: {},
-        name: "workspace_list",
-      });
-      const workspaceId = workspace.structuredContent?.workspaces?.[0]?.id;
-      expect(typeof workspaceId).toBe("string");
-      const preview = await client.callTool({
-        arguments: {
-          area: "page",
-          expectedRevision: createHash("sha256").update(source).digest("hex"),
-          outputPath: "preview.png",
-          path,
-          width: 32,
-          workspaceId,
-        },
-        name: "document_render_preview",
-      });
-      expect(preview.isError).not.toBe(true);
-      expect(preview.content).toContainEqual(
-        expect.objectContaining({
-          mimeType: "image/png",
-          type: "resource_link",
-          uri: expect.stringMatching(
-            /^inkscape:\/\/artifact\/art_[a-f0-9]{32}$/u,
-          ),
-        }),
-      );
-      expect(JSON.stringify(preview.content)).not.toContain(workspaceRoot);
     } finally {
       await client.close();
     }

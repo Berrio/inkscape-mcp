@@ -19,7 +19,7 @@ import {
 } from "./automation/recipe-queue-command.js";
 import { loadConfigFromCli, redactDiagnostic } from "./config/index.js";
 import { formatDoctor, runDoctor } from "./doctor/index.js";
-import { readHttpBearerToken, startHttpMcpServer } from "./http.js";
+import { createHttpCredentialProvider, startHttpMcpServer } from "./http.js";
 import { buildServer } from "./server/index.js";
 import { writeStdioLog } from "./server/stdio-logging.js";
 import { InternalTelemetry } from "./server/telemetry.js";
@@ -111,7 +111,7 @@ if (argument === "--help" || argument === "-h") {
     if (config.transport === "http") {
       const server = await startHttpMcpServer(
         config,
-        readHttpBearerToken(process.env),
+        createHttpCredentialProvider(process.env),
       );
       const stop = () => {
         void server.close();

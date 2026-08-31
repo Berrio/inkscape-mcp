@@ -150,6 +150,20 @@ export class ArtifactStore {
     return this.read(record, offset, length, maximumReadBytes);
   }
 
+  /** Restricts an opaque URI capability to a trusted principal scope. */
+  public async readScopedCapabilityChunk(
+    id: string,
+    owns: (owner: string) => boolean,
+    offset: number,
+    length: number,
+    maximumReadBytes: number,
+  ): Promise<{ bytes: Buffer; hash: string; size: number }> {
+    const record = await this.get(id);
+    if (!owns(record.owner))
+      throw new RevisionConflictError("Artifact is unavailable");
+    return this.read(record, offset, length, maximumReadBytes);
+  }
+
   public async removeExpired(): Promise<number> {
     let removed = 0;
     for (const [id, record] of this.records)

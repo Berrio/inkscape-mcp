@@ -100,6 +100,19 @@ export class DocumentResourceStore {
     return this.readCapability(id, kind, maximumReadBytes);
   }
 
+  /** HTTP resources bind a capability to the authenticated principal scope. */
+  public async readScopedCapability(
+    id: string,
+    owns: (owner: string) => boolean,
+    kind: DocumentResourceKind,
+    maximumReadBytes: number,
+  ): Promise<{ mimeType: string; text: string }> {
+    const record = this.records.get(id);
+    if (!record || !owns(record.owner))
+      throw new RevisionConflictError("Document resource is unavailable");
+    return this.readCapability(id, kind, maximumReadBytes);
+  }
+
   public async removeExpired(): Promise<number> {
     let removed = 0;
     for (const [id, record] of this.records)
@@ -155,6 +168,18 @@ export class ExportManifestResourceStore {
         "Export manifest resource is unavailable",
       );
     return { jobId: record.jobId, owner: record.owner };
+  }
+
+  public async resolveScoped(
+    id: string,
+    owns: (owner: string) => boolean,
+  ): Promise<{ jobId: string; owner: string }> {
+    const record = await this.resolve(id);
+    if (!owns(record.owner))
+      throw new RevisionConflictError(
+        "Export manifest resource is unavailable",
+      );
+    return record;
   }
 
   public removeForJob(jobId: string, owner: string): number {

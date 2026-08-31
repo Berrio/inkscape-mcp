@@ -54,6 +54,10 @@ Consulta la [guía de seguridad y workspaces](./docs/security-workspace-guide.md
 antes de automatizar: la versión actual protege rutas y publicaciones, pero no
 es un sandbox para documentos de origen hostil.
 
+El HTTP local experimental se documenta por separado en la
+[guía de seguridad HTTP](./docs/http-security.md); `stdio` continúa siendo el
+transporte recomendado y predeterminado.
+
 La [matriz de compatibilidad](./docs/compatibility-matrix.md) separa el baseline
 Windows/Inkscape 1.4.4 probado de formatos, plataformas y capacidades aún no
 anunciadas.

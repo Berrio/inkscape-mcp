@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   Client,
   StreamableHTTPClientTransport,
@@ -7,6 +10,7 @@ import {
 import { DEFAULT_CONFIG } from "../../src/config/index.js";
 import {
   createSecureHttpHandler,
+  createHttpCredentialProvider,
   readHttpBearerToken,
   startHttpMcpServer,
 } from "../../src/http.js";
@@ -106,6 +110,14 @@ describe("secure local HTTP transport", () => {
       event: "http_request_rejected",
       status: 401,
     });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "http_request_completed",
+        principal: expect.stringMatching(/^http_[a-f0-9]{24}$/u),
+        status: 200,
+      }),
+    );
+    expect(JSON.stringify(events)).not.toContain("127.0.0.1");
   });
 
   it("rate limits even if a caller forges forwarding headers", async () => {
@@ -139,6 +151,51 @@ describe("secure local HTTP transport", () => {
       }),
     );
     expect(rejected.status).toBe(429);
+  });
+
+  it("rotates a local multi-principal credential file without restart", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "inkscape-mcp-http-auth-"));
+    const credentialPath = join(directory, "credentials.json");
+    const oldToken = "a".repeat(32);
+    const newToken = "b".repeat(32);
+    await writeFile(
+      credentialPath,
+      JSON.stringify({ designer_a: oldToken, designer_b: token }),
+      "utf8",
+    );
+    const provider = createHttpCredentialProvider({
+      INKSCAPE_MCP_HTTP_TOKENS_FILE: credentialPath,
+    });
+    const handler = createSecureHttpHandler(
+      config,
+      provider,
+      { close: async () => undefined, fetch: async () => new Response("ok") },
+      { log: () => undefined },
+    );
+    const request = (value: string) =>
+      new Request("http://127.0.0.1:3000/mcp", {
+        headers: {
+          Authorization: `Bearer ${value}`,
+          Host: "127.0.0.1:3000",
+        },
+      });
+    try {
+      expect((await handler.fetch(request(oldToken))).status).toBe(200);
+      expect((await handler.fetch(request(token))).status).toBe(200);
+      const replacement = join(directory, "credentials.next.json");
+      await writeFile(
+        replacement,
+        JSON.stringify({ designer_a: newToken }),
+        "utf8",
+      );
+      await rename(replacement, credentialPath);
+      expect((await handler.fetch(request(oldToken))).status).toBe(401);
+      expect((await handler.fetch(request(token))).status).toBe(401);
+      expect((await handler.fetch(request(newToken))).status).toBe(200);
+    } finally {
+      await handler.close();
+      await rm(directory, { force: true, recursive: true });
+    }
   });
 
   it("binds the real listener locally and refuses unauthenticated requests", async () => {
@@ -185,6 +242,76 @@ describe("secure local HTTP transport", () => {
     } finally {
       await client.close();
       await server.close();
+    }
+  });
+
+  it("binds HTTP document resources to the authenticated principal", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "inkscape-mcp-http-owner-"));
+    const credentialPath = join(directory, "credentials.json");
+    const alphaToken = "c".repeat(32);
+    const betaToken = "d".repeat(32);
+    await writeFile(
+      credentialPath,
+      JSON.stringify({ alpha: alphaToken, beta: betaToken }),
+      "utf8",
+    );
+    await writeFile(
+      join(directory, "source.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>',
+      "utf8",
+    );
+    const server = await startHttpMcpServer(
+      {
+        ...config,
+        http: { ...config.http, port: 0 },
+        workspaceRoots: [directory],
+      },
+      createHttpCredentialProvider({
+        INKSCAPE_MCP_HTTP_TOKENS_FILE: credentialPath,
+      }),
+      { log: () => undefined },
+    );
+    const connect = async (name: string, currentToken: string) => {
+      const client = new Client(
+        { name, version: "0.0.0" },
+        { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+      );
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(server.url), {
+          authProvider: { token: async () => currentToken },
+        }),
+      );
+      return client;
+    };
+    const alpha = await connect("owner-alpha", alphaToken);
+    const beta = await connect("owner-beta", betaToken);
+    try {
+      const workspace = await alpha.callTool({
+        arguments: {},
+        name: "workspace_list",
+      });
+      const workspaceId = workspace.structuredContent?.workspaces?.[0]?.id;
+      expect(typeof workspaceId).toBe("string");
+      const inspected = await alpha.callTool({
+        arguments: { level: "summary", path: "source.svg", workspaceId },
+        name: "document_inspect",
+      });
+      expect(inspected.isError).not.toBe(true);
+      const summaryUri = inspected.structuredContent?.resources?.summaryUri;
+      expect(typeof summaryUri).toBe("string");
+      await expect(
+        alpha.readResource({ uri: summaryUri }),
+      ).resolves.toMatchObject({
+        contents: [expect.objectContaining({ mimeType: "application/json" })],
+      });
+      await expect(beta.readResource({ uri: summaryUri })).rejects.toThrow(
+        "Document resource is unavailable",
+      );
+    } finally {
+      await alpha.close();
+      await beta.close();
+      await server.close();
+      await rm(directory, { force: true, recursive: true });
     }
   });
 });

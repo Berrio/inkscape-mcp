@@ -5,7 +5,8 @@ import {
   type AuthInfo,
   type McpHttpHandler,
 } from "@modelcontextprotocol/server";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import {
   createServer,
   type IncomingMessage,
@@ -15,6 +16,11 @@ import { once } from "node:events";
 
 import { type ServerConfig } from "./config/index.js";
 import { buildServer, createServerRuntime } from "./server/index.js";
+import { httpOwnerScope } from "./server/ownership.js";
+import {
+  HttpTelemetry,
+  type HttpRequestTelemetryEvent,
+} from "./http-telemetry.js";
 
 const HTTP_PATH = "/mcp";
 const LOCAL_HOSTNAMES = ["127.0.0.1", "localhost"];
@@ -25,15 +31,21 @@ export type HttpMcpServer = {
   close: () => Promise<void>;
   url: string;
 };
-export type HttpLogEvent = {
-  event: "http_listening" | "http_request_rejected" | "http_server_error";
-  status?: 400 | 401 | 403 | 413 | 429 | 500 | undefined;
-};
+export type HttpLogEvent =
+  | HttpRequestTelemetryEvent
+  | {
+      event: "http_listening" | "http_request_rejected" | "http_server_error";
+      status?: 400 | 401 | 403 | 413 | 429 | 500 | 503 | undefined;
+    };
 export type HttpMcpServerOptions = {
   log?: ((event: HttpLogEvent) => void) | undefined;
 };
 
 type FetchHandler = Pick<McpHttpHandler, "close" | "fetch">;
+type HttpCredential = { clientId: string; token: string };
+export type HttpCredentialProvider = {
+  authenticate: (authorization: string | null) => Promise<AuthInfo | undefined>;
+};
 
 /** Returns the only supported HTTP secret without copying it into config. */
 export function readHttpBearerToken(env: NodeJS.ProcessEnv): string {
@@ -45,54 +57,110 @@ export function readHttpBearerToken(env: NodeJS.ProcessEnv): string {
   return token;
 }
 
+/**
+ * Reads HTTP credentials from an operator-controlled source. A token file is
+ * intentionally read again for every request, so an atomic local replacement
+ * rotates credentials without restarting the MCP process. The filename is
+ * configuration only and is never logged or exposed through MCP.
+ */
+export function createHttpCredentialProvider(
+  env: NodeJS.ProcessEnv,
+): HttpCredentialProvider {
+  const path = env.INKSCAPE_MCP_HTTP_TOKENS_FILE;
+  return path === undefined || path === ""
+    ? new StaticHttpCredentialProvider(readHttpBearerToken(env))
+    : new FileHttpCredentialProvider(path);
+}
+
 /** Wraps an official MCP v2 handler with the local HTTP security boundary. */
 export function createSecureHttpHandler(
   config: ServerConfig,
-  token: string,
+  credentials: string | HttpCredentialProvider,
   handler?: FetchHandler,
   options: HttpMcpServerOptions = {},
 ): FetchHandler {
   const log = options.log ?? writeHttpLog;
   const runtime = createServerRuntime(config);
+  const credentialProvider =
+    typeof credentials === "string"
+      ? new StaticHttpCredentialProvider(credentials)
+      : credentials;
+  const telemetry = new HttpTelemetry(log);
   const securedHandler =
     handler ??
-    createMcpHandler(() => buildServer(config, runtime), {
-      legacy: "reject",
-      maxSubscriptions: 16,
-      onerror: () => log({ event: "http_server_error", status: 500 }),
-    });
+    createMcpHandler(
+      (context) => {
+        if (context.authInfo === undefined)
+          throw new Error("HTTP authentication is required");
+        return buildServer(
+          config,
+          runtime,
+          httpOwnerScope(context.authInfo.clientId),
+        );
+      },
+      {
+        legacy: "reject",
+        maxSubscriptions: 16,
+        onerror: () => log({ event: "http_server_error", status: 500 }),
+      },
+    );
   const limiter = new LocalRateLimiter();
   return {
-    close: () => securedHandler.close(),
+    close: async () => {
+      await securedHandler.close();
+      await telemetry.shutdown();
+    },
     async fetch(request: Request): Promise<Response> {
-      if (new URL(request.url).pathname !== HTTP_PATH)
-        return new Response("Not found", { status: 404 });
-      const rejected =
-        hostHeaderValidationResponse(request, LOCAL_HOSTNAMES) ??
-        originValidationResponse(request, LOCAL_HOSTNAMES);
-      if (rejected) {
-        log({
-          event: "http_request_rejected",
-          status: rejected.status as 400 | 403,
-        });
-        return rejected;
+      const requestSpan = telemetry.start();
+      const respond = (response: Response): Response => {
+        requestSpan.finish(response.status);
+        return response;
+      };
+      try {
+        if (new URL(request.url).pathname !== HTTP_PATH)
+          return respond(new Response("Not found", { status: 404 }));
+        const rejected =
+          hostHeaderValidationResponse(request, LOCAL_HOSTNAMES) ??
+          originValidationResponse(request, LOCAL_HOSTNAMES);
+        if (rejected) {
+          log({
+            event: "http_request_rejected",
+            status: rejected.status as 400 | 403,
+          });
+          return respond(rejected);
+        }
+        if (!limiter.allow("loopback")) {
+          log({ event: "http_request_rejected", status: 429 });
+          return respond(
+            new Response("Too many requests", {
+              headers: { "Retry-After": "60" },
+              status: 429,
+            }),
+          );
+        }
+        const auth = await authenticateBearer(
+          request.headers.get("authorization"),
+          credentialProvider,
+        );
+        if (auth === undefined) {
+          log({ event: "http_server_error", status: 503 });
+          return respond(
+            new Response("Authentication temporarily unavailable", {
+              status: 503,
+            }),
+          );
+        }
+        if (auth instanceof Response) {
+          log({ event: "http_request_rejected", status: 401 });
+          return respond(auth);
+        }
+        const ownerScope = httpOwnerScope(auth.clientId);
+        requestSpan.setPrincipal(ownerScope.id);
+        return respond(await securedHandler.fetch(request, { authInfo: auth }));
+      } catch (error) {
+        requestSpan.finish(500);
+        throw error;
       }
-      if (!limiter.allow("loopback")) {
-        log({ event: "http_request_rejected", status: 429 });
-        return new Response("Too many requests", {
-          headers: { "Retry-After": "60" },
-          status: 429,
-        });
-      }
-      const auth = authenticateBearer(
-        request.headers.get("authorization"),
-        token,
-      );
-      if (auth instanceof Response) {
-        log({ event: "http_request_rejected", status: 401 });
-        return auth;
-      }
-      return securedHandler.fetch(request, { authInfo: auth });
     },
   };
 }
@@ -100,13 +168,15 @@ export function createSecureHttpHandler(
 /** Starts the opt-in loopback-only HTTP endpoint. */
 export async function startHttpMcpServer(
   config: ServerConfig,
-  token: string,
+  credentials: string | HttpCredentialProvider,
   options: HttpMcpServerOptions = {},
 ): Promise<HttpMcpServer> {
   if (config.transport !== "http")
     throw new Error("HTTP server requires transport=http");
   const log = options.log ?? writeHttpLog;
-  const handler = createSecureHttpHandler(config, token, undefined, { log });
+  const handler = createSecureHttpHandler(config, credentials, undefined, {
+    log,
+  });
   const server = createServer((request, response) => {
     void handleNodeRequest(request, response, config, handler, log);
   });
@@ -131,32 +201,102 @@ export async function startHttpMcpServer(
   };
 }
 
-function authenticateBearer(
+async function authenticateBearer(
   authorization: string | null,
-  expectedToken: string,
-): AuthInfo | Response {
+  provider: HttpCredentialProvider,
+): Promise<AuthInfo | Response | undefined> {
   const match = /^Bearer ([A-Za-z0-9_-]{1,256})$/iu.exec(authorization ?? "");
   const actualToken = match?.[1];
-  if (!actualToken || !constantTimeTokenEquals(actualToken, expectedToken))
+  if (!actualToken)
     return new Response("Unauthorized", {
       headers: { "WWW-Authenticate": 'Bearer realm="inkscape-mcp"' },
       status: 401,
     });
-  return {
-    clientId: "local-http-token",
-    expiresAt: Math.floor(Date.now() / 1000) + 60,
-    scopes: ["mcp"],
-    token: expectedToken,
-  };
+  try {
+    const auth = await provider.authenticate(authorization);
+    return (
+      auth ??
+      new Response("Unauthorized", {
+        headers: { "WWW-Authenticate": 'Bearer realm="inkscape-mcp"' },
+        status: 401,
+      })
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+class StaticHttpCredentialProvider implements HttpCredentialProvider {
+  public constructor(private readonly token: string) {}
+
+  public async authenticate(
+    authorization: string | null,
+  ): Promise<AuthInfo | undefined> {
+    return authenticateCredentials(authorization, [
+      { clientId: "local-http-token", token: this.token },
+    ]);
+  }
+}
+
+class FileHttpCredentialProvider implements HttpCredentialProvider {
+  public constructor(private readonly path: string) {}
+
+  public async authenticate(
+    authorization: string | null,
+  ): Promise<AuthInfo | undefined> {
+    return authenticateCredentials(authorization, await this.credentials());
+  }
+
+  private async credentials(): Promise<readonly HttpCredential[]> {
+    const contents = await readFile(this.path, "utf8");
+    if (Buffer.byteLength(contents, "utf8") > 64 * 1024)
+      throw new Error("HTTP credential source is invalid");
+    const parsed: unknown = JSON.parse(contents);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error("HTTP credential source is invalid");
+    const entries = Object.entries(parsed).sort(([left], [right]) =>
+      left.localeCompare(right),
+    );
+    if (entries.length < 1 || entries.length > 32)
+      throw new Error("HTTP credential source is invalid");
+    return entries.map(([clientId, token]) => {
+      if (
+        !/^[A-Za-z0-9._-]{1,64}$/u.test(clientId) ||
+        typeof token !== "string" ||
+        !TOKEN_PATTERN.test(token)
+      )
+        throw new Error("HTTP credential source is invalid");
+      return { clientId, token };
+    });
+  }
+}
+
+function authenticateCredentials(
+  authorization: string | null,
+  credentials: readonly HttpCredential[],
+): AuthInfo | undefined {
+  const match = /^Bearer ([A-Za-z0-9_-]{1,256})$/iu.exec(authorization ?? "");
+  const actualToken = match?.[1];
+  if (!actualToken) return undefined;
+  let selected: HttpCredential | undefined;
+  for (const credential of credentials) {
+    if (constantTimeTokenEquals(actualToken, credential.token))
+      selected ??= credential;
+  }
+  return selected === undefined
+    ? undefined
+    : {
+        clientId: selected.clientId,
+        expiresAt: Math.floor(Date.now() / 1000) + 60,
+        scopes: ["mcp"],
+        token: actualToken,
+      };
 }
 
 function constantTimeTokenEquals(actual: string, expected: string): boolean {
-  const actualBytes = Buffer.from(actual);
-  const expectedBytes = Buffer.from(expected);
-  return (
-    actualBytes.length === expectedBytes.length &&
-    timingSafeEqual(actualBytes, expectedBytes)
-  );
+  const actualDigest = createHash("sha256").update(actual).digest();
+  const expectedDigest = createHash("sha256").update(expected).digest();
+  return timingSafeEqual(actualDigest, expectedDigest);
 }
 
 async function handleNodeRequest(

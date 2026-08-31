@@ -8,6 +8,8 @@ Actualizado: 2026-08-25. Las versiones directas se fijan en `package.json` y el 
 | `@modelcontextprotocol/client`          |   2.0.0 | Pruebas de transporte/negociación | MIT                | Solo desarrollo                                          |
 | `@modelcontextprotocol/conformance`     |  0.1.16 | Conformance fijada                | MIT                | Solo desarrollo                                          |
 | `@modelcontextprotocol/inspector`       |   2.3.0 | Inspector fijado                  | MIT                | Tiene postinstall pendiente de aprobación; no se ejecutó |
+| `@opentelemetry/api`                    |   1.9.1 | API de trazas HTTP locales        | Apache-2.0         | Sin exporter remoto ni payloads                          |
+| `@opentelemetry/sdk-trace-base`         |  2.10.0 | Trazas HTTP estructuradas         | Apache-2.0         | Exportador allowlisted sólo a stderr                     |
 | `zod`                                   |   4.4.3 | Schemas de dominio                | MIT                | Validación de inputs                                     |
 | `typescript`                            |   6.0.3 | Compilación                       | Apache-2.0         | Solo desarrollo                                          |
 | `vitest`                                |  4.1.11 | Pruebas                           | MIT                | Solo desarrollo                                          |

@@ -91,9 +91,11 @@ un parser nativo en sandboxed.
 - No incluyas rutas absolutas, documentos o secretos en logs que compartas.
 
 El transporte HTTP experimental nunca es una vía para exponer el MCP fuera del
-equipo: sólo escucha `127.0.0.1`, valida Host/Origin y exige un bearer token
-local inyectado por `INKSCAPE_MCP_HTTP_TOKEN`. Mantén el token fuera de archivos
-versionados, rótalo reiniciando el proceso y no configures proxies, túneles ni
-binds alternativos. Aún faltan conformance HTTP, auditoría estructurada y un
-modelo de autorización por principal antes de anunciarlo como transporte
-estable.
+equipo: sólo escucha `127.0.0.1`, valida Host/Origin y exige bearer local. Un
+token único se inyecta por `INKSCAPE_MCP_HTTP_TOKEN`; para rotarlo sin reinicio
+puedes usar `INKSCAPE_MCP_HTTP_TOKENS_FILE` con reemplazo atómico y ACL privada.
+HTTP liga artifacts, recursos, jobs, planes y snapshots al principal
+autenticado y emite sólo telemetría estructurada redactada a stderr. No
+configures proxies, túneles ni binds alternativos. Consulta la
+[guía HTTP](./http-security.md): faltan conformance HTTP moderno, sandbox y
+autorización por ACL de filesystem antes de anunciarlo como transporte estable.

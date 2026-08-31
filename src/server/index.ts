@@ -194,6 +194,7 @@ import {
   ExportManifestResourceStore,
 } from "./document-resources.js";
 import { JobStore } from "./jobs.js";
+import { type OwnerScope } from "./ownership.js";
 import {
   AtomicFileStore,
   ArtifactStore,
@@ -1255,6 +1256,7 @@ export function createServerRuntime(config: ServerConfig): ServerRuntime {
 export function buildServer(
   config: ServerConfig,
   runtime: ServerRuntime = createServerRuntime(config),
+  ownerScope?: OwnerScope,
 ): McpServer {
   const server = new McpServer(
     {
@@ -1278,6 +1280,8 @@ export function buildServer(
     scratch,
     snapshots,
   } = runtime;
+  const ownerForWorkspace =
+    ownerScope?.ownerForWorkspace ?? ((id: string) => id);
   const workspaces = () => WorkspaceService.create(config.workspaceRoots);
   let fontCache:
     | { expiresAt: number; families: readonly string[]; source: string }
@@ -1311,6 +1315,7 @@ export function buildServer(
         0,
         uri.href,
         config.maxResourceReadBytes,
+        ownerScope,
       ),
   );
   server.registerResource(
@@ -1331,6 +1336,7 @@ export function buildServer(
         parseArtifactOffset(resourceVariable(variables.offset)),
         uri.href,
         config.maxResourceReadBytes,
+        ownerScope,
       ),
   );
   server.registerResource(
@@ -1413,6 +1419,7 @@ export function buildServer(
           kind,
           uri.href,
           config.maxResourceReadBytes,
+          ownerScope,
         ),
     );
   server.registerResource(
@@ -1432,6 +1439,7 @@ export function buildServer(
         jobs,
         resourceVariable(variables.id),
         uri.href,
+        ownerScope,
       ),
   );
 
@@ -1548,7 +1556,7 @@ export function buildServer(
       await artifacts.removeExpired();
       const chunk = await artifacts.readChunk(
         artifactId,
-        workspaceId,
+        ownerForWorkspace(workspaceId),
         offset,
         length,
         config.maxResourceReadBytes,
@@ -1713,7 +1721,7 @@ export function buildServer(
       ).resolveExisting(workspaceId, path);
       const snapshot = await snapshots.create(
         document.absolutePath,
-        workspaceId,
+        ownerForWorkspace(workspaceId),
         ttlMs,
         expectedRevision,
       );
@@ -1751,7 +1759,7 @@ export function buildServer(
       ).resolveExisting(workspaceId, path);
       const output = await snapshots.restore(
         snapshotId,
-        workspaceId,
+        ownerForWorkspace(workspaceId),
         document.absolutePath,
         expectedRevision,
       );
@@ -7273,7 +7281,7 @@ export function buildServer(
           width: output.width,
           widthUnit: output.widthUnit,
         },
-        owner: workspaceId,
+        owner: ownerForWorkspace(workspaceId),
         revision,
         summary: {
           inspectionLevel: output.inspectionLevel,
@@ -8190,7 +8198,7 @@ export function buildServer(
       await artifacts.removeExpired();
       const artifact = await artifacts.publish(
         output.absolutePath,
-        workspaceId,
+        ownerForWorkspace(workspaceId),
         24 * 60 * 60 * 1_000,
       );
       if (artifact.hash !== committed.revision)
@@ -8362,7 +8370,7 @@ export function buildServer(
           }),
         )
         .digest("hex");
-      const plan = exportPlans.create(workspaceId, {
+      const plan = exportPlans.create(ownerForWorkspace(workspaceId), {
         capabilitiesFingerprint: observed.fingerprint,
         digest,
         outputDirectory: preset.outputDirectory,
@@ -8491,7 +8499,7 @@ export function buildServer(
       const savedPlan =
         planToken === undefined
           ? undefined
-          : exportPlans.consume(planToken, workspaceId);
+          : exportPlans.consume(planToken, ownerForWorkspace(workspaceId));
       const execute = async (execution?: {
         beginPublication?: () => void;
         onProgress: (progress: { detail?: string; stage: string }) => void;
@@ -8723,7 +8731,7 @@ export function buildServer(
             "Asynchronous export jobs require mode all_or_nothing",
           );
         const job = jobs.create(
-          workspaceId,
+          ownerForWorkspace(workspaceId),
           async (options) => {
             const response = await execute(options);
             return response.structuredContent;
@@ -8731,13 +8739,16 @@ export function buildServer(
           {
             onTerminal: (snapshot) => {
               if (snapshot.status !== "completed")
-                exportManifestResources.removeForJob(snapshot.id, workspaceId);
+                exportManifestResources.removeForJob(
+                  snapshot.id,
+                  ownerForWorkspace(workspaceId),
+                );
             },
           },
         );
         const manifestResource = exportManifestResources.register(
           job.id,
-          workspaceId,
+          ownerForWorkspace(workspaceId),
         );
         const result = {
           jobId: job.id,
@@ -8788,7 +8799,7 @@ export function buildServer(
     async ({ jobId, workspaceId }) => {
       jobs.removeExpired();
       await exportManifestResources.removeExpired();
-      const result = jobs.get(jobId, workspaceId);
+      const result = jobs.get(jobId, ownerForWorkspace(workspaceId));
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
         structuredContent: result,
@@ -8827,7 +8838,7 @@ export function buildServer(
     async ({ jobId, workspaceId }) => {
       jobs.removeExpired();
       await exportManifestResources.removeExpired();
-      const result = jobs.cancel(jobId, workspaceId);
+      const result = jobs.cancel(jobId, ownerForWorkspace(workspaceId));
       return {
         content: [{ type: "text", text: JSON.stringify(result) }],
         structuredContent: result,
@@ -9106,7 +9117,7 @@ export function buildServer(
       await artifacts.removeExpired();
       const artifact = await artifacts.publish(
         output.absolutePath,
-        workspaceId,
+        ownerForWorkspace(workspaceId),
         24 * 60 * 60 * 1_000,
       );
       if (artifact.hash !== committed.revision)
@@ -10926,18 +10937,28 @@ async function artifactResource(
   offset: number,
   uri: string,
   maximumReadBytes: number,
+  ownerScope?: OwnerScope,
 ): Promise<{
   contents: Array<{ blob: string; mimeType: string; uri: string }>;
 }> {
   if (id === undefined || !/^art_[a-f0-9]{32}$/u.test(id))
     throw new Error("Artifact URI is invalid");
   await artifacts.removeExpired();
-  const chunk = await artifacts.readCapabilityChunk(
-    id,
-    offset,
-    maximumReadBytes,
-    maximumReadBytes,
-  );
+  const chunk =
+    ownerScope === undefined
+      ? await artifacts.readCapabilityChunk(
+          id,
+          offset,
+          maximumReadBytes,
+          maximumReadBytes,
+        )
+      : await artifacts.readScopedCapabilityChunk(
+          id,
+          ownerScope.owns,
+          offset,
+          maximumReadBytes,
+          maximumReadBytes,
+        );
   return {
     contents: [
       {
@@ -10955,13 +10976,22 @@ async function documentResource(
   kind: "metadata" | "summary" | "svg",
   uri: string,
   maximumReadBytes: number,
+  ownerScope?: OwnerScope,
 ): Promise<{
   contents: Array<{ mimeType: string; text: string; uri: string }>;
 }> {
   if (id === undefined || !/^doc_[a-f0-9]{32}$/u.test(id))
     throw new Error("Document resource URI is invalid");
   await resources.removeExpired();
-  const resource = await resources.readCapability(id, kind, maximumReadBytes);
+  const resource =
+    ownerScope === undefined
+      ? await resources.readCapability(id, kind, maximumReadBytes)
+      : await resources.readScopedCapability(
+          id,
+          ownerScope.owns,
+          kind,
+          maximumReadBytes,
+        );
   return {
     contents: [{ mimeType: resource.mimeType, text: resource.text, uri }],
   };
@@ -10972,13 +11002,17 @@ async function exportManifestResource(
   jobs: JobStore,
   id: string | undefined,
   uri: string,
+  ownerScope?: OwnerScope,
 ): Promise<{
   contents: Array<{ mimeType: string; text: string; uri: string }>;
 }> {
   if (id === undefined || !/^exp_[a-f0-9]{32}$/u.test(id))
     throw new Error("Export manifest resource URI is invalid");
   await resources.removeExpired();
-  const reference = await resources.resolve(id);
+  const reference =
+    ownerScope === undefined
+      ? await resources.resolve(id)
+      : await resources.resolveScoped(id, ownerScope.owns);
   const job = jobs.get<{ manifest?: unknown }>(
     reference.jobId,
     reference.owner,

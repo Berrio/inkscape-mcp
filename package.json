@@ -52,6 +52,7 @@
     "test:f05-g03": "npm run build --silent && node scripts/test-f05-pdf-multipage.mjs",
     "test:f05-g04": "npm run build --silent && node scripts/test-f05-svg-reopen.mjs",
     "test:f05-g05": "npm run build --silent && vitest run tests/unit/storage.test.ts tests/unit/recovery.test.ts && node scripts/test-f05-batch-recovery.mjs",
+    "test:f05-g06": "npm run build --silent && vitest run tests/unit/runner.test.ts tests/unit/jobs.test.ts tests/unit/recovery.test.ts && node scripts/test-f05-cancel-restart.mjs",
     "test:f09-wp01": "npm run build --silent && node scripts/test-f09-server-contract.mjs",
     "test:f09-wp02": "npm run build --silent && node scripts/test-f09-resources-prompts.mjs",
     "test:f09-wp03": "npm run build --silent && vitest run tests/unit/jobs.test.ts tests/unit/document-resources.test.ts && node scripts/test-f09-resources-prompts.mjs",

@@ -27,6 +27,75 @@ const requiredTools = [
   "inkscape_status",
   "workspace_list",
 ];
+const expectedAnnotations = new Map([
+  ["document_create", { destructiveHint: false }],
+  ["document_export_batch", { destructiveHint: false }],
+  ["document_inspect", { readOnlyHint: true }],
+  ["document_render_preview", { destructiveHint: false }],
+  ["elements_create", { destructiveHint: true }],
+  ["inkscape_status", { readOnlyHint: true }],
+  ["job_cancel", { destructiveHint: false }],
+  ["job_get", { readOnlyHint: true }],
+  ["workspace_list", { readOnlyHint: true }],
+]);
+const requiredOutputProperties = new Map([
+  ["document_create", "revision"],
+  ["document_export_batch", "mode"],
+  ["document_inspect", "revision"],
+  ["document_render_preview", "artifact"],
+  ["elements_create", "revision"],
+  ["inkscape_status", "workspaceReady"],
+  ["job_cancel", "status"],
+  ["job_get", "status"],
+  ["workspace_list", "workspaces"],
+]);
+
+function outputSchemaBranches(schema) {
+  if (Array.isArray(schema?.anyOf))
+    return schema.anyOf.flatMap(outputSchemaBranches);
+  if (Array.isArray(schema?.oneOf))
+    return schema.oneOf.flatMap(outputSchemaBranches);
+  if (schema?.type === "object") return [schema];
+  return [];
+}
+
+function assertToolAnnotationsAndOutputSchemas(tools) {
+  for (const tool of tools) {
+    const schemas = outputSchemaBranches(tool.outputSchema);
+    if (
+      schemas.length === 0 ||
+      schemas.some(
+        (schema) =>
+          schema.additionalProperties !== false ||
+          typeof schema.properties !== "object" ||
+          Object.keys(schema.properties).length === 0,
+      )
+    )
+      throw new Error(`tool ${tool.name} has a missing or open output schema`);
+    const annotations = tool.annotations;
+    if (
+      annotations === undefined ||
+      Object.values(annotations).some((value) => typeof value !== "boolean") ||
+      (annotations.readOnlyHint === true &&
+        annotations.destructiveHint === true)
+    )
+      throw new Error(`tool ${tool.name} has invalid intent annotations`);
+  }
+  for (const [name, expected] of expectedAnnotations) {
+    const tool = tools.find((candidate) => candidate.name === name);
+    if (JSON.stringify(tool?.annotations) !== JSON.stringify(expected))
+      throw new Error(`tool ${name} changed its stable intent annotation`);
+  }
+  for (const [name, property] of requiredOutputProperties) {
+    const tool = tools.find((candidate) => candidate.name === name);
+    if (
+      !outputSchemaBranches(tool?.outputSchema).some(
+        (schema) => property in schema.properties,
+      )
+    )
+      throw new Error(`tool ${name} output schema omits ${property}`);
+  }
+}
 
 async function inspectCatalog(label) {
   const client = new Client(
@@ -54,6 +123,7 @@ async function inspectCatalog(label) {
       )
     )
       throw new Error("server did not expose its complete typed tool catalog");
+    assertToolAnnotationsAndOutputSchemas(tools);
     const instructions = client.getInstructions();
     for (const phrase of [
       "workspace_list",

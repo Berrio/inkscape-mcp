@@ -1963,7 +1963,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [x] `F09-T03` Validar/endurecer el transporte stdio introducido en F01 con la API v2 oficial y todo el catálogo. — El smoke `test:f09-wp01` usa `StdioClientTransport` y negociación fijada a `2026-07-28` para listar el catálogo completo en procesos independientes.
 - [x] `F09-T04` Repetir como regresión que stdout contiene únicamente framing MCP con el catálogo completo, errores y progreso activos. — La regresión conecta/lista/invoca dos veces sin interferencia de diagnósticos, inicia un cliente raw para parámetros MCP inválidos (respuesta JSON-RPC de error) y observa por `job_get` una exportación real con progreso monotónico `rendering`/`publishing`; los logs continúan exclusivamente por stderr. Las notificaciones push quedan como evolución de F09-T12/T13.
 - [x] `F09-T05` Traducir errores de dominio a `isError` y protocolo mal formado a error MCP. — Una inspección fuera de workspace y un argumento extra estricto devuelven `isError` compatible, preservando la validación MCP del SDK para requests mal formados.
-- [ ] `F09-T06` Verificar tool annotations y output schemas.
+- [x] `F09-T06` Verificar tool annotations y output schemas. — `test:f09-wp01` exige que cada tool publique una anotación booleana válida y un output schema cerrado; cubre además las uniones tipadas de `document_export_batch` y las propiedades de contrato de tools representativas.
 
 #### Resources y prompts
 

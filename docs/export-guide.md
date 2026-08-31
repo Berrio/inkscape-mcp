@@ -20,6 +20,29 @@ archivo fuente no se entrega directamente al proceso nativo. La publicación
 ocurre sólo después de verificar el artefacto y comprobar que la revisión de
 origen no cambió.
 
+## Recorrido MVP reproducible: etiqueta de 10 cm x 4 cm
+
+El recorrido minimo usa solo tools MCP, paths relativos y las revisiones
+devueltas por el servidor. Primero llama `workspace_list` y conserva el ID
+opaco. Despues ejecuta las siguientes operaciones, sustituyendo cada marcador
+`<revision>` por el valor devuelto por la operacion anterior:
+
+1. `document_create`: `outputPath: "etiqueta.svg"`, `width: 8`, `height: 3`,
+   `unit: "cm"` y `workspaceId`.
+2. `document_resize`: `path: "etiqueta.svg"`, `width: 10`, `height: 4`,
+   `unit: "cm"`, `mode: "page_only"` y `expectedRevision: <revision>`.
+3. `document_inspect` con `level: "summary"`, seguido de
+   `document_render_preview` con la revision actual y un `outputPath` PNG
+   nuevo. El preview no cambia el SVG.
+4. Exporta la misma revision con `export_png` (por ejemplo `width: 400`),
+   `export_pdf` y `export_svg` con `flavor: "plain"`, siempre hacia nombres
+   nuevos como `etiqueta.png`, `etiqueta.pdf` y `etiqueta-plain.svg`.
+
+Cada respuesta incluye metadata verificada; para una etiqueta 10 x 4 cm, un
+PNG de 400 px de ancho mide 400 x 160 px. El script
+`npm run test:f05-g09` reproduce este recorrido en un workspace temporal,
+reabre el PDF y verifica las firmas de PNG/PDF y el namespace del SVG plano.
+
 ## PNG: raster para web, vista previa o imprenta controlada
 
 PNG captura una apariencia en píxeles. Conserva transparencia, pero **no**

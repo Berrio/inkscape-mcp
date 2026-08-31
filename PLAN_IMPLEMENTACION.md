@@ -2082,7 +2082,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [x] `F11-T18` `package.json` bin `inkscape-mcp`, files allowlist y `mcpName` si corresponde. — `npm run pack:check` verifica la allowlist y `test:pack` confirma que npm crea y resuelve el shim `inkscape-mcp`.
 - [x] `F11-T19` Instalar el `.tgz` producido en directorio temporal y ejecutar doctor/stdio real. — El smoke instala el tarball, parsea `--doctor --json` y conecta un cliente MCP al binario `dist` instalado.
 - [x] `F11-T20` Probar instalación con npm limpio y sin source tree. — `scripts/pack-smoke.mjs` usa un prefijo temporal independiente, instala sólo el `.tgz` con npm y ejecuta el binario publicado, recetas y cola durable.
-- [x] `F11-T21` Sincronizar versión package/server/changelog/server.json. — `0.1.0` alinea `package.json`, lockfile, CLI, server manifest y changelog; el test de metadata evita divergencias y el paquete permanece privado.
+- [x] `F11-T21` Sincronizar versión package/server/changelog/server.json. — `0.1.0` alinea `package.json`, lockfile, CLI, server manifest y changelog; el test de metadata evita divergencias y el paquete queda preparado para publicación pública. La publicación efectiva sigue siendo `F11-T23`.
 - [x] `F11-T22` Crear provenance/SBOM/checksums según infraestructura disponible. — `npm run release:provenance` crea localmente tarball, SPDX, provenance y `SHA256SUMS` de un árbol Git limpio, sin publicar artefactos.
 - [ ] `F11-T23` Publicar npm solo con autorización explícita del usuario.
 - [ ] `F11-T24` Preparar/publicar MCP Registry solo después de npm y con autorización explícita.

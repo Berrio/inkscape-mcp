@@ -8582,6 +8582,7 @@ export function buildServer(
               stage: "rendering",
             });
             const rendered = await renderGenericExport({
+              capabilities,
               config,
               inputPath: input.absolutePath,
               inputRoot: input.workspaceRoot,
@@ -10403,11 +10404,9 @@ function isBaselineBatchSpec(
   if (spec.format === "pdf")
     return (
       spec.area.kind !== "pages" &&
-      spec.filterRasterDpi === undefined &&
       spec.filters === "preserve" &&
       spec.latex !== true &&
       spec.margin === undefined &&
-      spec.text === "preserve" &&
       spec.version === undefined
     );
   return (
@@ -10418,6 +10417,7 @@ function isBaselineBatchSpec(
 }
 
 async function renderGenericExport(request: {
+  capabilities: CapabilityService;
   config: ServerConfig;
   inputPath: string;
   inputRoot: string;
@@ -10457,6 +10457,27 @@ async function renderGenericExport(request: {
   );
   if (!("version" in probe))
     throw new Error("Inkscape executable could not be validated");
+  const requiredCapabilities = requiredPdfCapabilityFlags(request.spec);
+  if (requiredCapabilities.length > 0) {
+    const observed = await request.capabilities.inspect(
+      request.runner,
+      candidate,
+      probe.version,
+      process.cwd(),
+    );
+    const available = new Set(
+      observed.flags
+        .filter((flag) => flag.availability === "available")
+        .map((flag) => flag.name),
+    );
+    const unavailable = requiredCapabilities.filter(
+      (flag) => !available.has(flag),
+    );
+    if (unavailable.length > 0)
+      throw new Error(
+        `Requested PDF renderer options are unavailable in this Inkscape installation: ${unavailable.map(pdfCapabilityLabel).join(", ")}`,
+      );
+  }
   return request.scratch.withDirectory("staging", async (directory) => {
     const nativeInput = await createNativeInputBundle(
       request.inputPath,

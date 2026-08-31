@@ -78,11 +78,27 @@ publicación, sigue la [guía de evidencia de release](./docs/release-evidence.m
 
 ## Ejecutar localmente
 
+Clona el repositorio, instala exactamente las dependencias fijadas y genera el
+servidor antes de configurar tu cliente MCP:
+
 ```powershell
+git clone https://github.com/Berrio/inkscape-mcp.git
+cd inkscape-mcp
 npm ci
+npm run build
+node dist/cli.js --doctor --json
+```
+
+Para verificar la instalación completa contra Inkscape, ejecuta además:
+
+```powershell
 npm run check
 npm run test:mcp
-node dist/cli.js --doctor --json
+```
+
+Después inicia el servidor para el workspace autorizado:
+
+```powershell
 node dist/cli.js --workspace-root C:\ruta\a\tus\disenos
 ```
 

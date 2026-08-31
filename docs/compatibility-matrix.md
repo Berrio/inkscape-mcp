@@ -37,6 +37,11 @@ para prevenir perdida silenciosa.
 
 ## Plataforma y transporte
 
+La CI publica una matriz de unitarios/build para Windows, Linux y macOS con
+Node 24.18.0. Esa matriz no instala Inkscape ni ejecuta `test:mcp`: confirma
+portabilidad del servidor, no una integracion nativa ni soporte de formatos en
+esas plataformas.
+
 | Área                              | Estado                      | Evidencia y límite                                                                                                                                                                          |
 | --------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Windows + Inkscape 1.4.4 MSIX     | Estable para el baseline    | Discovery MSIX, doctor, stdio real y exports reales pasan en esta build. Las rutas MSIX no se fijan en configuración.                                                                       |

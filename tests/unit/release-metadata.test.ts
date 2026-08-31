@@ -50,7 +50,7 @@ describe("release metadata", () => {
         version: packageMetadata.version,
       },
     ]);
-    expect(packageMetadata.private).toBe(true);
+    expect(packageMetadata.private).toBe(false);
     expect(changelog).toContain(`## [${packageMetadata.version}] - 2026-08-27`);
   });
 });

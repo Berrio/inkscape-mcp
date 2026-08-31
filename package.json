@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "MCP server for secure headless Inkscape document design and exports",
   "license": "MIT",
-  "private": true,
+  "private": false,
   "mcpName": "io.github.berrio/inkscape-mcp",
   "repository": {
     "type": "git",
@@ -15,7 +15,7 @@
   },
   "type": "module",
   "bin": {
-    "inkscape-mcp": "./dist/cli.js"
+    "inkscape-mcp": "dist/cli.js"
   },
   "files": [
     "dist",

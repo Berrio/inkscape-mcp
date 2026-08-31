@@ -33,7 +33,7 @@ describe("release provenance", () => {
     expect(provenance).toMatchObject({
       artifacts: [{ fileName: "inkscape-mcp-0.1.0.tgz", sha256: "abc123" }],
       git: { commit: "a".repeat(40), treeState: "clean" },
-      package: { name: "inkscape-mcp", private: true, version: "0.1.0" },
+      package: { name: "inkscape-mcp", private: false, version: "0.1.0" },
       schema: "inkscape-mcp-release-provenance/v1",
     });
   });

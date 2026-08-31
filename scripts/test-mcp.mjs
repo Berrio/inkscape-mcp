@@ -3873,18 +3873,19 @@ try {
     );
   }
   const artifactUri = preview.structuredContent.artifact.uri;
-  if (
-    !preview.content.some(
-      (item) =>
-        item.type === "resource_link" &&
-        item.mimeType === "image/png" &&
-        item.uri === artifactUri,
-    )
-  ) {
+  const hasInlineImage = preview.content.some(
+    (item) => item.type === "image" && item.mimeType === "image/png",
+  );
+  const hasArtifactLink = preview.content.some(
+    (item) =>
+      item.type === "resource_link" &&
+      item.mimeType === "image/png" &&
+      item.uri === artifactUri,
+  );
+  if (!hasInlineImage && !hasArtifactLink)
     throw new Error(
-      "document_render_preview did not return its opaque artifact link",
+      "document_render_preview did not return inline content or its opaque artifact link",
     );
-  }
   const resourceTemplates = await workspaceClient.listResourceTemplates();
   if (
     !resourceTemplates.resourceTemplates.some(

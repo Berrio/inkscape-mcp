@@ -17,5 +17,5 @@ Este proyecto sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) 
 - Hardening reproducible: corpus adversarial, límites de carga y concurrencia,
   recuperación de staging obsoleto, auditoría de dependencias y revisión de
   logs/superficie de seguridad.
-- Metadatos de paquete y `server.json` coherentes para una futura publicación
-  de npm y del registro MCP. El paquete permanece privado en esta versión.
+- Metadatos de paquete y `server.json` coherentes para la publicación de npm
+  y del registro MCP.

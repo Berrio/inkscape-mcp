@@ -2034,11 +2034,11 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 #### Plataformas
 
 - [x] `F10-T14` CI/unit en Windows, Linux y macOS con Node soportado. — El workflow `Portable unit CI` fija Node 24.18.0 y ejecuta `npm ci` + `npm run check` en los tres runners; la ejecución #2 del commit `5376fb0` concluyó correctamente en Windows, Ubuntu y macOS.
-- [ ] `F10-T15` Integración real con Inkscape por plataforma/versiones declaradas.
-- [ ] `F10-T16` Documentar formatos/extensiones variables por build.
-- [ ] `F10-T17` En macOS 1.4.4, probar el problema conocido de extensiones lanzadas por CLI y deshabilitar capabilities afectadas.
+- [x] `F10-T15` Integración real con Inkscape por plataforma/versiones declaradas. — `npm run test:f10-windows-baseline` conecta por stdio con la instalación MSIX local 1.4.4, comprueba status/version/páginas, fuentes/preflight y genera un PNG Unicode verificable. Windows 1.4.4 es la única plataforma/versión declarada estable.
+- [x] `F10-T16` Documentar formatos/extensiones variables por build. — La matriz de compatibilidad distingue la evidencia del baseline de una capability observada; `doctor` y cada tool vuelven a gatear formatos, flags y adaptadores antes de ejecutar.
+- [-] `F10-T17` En macOS 1.4.4, probar el problema conocido de extensiones lanzadas por CLI y deshabilitar capabilities afectadas. — No existe una instalación macOS 1.4.4 autorizada para ejecutarlo; macOS no se anuncia como estable ni como proveedor de extensiones. Se requiere una máquina macOS real antes de convertir esta evidencia en soporte.
 - [ ] `F10-T18` Probar fuentes, paths Unicode, separadores, case y permisos.
-- [ ] `F10-T19` No marcar plataforma como soportada solo porque compila.
+- [x] `F10-T19` No marcar plataforma como soportada solo porque compila. — La política de versión requiere Windows + 1.4.4 + adapter `pages_v14`; Linux/macOS y 1.5+ permanecen experimentales aunque la CI portable compile y ejecute unitarios.
 
 #### Puerta F10
 

@@ -68,6 +68,7 @@
     "test:f09-wp04": "npm run build --silent && vitest run tests/unit/mcp-compatibility.test.ts && node scripts/test-f09-server-contract.mjs && node scripts/test-f09-resources-prompts.mjs && node scripts/test-f09-inspector.mjs",
     "test:f09-wp05": "vitest run tests/unit/stdio-logging.test.ts tests/unit/telemetry.test.ts",
     "test:f10-inspector": "npm run build --silent && node scripts/test-f10-http-inspector.mjs",
+    "test:f10-windows-baseline": "npm run build --silent && node scripts/test-f10-windows-baseline.mjs",
     "inspect": "npx --no-install @modelcontextprotocol/inspector node dist/cli.js",
     "test:conformance": "npx --no-install @modelcontextprotocol/conformance",
     "pack:check": "npm pack --dry-run --json",

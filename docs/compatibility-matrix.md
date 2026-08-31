@@ -35,6 +35,22 @@ version. Inkscape 1.5+ sigue experimental. Hasta tener un adapter
 representacion de pagina SVG `view` se rechaza antes de leer o mutar paginas
 para prevenir perdida silenciosa.
 
+La prueba `npm run test:f10-windows-baseline` verifica ese baseline por stdio:
+status/version, fuente local sin rutas de archivos, preflight de una familia
+ausente, SVG y PNG con directorios/Unicode y rechazo de una ruta de drive
+aportada por el cliente. No se ejecuta en la CI portable porque depende de la
+instalacion MSIX real.
+
+### Regla para formatos y extensiones variables por build
+
+La tabla de importacion/exportacion es evidencia del baseline, no un permiso
+para asumir que otra compilacion contiene los mismos codecs, extensiones o
+flags. Al iniciar, `doctor` sondea la instalacion local y las tools vuelven a
+validar las capabilities requeridas antes de ejecutar. Si un formato, flag o
+adaptador no se observa y verifica en ese build, la operacion falla de forma
+recuperable y no publica un artefacto. Compilar el servidor en una plataforma
+o detectar una extension instalada no cambia su estado a soportado.
+
 ## Plataforma y transporte
 
 La CI publica una matriz de unitarios/build para Windows, Linux y macOS con

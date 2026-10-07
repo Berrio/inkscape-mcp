@@ -1482,7 +1482,7 @@ Evidencia específica adicional para WP de alto riesgo:
 
 - [x] `F01-T05` Implementar `spawn` sin shell, argumentos array, cwd seguro y `windowsHide`.
 - [x] `F01-T06` Implementar captura acotada e independiente de stdout/stderr, clasificación de truncamiento y drenaje sin deadlock.
-- [x] `F01-T07` Implementar timeout, AbortSignal y cierre seguro del árbol: Windows Job Object/equivalente asociado al crear el hijo, terminación escalonada y prueba de nietos que ignoran la señal inicial. — Terminador de árbol Windows `taskkill /T /F` probado; Job Object para procesos desacoplados queda como hardening posterior documentado.
+- [x] `F01-T07` Implementar timeout, AbortSignal y cierre seguro del árbol: Windows Job Object/equivalente asociado al crear el hijo, terminación escalonada y prueba de nietos que ignoran la señal inicial. — Terminador de árbol Windows `taskkill /T /F` probado. Desde 2026-10-07 (ADR-012), cada proceso nativo corre en un Job Object kill-on-close al que se une un lanzador antes del `spawn`; las pruebas verifican un huérfano desacoplado y un servidor muerto con SIGKILL sin procesos supervivientes.
 - [x] `F01-T08` Implementar semáforo global configurable.
 - [x] `F01-T09` Implementar limpieza `finally` y tracking de PID solo interno.
 - [x] `F01-T10` Crear fake Inkscape: éxito, error, timeout, salida enorme, output parcial, señal ignorada.
@@ -2059,7 +2059,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [x] `F11-T01` Ejecutar fuzz/property tests de units, paths, selectors, XML, path data y export schemas. — `tests/unit/hardening-property.test.ts` recorre entradas pseudoaleatorias deterministas y casos frontera para conversiones, paths de workspace/output, AST de path, selectores y referencias SVG externas.
 - [x] `F11-T02` Ejecutar corpus adversarial de SVG/PDF/raster. — `tests/unit/adversarial-corpus.test.ts` cubre SVG activo/profundo/excesivo, PDF truncado y raster corrupto; los verificadores PNG exigen ahora IHDR/CRC/IEND completos y el inspector raster valida CRC de IHDR.
 - [x] `F11-T03` Stress de archivos grandes, pages, objetos, DPI, lotes y concurrencia. — `tests/unit/stress-limits.test.ts` cubre 10.000 objetos SVG, 128 páginas, DPI 0.1/10.000, 50 variantes y 64 escritores contendiendo el mismo lock canónico.
-- [x] `F11-T04` Crash/cancel/kill tests y escaneo de temporales/procesos huérfanos. — El runner prueba timeout, abort y árbol padre/nieto en Windows; `recoverStaleScratch` barre sólo temporales propios vencidos al arrancar. Los procesos desacoplados deliberadamente siguen siendo un riesgo residual documentado hasta contar con Job Object/helper nativo.
+- [x] `F11-T04` Crash/cancel/kill tests y escaneo de temporales/procesos huérfanos. — El runner prueba timeout, abort y árbol padre/nieto en Windows; `recoverStaleScratch` barre sólo temporales propios vencidos al arrancar. Los procesos desacoplados quedan cubiertos desde 2026-10-07 por el Job Object de ADR-012.
 - [x] `F11-T05` Revisar dependencias, advisories, licencias y SBOM. — Auditoría npm sin vulnerabilidades, revisión de licencias runtime y generación local de SPDX 2.3 documentadas en `docs/dependency-audit.md`; el SBOM versionado de release se genera en F11-T22.
 - [x] `F11-T06` Revisión manual del threat model y de todo uso de filesystem/process/XML. — `docs/security-surface-audit.md` registra la revisión y riesgos residuales; se corrigió `rewriteStagedAssetReferences` para sanitizar y rechazar SVG activo/remoto antes de parsearlo.
 - [x] `F11-T07` Auditoría de logs para secretos/rutas/contenido. — `docs/logging-audit.md` registra el análisis; `redactDiagnostic` protege stderr de rutas/credenciales y una prueba fija esa redacción.
@@ -2095,7 +2095,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 - [ ] `F11-G01` Todas las puertas F00–F09 están cerradas; F10 puede constar como `[w]` diferido con alcance Windows/stdio explícito.
 - [ ] `F11-G02` Suite P0/P1 e Inspector stdio pasan desde paquete instalado; conformance HTTP es obligatoria solo si F10 se incluye en ese release.
-- [x] `F11-G03` Auditoría de seguridad no tiene hallazgos altos/críticos abiertos. — `npm audit` completo y runtime informaron cero vulnerabilidades; la revisión manual mantiene explícitos los riesgos nativos residuales.
+- [x] `F11-G03` Auditoría de seguridad no tiene hallazgos altos/críticos abiertos. — `npm audit` completo y runtime informaron cero vulnerabilidades; la revisión manual mantiene explícitos los riesgos nativos residuales. Reabierta por la auditoría de código del 2026-10-07 (1 crítico, 1 alto) y cerrada el mismo día tras su remediación, `npm audit` en 0, `npm run check` y las puertas E2E con Inkscape 1.4.4; evidencia en `docs/progress/F11.md`.
 - [x] `F11-G04` Documentación reproduce los escenarios de aceptación desde cero. — README y guías cubren instalación Windows, doctor, stdio, tests MCP/paquete, automatización y evidencia de release.
 - [x] `F11-G05` La matriz no promete capabilities no probadas. — `docs/compatibility-matrix.md` separa baseline probado, gating y funciones no anunciadas/P2.
 - [x] `F11-G06` Evidencia/notas de versión en `docs/progress/F11.md`. — WP20–WP21 registran metadata 0.1.0, artefactos reproducibles y gates ejecutados.
@@ -2673,7 +2673,7 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 ### Implementación
 
 - [x] F00 Bootstrap.
-- [~] F01 Discovery/runner (todos los WP implementados; gates de acciones, carreras y Job Object aún abiertos).
+- [~] F01 Discovery/runner (todos los WP implementados; Job Object implementado 2026-10-07 con ADR-012; quedan abiertos los gates de acciones y carreras).
 - [~] F02 Workspace/XML/transacciones.
 - [~] F03 Tamaños/páginas.
 - [x] F04 Inspección/preflight/preview.

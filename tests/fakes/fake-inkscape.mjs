@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname } from "node:path";
 
 const [mode, ...argumentsList] = process.argv.slice(2);
@@ -73,6 +74,21 @@ if (mode === "success") {
   mkdirSync(dirname(grandchildPidPath), { recursive: true });
   writeFileSync(grandchildPidPath, String(grandchild.pid), "utf8");
   setInterval(() => undefined, 1000);
+} else if (mode === "orphan-pipe") {
+  // Leaves a detached descendant that inherits stdout/stderr and outlives this
+  // process, so the runner never observes `close` without its own deadline.
+  const orphanPidPath = options.get("--orphan-pid");
+  if (!orphanPidPath) throw new Error("--orphan-pid is required");
+  const orphan = spawn(process.execPath, [import.meta.filename, "timeout"], {
+    // Keep the test's temporary CWD removable while the orphan is alive.
+    cwd: tmpdir(),
+    detached: true,
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+  orphan.unref();
+  mkdirSync(dirname(orphanPidPath), { recursive: true });
+  writeFileSync(orphanPidPath, String(orphan.pid), "utf8");
+  process.exit(0);
 } else if (mode === "echo") {
   process.stdout.write(`${options.get("--value") ?? ""}\n`);
   process.exit(0);

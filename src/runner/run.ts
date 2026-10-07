@@ -1,7 +1,13 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
+import { win32 } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { ProcessAbortedError, ProcessSpawnError } from "./errors.js";
 import { AsyncSemaphore } from "./semaphore.js";
+
+/** Bound on waiting for stdio to close once a process tree was terminated. */
+const POST_TERMINATION_CLOSE_TIMEOUT_MS = 5_000;
 
 export type ProcessTerminationReason =
   "completed" | "aborted" | "output-limit" | "timeout";
@@ -44,13 +50,46 @@ export class ProcessTracker {
   }
 }
 
+/**
+ * How the runner contains a native process tree:
+ * - `job-object`: Windows Job Object with kill-on-close, joined before the
+ *   target starts, so detached descendants die with the tree;
+ * - `process-tree`: `taskkill /T` on Windows or the process group on POSIX.
+ */
+export type ProcessContainment = "job-object" | "process-tree";
+export type ProcessRunnerOptions = {
+  /** `auto` uses a Job Object on Windows when the probe succeeds. */
+  containment?: "auto" | "process-tree" | undefined;
+};
+type JobLauncher = { nodeArgs: readonly string[]; script: string };
+
 export class ProcessRunner {
   public readonly tracker = new ProcessTracker();
 
   private readonly semaphore: AsyncSemaphore;
+  private readonly containmentMode: "auto" | "process-tree";
 
-  public constructor(maxConcurrency: number) {
+  public constructor(
+    maxConcurrency: number,
+    options: ProcessRunnerOptions = {},
+  ) {
     this.semaphore = new AsyncSemaphore(maxConcurrency);
+    this.containmentMode = options.containment ?? "auto";
+  }
+
+  /** Reports the containment that runs will actually use. */
+  public async processContainment(): Promise<ProcessContainment> {
+    return (await this.jobLauncher()) === undefined
+      ? "process-tree"
+      : "job-object";
+  }
+
+  private jobLauncher(): Promise<JobLauncher | undefined> {
+    if (this.containmentMode !== "auto" || process.platform !== "win32")
+      return Promise.resolve(undefined);
+    // Job support is a property of the host, shared by every runner.
+    hostJobLauncher ??= probeJobLauncher();
+    return hostJobLauncher;
   }
 
   public get activeCount(): number {
@@ -69,16 +108,88 @@ export class ProcessRunner {
     const release = await this.semaphore.acquire(request.signal);
 
     try {
+      const launcher = await this.jobLauncher();
       if (request.signal?.aborted) {
         throw new ProcessAbortedError(
           "Process execution was aborted before spawn",
         );
       }
-      return await runChildProcess(executable, request, this.tracker);
+      // Only an existing absolute executable goes through the launcher, so a
+      // missing binary still surfaces as a spawn error, exactly as before.
+      const contained =
+        launcher !== undefined &&
+        win32.isAbsolute(executable) &&
+        existsSync(executable);
+      return await runChildProcess(
+        contained ? process.execPath : executable,
+        contained
+          ? {
+              ...request,
+              args: [
+                ...launcher.nodeArgs,
+                launcher.script,
+                "--",
+                executable,
+                ...request.args,
+              ],
+            }
+          : request,
+        this.tracker,
+        contained,
+      );
     } finally {
       release();
     }
   }
+}
+
+const JOB_LAUNCHER_PROBE_TIMEOUT_MS = 15_000;
+let hostJobLauncher: Promise<JobLauncher | undefined> | undefined;
+
+/** Locates the launcher next to this module: `.js` in `dist/`, `.ts` when
+ * the runner itself is executed from sources by the test suite. */
+function resolveJobLauncher(): JobLauncher | undefined {
+  const compiled = fileURLToPath(new URL("./job-launcher.js", import.meta.url));
+  if (existsSync(compiled)) return { nodeArgs: [], script: compiled };
+  const source = fileURLToPath(new URL("./job-launcher.ts", import.meta.url));
+  if (existsSync(source))
+    return {
+      nodeArgs: ["--disable-warning=ExperimentalWarning"],
+      script: source,
+    };
+  return undefined;
+}
+
+/** Proves once that this host can create and join a kill-on-close job. */
+async function probeJobLauncher(): Promise<JobLauncher | undefined> {
+  const launcher = resolveJobLauncher();
+  if (launcher === undefined) return undefined;
+  const succeeded = await new Promise<boolean>((resolveProbe) => {
+    const probe = spawn(
+      process.execPath,
+      [...launcher.nodeArgs, launcher.script, "--probe"],
+      {
+        env: buildMinimalEnvironment(),
+        shell: false,
+        stdio: "ignore",
+        windowsHide: true,
+      },
+    );
+    const timer = setTimeout(() => {
+      probe.kill();
+      resolveProbe(false);
+    }, JOB_LAUNCHER_PROBE_TIMEOUT_MS);
+    timer.unref();
+    probe.once("error", () => {
+      clearTimeout(timer);
+      resolveProbe(false);
+    });
+    probe.once("exit", (code) => {
+      clearTimeout(timer);
+      resolveProbe(code === 0);
+    });
+  });
+  return succeeded ? launcher : undefined;
 }
 
 export function buildMinimalEnvironment(
@@ -124,6 +235,7 @@ function runChildProcess(
   executable: string,
   request: ProcessRunRequest,
   tracker: ProcessTracker,
+  viaJobLauncher = false,
 ): Promise<ProcessRunResult> {
   return new Promise<ProcessRunResult>((resolve, reject) => {
     const startedAt = performance.now();
@@ -137,6 +249,10 @@ function runChildProcess(
     try {
       child = spawn(executable, [...request.args], {
         cwd: request.cwd,
+        // POSIX: a dedicated process group lets termination reach grandchildren.
+        // Windows launcher: keeps it out of libuv's job, whose silent
+        // breakaway would let the native tree escape the launcher's job.
+        detached: process.platform !== "win32" || viaJobLauncher,
         env: buildMinimalEnvironment(request.env),
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
@@ -153,7 +269,11 @@ function runChildProcess(
     }
 
     if (child.pid === undefined) {
-      reject(new ProcessSpawnError("Spawned process has no PID"));
+      // libuv reports the failure asynchronously; without a listener the
+      // `error` event would become an uncaught exception.
+      child.once("error", (error) =>
+        reject(new ProcessSpawnError("Unable to spawn process", error.message)),
+      );
       return;
     }
 
@@ -190,6 +310,19 @@ function runChildProcess(
       }
       terminationReason = reason;
       terminationPromise = terminateProcessTree(child, pid);
+      // A descendant that escaped termination can keep the stdio pipes open,
+      // so `close` would never fire. Bound the wait and release the slot.
+      void terminationPromise
+        .catch(() => undefined)
+        .then(() => {
+          const deadline = setTimeout(() => {
+            if (settled) return;
+            child.stdout?.destroy();
+            child.stderr?.destroy();
+            void finish(child.exitCode, child.signalCode);
+          }, POST_TERMINATION_CLOSE_TIMEOUT_MS);
+          deadline.unref();
+        });
     }
 
     async function finish(
@@ -247,29 +380,80 @@ async function terminateProcessTree(
   pid: number,
 ): Promise<void> {
   if (process.platform === "win32") {
-    await runTaskkill(pid);
+    try {
+      await runTaskkill(pid);
+    } catch (error) {
+      // taskkill reports an error when descendants vanish while it walks the
+      // tree (for example when a Job Object closes first). Only a surviving
+      // root process means the termination actually failed.
+      if (isProcessAlive(pid)) throw error;
+    }
     return;
   }
 
-  child.kill("SIGTERM");
+  signalProcessGroup(child, pid, "SIGTERM");
   await new Promise<void>((resolve) => {
     setTimeout(resolve, 250);
   });
-  if (child.exitCode === null && child.signalCode === null) {
-    child.kill("SIGKILL");
+  // Always escalate for the whole group: the leader may have exited while a
+  // grandchild still ignores SIGTERM.
+  signalProcessGroup(child, pid, "SIGKILL");
+}
+
+function signalProcessGroup(
+  child: ChildProcess,
+  pid: number,
+  signal: NodeJS.Signals,
+): void {
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    if (child.exitCode === null && child.signalCode === null)
+      child.kill(signal);
   }
 }
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/** Resolves taskkill from the system directory, never from CWD or PATH. */
+export function systemTaskkillPath(
+  environment: NodeJS.ProcessEnv = process.env,
+): string {
+  const systemRoot = environment.SystemRoot ?? environment.windir;
+  return win32.join(
+    systemRoot && win32.isAbsolute(systemRoot) ? systemRoot : "C:\\Windows",
+    "System32",
+    "taskkill.exe",
+  );
+}
+
+/** taskkill exit code when the target PID no longer exists. */
+const TASKKILL_PROCESS_NOT_FOUND = 128;
+
 function runTaskkill(pid: number): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const taskkill = spawn("taskkill.exe", ["/pid", String(pid), "/t", "/f"], {
-      shell: false,
-      stdio: "ignore",
-      windowsHide: true,
-    });
+    const taskkill = spawn(
+      systemTaskkillPath(),
+      ["/pid", String(pid), "/t", "/f"],
+      {
+        shell: false,
+        stdio: "ignore",
+        windowsHide: true,
+      },
+    );
 
     taskkill.once("error", (error) => reject(error));
-    taskkill.once("close", () => resolve());
+    taskkill.once("close", (code) => {
+      if (code === 0 || code === TASKKILL_PROCESS_NOT_FOUND) resolve();
+      else reject(new Error(`taskkill failed with exit code ${String(code)}`));
+    });
   });
 }
 

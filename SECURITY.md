@@ -26,6 +26,18 @@ resolución canónica y los rechecks reducen traversal y cambios accidentales,
 pero no garantizan resistencia frente a un proceso local con permisos que
 manipule junctions/reparse points durante una operación.
 
-Las configuraciones y resultados redactan rutas absolutas. Las tools aceptan
-rutas relativas dentro del workspace, nunca shell, argv o rutas de ejecutable
-arbitrarias. La red permanece denegada para recursos de documentos.
+Las configuraciones, resultados y errores devueltos por MCP redactan rutas
+absolutas. Las tools aceptan rutas relativas dentro del workspace, nunca shell,
+argv o rutas de ejecutable arbitrarias. La red permanece denegada para recursos
+de documentos.
+
+En el transporte HTTP opcional, artifacts, recursos, jobs y snapshots se ligan
+al principal autenticado, pero los documentos no: cualquier token válido accede
+a todos los `workspaceRoots` configurados.
+
+En Windows, cada proceso nativo corre dentro de un Job Object con
+kill-on-close (ADR-012), así que sus descendientes mueren con el árbol aunque
+se desacoplen o aunque el servidor termine de forma abrupta. `--doctor --json`
+informa el modo efectivo en `processContainment`; si el host no admite Job
+Objects, se usa `taskkill /T` desde el directorio del sistema. El Job Object
+gestiona el ciclo de vida de los procesos; no es un sandbox.

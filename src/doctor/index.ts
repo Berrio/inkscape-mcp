@@ -24,7 +24,7 @@ import {
   probeInkscapeCandidate,
   type CandidateRejection,
 } from "../discovery/index.js";
-import { ProcessRunner } from "../runner/index.js";
+import { ProcessRunner, type ProcessContainment } from "../runner/index.js";
 
 export type DoctorReport = {
   capabilities?: Pick<
@@ -51,6 +51,8 @@ export type DoctorReport = {
   jpegExportProbe?: { available: boolean; reason?: string };
   tiffExportProbe?: { available: boolean; reason?: string };
   webpExportProbe?: { available: boolean; reason?: string };
+  /** Containment of native process trees: lifecycle cleanup, not a sandbox. */
+  processContainment: ProcessContainment;
   securityPosture: NativeSecurityPosture;
   workspaceReady: boolean;
 };
@@ -148,6 +150,7 @@ export async function runDoctor(
       jpegExportProbe,
       tiffExportProbe,
       webpExportProbe,
+      processContainment: await runner.processContainment(),
       securityPosture: nativeSecurityPosture(config),
       workspaceReady: isWorkspaceReady(config),
     };
@@ -156,6 +159,7 @@ export async function runDoctor(
   return {
     config: redactConfig(config),
     diagnostics,
+    processContainment: await runner.processContainment(),
     securityPosture: nativeSecurityPosture(config),
     workspaceReady: isWorkspaceReady(config),
   };
@@ -167,6 +171,7 @@ export function formatDoctor(report: DoctorReport): string {
     `Workspace: ${report.workspaceReady ? "ready" : "not configured (document tools unavailable)"}`,
     `Inkscape: ${report.inkscape ? `${report.inkscape.version} (${report.inkscape.installKind})` : "not found"}`,
     `Security: ${report.securityPosture.securityLevel}; native parsers are unsandboxed (${report.securityPosture.nativeInputPolicy})`,
+    `Process containment: ${report.processContainment === "job-object" ? "Windows Job Object (kill on close; not a sandbox)" : "process tree termination"}`,
   ];
   if (report.capabilities) {
     lines.push(

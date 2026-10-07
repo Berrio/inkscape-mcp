@@ -3,6 +3,8 @@ export {
   buildMinimalEnvironment,
   ProcessRunner,
   ProcessTracker,
+  type ProcessContainment,
+  type ProcessRunnerOptions,
   type ProcessRunRequest,
   type ProcessRunResult,
   type ProcessTerminationReason,

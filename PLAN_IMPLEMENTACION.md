@@ -59,7 +59,7 @@ instrucción copiable en README antes de iniciar el siguiente.
 | P0        | `[x]`  | **Integración Windows**: ejemplos `.ps1` y Programador de tareas, rutas con espacios, logs a fichero y modo `--non-interactive`; no GUI ni credenciales.                                        | Las exportaciones de etiquetas se programan o lanzan con una instrucción copiable.                          |
 | P1        | `[x]`  | **Cola local durable**: recetas encoladas, listado, reintento explícito, cancelación y recibos; nunca publicar un resultado parcial en modo atómico.                                            | La receta/recibo sobrevive reinicios; la cancelación cooperativa termina sólo el batch atómico ya iniciado. |
 | P1        | `[ ]`  | `F08-T01–T10`: completar los importadores prácticos restantes (raster, fuentes/perfiles bajo policy) con manifests y capability gates.                                                          | Materiales habituales entran de forma segura.                                                               |
-| P1        | `[ ]`  | Cerrar puertas F01–F09 y release Windows/stdio: carreras, cleanup, fixtures visuales, Inspector, package smoke y documentación.                                                                 | Paquete instalable y operable sin memoria del operador.                                                     |
+| P1        | `[~]`  | Cerrar puertas F01–F09 (hecho 2026-10-07, `F11-G01`) y release Windows/stdio: Inspector/suite desde paquete instalado (`F11-G02`) y publicación autorizada.                                     | Paquete instalable y operable sin memoria del operador.                                                     |
 | P2        | `[ ]`  | Paths avanzados y formatos/extensiones no centrales: LPE, mesh, conectores, PS/EPS/EMF/WMF/XAML y optimizadores, todos gateados.                                                                | Cobertura profesional que no bloquea el flujo autónomo base.                                                |
 | P3        | `[ ]`  | HTTP, matriz macOS/Linux/1.5, GUI bridge, sandbox y CMYK/PDF-X.                                                                                                                                 | Opcionales; no retrasan Windows/stdio ni la automatización local.                                           |
 
@@ -2093,7 +2093,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 #### Puerta 1.0 F11
 
-- [ ] `F11-G01` Todas las puertas F00–F09 están cerradas; F10 puede constar como `[w]` diferido con alcance Windows/stdio explícito.
+- [x] `F11-G01` Todas las puertas F00–F09 están cerradas; F10 puede constar como `[w]` diferido con alcance Windows/stdio explícito. — Revisión 2026-10-07: de las 73 puertas F00–F09, 72 constan `[x]` y `F01-G02` consta `[w]` por decisión explícita del usuario (2026-08-30). Las tareas no completadas de esas fases son `[-]` con evidencia (`F08-T15/T16/T17`) o `F08-T31` `[~]`, que no es una puerta. F10 no forma parte del release Windows/stdio 1.0 y sus puertas siguen abiertas, sin marcarse `[w]` sin decisión del usuario. Tras los commits `3439977` y `527b6e8`: `npm run check` y todas las puertas E2E con Inkscape 1.4.4 en verde.
 - [ ] `F11-G02` Suite P0/P1 e Inspector stdio pasan desde paquete instalado; conformance HTTP es obligatoria solo si F10 se incluye en ese release.
 - [x] `F11-G03` Auditoría de seguridad no tiene hallazgos altos/críticos abiertos. — `npm audit` completo y runtime informaron cero vulnerabilidades; la revisión manual mantiene explícitos los riesgos nativos residuales. Reabierta por la auditoría de código del 2026-10-07 (1 crítico, 1 alto) y cerrada el mismo día tras su remediación, `npm audit` en 0, `npm run check` y las puertas E2E con Inkscape 1.4.4; evidencia en `docs/progress/F11.md`.
 - [x] `F11-G04` Documentación reproduce los escenarios de aceptación desde cero. — README y guías cubren instalación Windows, doctor, stdio, tests MCP/paquete, automatización y evidencia de release.
@@ -2673,16 +2673,16 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 ### Implementación
 
 - [x] F00 Bootstrap.
-- [~] F01 Discovery/runner (todos los WP implementados; Job Object implementado 2026-10-07 con ADR-012; quedan abiertos los gates de acciones y carreras).
-- [~] F02 Workspace/XML/transacciones.
-- [~] F03 Tamaños/páginas.
+- [x] F01 Discovery/runner (puertas cerradas; `F01-G02` `[w]` por decisión del usuario; Job Object 2026-10-07 con ADR-012).
+- [x] F02 Workspace/XML/transacciones.
+- [x] F03 Tamaños/páginas.
 - [x] F04 Inspección/preflight/preview.
 - [x] F05 Exportación MVP.
 - [x] F06 Diseño básico.
-- [~] F07 Diseño avanzado.
-- [~] F08 Importación/formatos/presets.
-- [~] F09 MCP completo.
-- [~] F11 Release Windows/stdio 1.0: CLI autónoma, recetas y automatización Windows terminadas; faltan sus gates de release.
+- [x] F07 Diseño avanzado.
+- [~] F08 Importación/formatos/presets (puertas cerradas; `F08-T31` exporters INX parcial).
+- [x] F09 MCP completo.
+- [~] F11 Release Windows/stdio 1.0: `F11-G01` cerrada el 2026-10-07; faltan `F11-G02` y la publicación (`F11-T23–T25`, sólo con autorización).
 - [~] F10 Expansión HTTP/versiones/plataformas (P2; no bloquea 1.0).
 - [~] F12 Opcionales.
 
@@ -2708,10 +2708,11 @@ cambios ajenos, no publicar paquetes ni activar HTTP/GUI sin autorización.
    `npm run test:windows` y `npm run test:pack`; regenerar una carpeta
    candidata de `release:provenance` con nombre nuevo. Corregir primero
    cualquier regresión de CLI, receta, cola, PowerShell o paquete instalado.
-2. **P0 - Cerrar seguridad y concurrencia que afectan el uso local.** Completar
-   gates pendientes F01/F02: acciones nativas permitidas con mapeo de IDs,
-   carreras de outputs/revisiones y el aislamiento de procesos Windows que
-   falta. Cada caso debe tener fixture de fallo y no ampliar workspaces.
+2. **P0 - Cerrar seguridad y concurrencia que afectan el uso local.** Cerrada
+   el 2026-10-07: las puertas F01/F02 constan cerradas, la auditoría de código
+   se remedió y el aislamiento de procesos Windows usa un Job Object
+   (ADR-012). Ante una regresión, añadir el fixture de fallo sin ampliar
+   workspaces.
 3. **P1 - Completar importación segura y visible.** Mantener SVG/SVGZ,
    raster y PDF como adaptadores separados mientras no haya una transacción
    común probada. Añadir primero manifests comparables y preflight de

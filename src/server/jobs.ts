@@ -1,3 +1,5 @@
+import { publicErrorMessage } from "./public-errors.js";
+
 export type JobStatus =
   "cancelled" | "completed" | "failed" | "queued" | "running";
 export type JobProgress = { detail?: string; stage: string };
@@ -78,12 +80,7 @@ export class JobStore {
       } catch (error) {
         if (record.controller.signal.aborted) this.finish(record, "cancelled");
         else
-          this.finish(
-            record,
-            "failed",
-            undefined,
-            error instanceof Error ? error.message : "Job failed",
-          );
+          this.finish(record, "failed", undefined, publicErrorMessage(error));
       }
     });
     return snapshot(record);

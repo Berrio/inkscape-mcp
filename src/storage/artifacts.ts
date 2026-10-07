@@ -1,4 +1,4 @@
-import { copyFile, mkdir, open, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, open, readdir, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { RevisionConflictError, sha256File } from "./revisions.js";
@@ -43,13 +43,38 @@ export type ArtifactPublishRequest = {
 };
 export type ArtifactBatch = { artifacts: readonly Artifact[]; id: string };
 
+/** Maximum live artifacts held by one store, regardless of their size. */
+export const MAX_ARTIFACT_COUNT = 1_000;
+/** Total bytes a store may hold, as a multiple of the per-artifact limit. */
+export const ARTIFACT_TOTAL_BYTES_FACTOR = 4;
+/** Untracked artifact files older than this are leftovers of a previous run. */
+const ORPHAN_ARTIFACT_AGE_MS = 24 * 60 * 60 * 1_000;
+
+export type ArtifactStoreOptions = {
+  maxCount?: number | undefined;
+  maxTotalBytes?: number | undefined;
+  orphanAgeMs?: number | undefined;
+};
+
 export class ArtifactStore {
   private readonly records = new Map<string, ArtifactRecord>();
+  private readonly maxCount: number;
+  private readonly maxTotalBytes: number;
+  private readonly orphanAgeMs: number;
+  private reservedBytes = 0;
+  private reservedCount = 0;
+  private orphanSweep: Promise<void> | undefined;
 
   public constructor(
     private readonly root: string,
     private readonly maxArtifactBytes: number,
-  ) {}
+    options: ArtifactStoreOptions = {},
+  ) {
+    this.maxCount = options.maxCount ?? MAX_ARTIFACT_COUNT;
+    this.maxTotalBytes =
+      options.maxTotalBytes ?? maxArtifactBytes * ARTIFACT_TOTAL_BYTES_FACTOR;
+    this.orphanAgeMs = options.orphanAgeMs ?? ORPHAN_ARTIFACT_AGE_MS;
+  }
 
   public async publish(
     sourcePath: string,
@@ -65,6 +90,33 @@ export class ArtifactStore {
     if (!Number.isInteger(ttlMs) || ttlMs < 1)
       throw new Error("ttlMs must be a positive integer");
     await mkdir(resolve(this.root), { recursive: true });
+    this.orphanSweep ??= this.removeOrphans().catch(() => undefined);
+    await this.orphanSweep;
+    await this.removeExpired();
+    const reservation = sourceMetadata.size;
+    if (
+      this.records.size + this.reservedCount >= this.maxCount ||
+      this.storedBytes() + this.reservedBytes + reservation > this.maxTotalBytes
+    )
+      throw new RevisionConflictError(
+        "Artifact storage quota is exhausted; read or let earlier artifacts expire first",
+      );
+    this.reservedBytes += reservation;
+    this.reservedCount += 1;
+    try {
+      return await this.copyAndRecord(sourcePath, owner, ttlMs, safeMetadata);
+    } finally {
+      this.reservedBytes -= reservation;
+      this.reservedCount -= 1;
+    }
+  }
+
+  private async copyAndRecord(
+    sourcePath: string,
+    owner: string,
+    ttlMs: number,
+    safeMetadata: ArtifactMetadata | undefined,
+  ): Promise<Artifact> {
     const id = `art_${crypto.randomUUID().replaceAll("-", "")}`;
     const path = join(resolve(this.root), id);
     await copyFile(sourcePath, path);
@@ -172,6 +224,29 @@ export class ArtifactStore {
         removed += 1;
       }
     return removed;
+  }
+
+  private storedBytes(): number {
+    let total = 0;
+    for (const record of this.records.values()) total += record.size;
+    return total;
+  }
+
+  /**
+   * Records live only in memory, so a restart orphans earlier copies. The
+   * root can be shared by concurrent local servers; only untracked artifact
+   * files older than every TTL this server issues are removed.
+   */
+  private async removeOrphans(): Promise<void> {
+    const directory = resolve(this.root);
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (!entry.isFile() || !/^art_[a-f0-9]{32}$/u.test(entry.name)) continue;
+      if (this.records.has(entry.name)) continue;
+      const path = join(directory, entry.name);
+      const metadata = await stat(path).catch(() => undefined);
+      if (metadata && Date.now() - metadata.mtimeMs > this.orphanAgeMs)
+        await rm(path, { force: true });
+    }
   }
 
   private async get(id: string, owner?: string): Promise<ArtifactRecord> {

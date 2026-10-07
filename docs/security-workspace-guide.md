@@ -58,15 +58,38 @@ el servidor rechaza la sobrescritura. Esta regla evita que dos automatizaciones
 publiquen silenciosamente sobre el mismo archivo.
 
 Cada edición in-place crea un backup antes del reemplazo bajo la política
-`on-in-place-mutation`. Para una restauración deliberada, usa
-`document_snapshot` antes de mutar y `document_restore` con su ID opaco y la
-revisión actual. No copies archivos temporales para recuperar cambios: los
+`on-in-place-mutation`, junto al documento, con el nombre
+`<archivo>.bak-<fecha ISO>-<id>`. Se conservan los **10 backups más recientes
+por documento**: tras cada publicación correcta, el servidor elimina los más
+antiguos que siguen exactamente ese patrón y nunca toca otros archivos (por
+ejemplo, un `doc.svg.bak-manual` tuyo). Si necesitas más historial, copia los
+backups fuera del workspace o usa snapshots. Para una restauración deliberada,
+usa `document_snapshot` antes de mutar y `document_restore` con su ID opaco y
+la revisión actual. No copies archivos temporales para recuperar cambios: los
 temporales no son una API y se limpian tras éxito, error o cancelación.
+
+Los locks de publicación se coordinan entre **todos los procesos locales** de
+inkscape-mcp (stdio, HTTP, CLI de recetas y worker de cola) mediante archivos
+de lock en `<scratch>/inkscape-mcp-locks`. Un lock abandonado por un proceso
+que terminó se recupera automáticamente; si otro proceso vivo lo mantiene más
+de 60 s, la operación falla con `Document is locked by another inkscape-mcp
+process` y puede reintentarse.
 
 Los lotes publican archivos relacionados con locks, staging y rollback ante un
 fallo manejado. Un crash del proceso entre múltiples renames no puede ser una
 transacción atómica del filesystem; por eso conserva el recibo de receta y
 verifica las revisiones de los outputs después de una interrupción.
+
+Los artifacts temporales (`inkscape://artifact/...`) tienen cuota: como máximo
+1.000 vivos y 4 × `maxArtifactBytes` en total por proceso. Al agotarla, la
+exportación falla de forma recuperable hasta que expiren artifacts anteriores
+(24 h). Al arrancar se eliminan copias huérfanas de ejecuciones previas con más
+de 24 h.
+
+Los errores devueltos a un cliente MCP nunca incluyen rutas absolutas: los
+errores del sistema de archivos se traducen a un texto estable con su código
+(`File is locked by another program (EBUSY)`) y el resto pasa por la misma
+redacción que los logs.
 
 ## Qué protege la entrada nativa
 
@@ -75,9 +98,22 @@ limita tamaño, sanea SVG bajo la política configurada, reescribe dependencias
 locales permitidas y vuelve a comprobar revisiones antes de publicar. Rechaza
 contenido activo, recursos remotos y argumentos o acciones nativas arbitrarias.
 
+El saneamiento identifica las referencias por namespace y nombre local, no por
+el prefijo literal: `xl:href` ligado a XLink se trata igual que `xlink:href`.
+También elimina `xml:base`, processing instructions (salvo la declaración XML),
+animaciones SMIL que asignan referencias prohibidas, referencias UNC y CSS
+ofuscado con escapes. En la copia staged para Inkscape se eliminan los
+`sodipodi:absref`, porque Inkscape los usa como ruta alternativa fuera del
+bundle. `maxInputBytes` y `maximumSanitizeMode` de la configuración de arranque
+se aplican a todas las tools, no sólo a las que reciben un modo explícito.
+
 Esto protege contra rutas inesperadas, inyección de argumentos, XML activo y
 publicación inconsistente dentro de los límites declarados. No prueba que
 Inkscape, Poppler, PNG/JPEG/WebP/GIF u otro parser no tenga vulnerabilidades.
+En Windows cada ejecución nativa corre dentro de un Job Object con
+kill-on-close: al terminar, cancelar o expirar, o si el servidor muere, no
+quedan procesos de Inkscape huérfanos. Comprueba `processContainment` en
+`--doctor --json` (`job-object` o, si el host no lo admite, `process-tree`).
 Un Job Object, timeout, límite de memoria/bytes o sanitización no convierte a
 un parser nativo en sandboxed.
 
@@ -95,7 +131,12 @@ equipo: sólo escucha `127.0.0.1`, valida Host/Origin y exige bearer local. Un
 token único se inyecta por `INKSCAPE_MCP_HTTP_TOKEN`; para rotarlo sin reinicio
 puedes usar `INKSCAPE_MCP_HTTP_TOKENS_FILE` con reemplazo atómico y ACL privada.
 HTTP liga artifacts, recursos, jobs, planes y snapshots al principal
-autenticado y emite sólo telemetría estructurada redactada a stderr. No
+autenticado y emite sólo telemetría estructurada redactada a stderr. Los
+**documentos no** se aíslan por principal: todo token válido puede leer y
+modificar todos los `workspaceRoots` configurados, así que entrega tokens sólo
+a quien deba acceder a todos ellos. El rate limit es de 120 peticiones/minuto
+por principal, más un cupo compartido para intentos no autenticados que no
+consume el de los clientes válidos. No
 configures proxies, túneles ni binds alternativos. Consulta la
 [guía HTTP](./http-security.md): faltan conformance HTTP moderno, sandbox y
 autorización por ACL de filesystem antes de anunciarlo como transporte estable.

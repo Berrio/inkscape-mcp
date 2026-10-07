@@ -19,7 +19,11 @@ import {
   win32,
 } from "node:path";
 
-import { sanitizeSvg, type SanitizeMode } from "../svg/index.js";
+import {
+  sanitizeSvg,
+  svgReferenceAttributeKind,
+  type SanitizeMode,
+} from "../svg/index.js";
 import {
   assertRevision,
   RevisionConflictError,
@@ -60,7 +64,12 @@ export type NativeInputBundleOptions = {
   maximumSanitizeMode?: SanitizeMode | undefined;
 };
 
-type XmlAttribute = { name: string; value: string };
+type XmlAttribute = {
+  localName?: string | null;
+  name: string;
+  namespaceURI?: string | null;
+  value: string;
+};
 type XmlElement = {
   attributes: {
     item(index: number): XmlAttribute | null | undefined;
@@ -70,6 +79,7 @@ type XmlElement = {
   localName: string;
   nextSibling: XmlNode | null;
   nodeType: number;
+  removeAttribute(name: string): void;
   setAttribute(name: string, value: string): void;
   textContent: string;
 };
@@ -131,9 +141,10 @@ export async function createNativeInputBundle(
     options.maxDependencyBytes ?? 50 * 1024 * 1024,
   );
   rewriteReferences(root, dependencies);
+  const strippedFallbacks = stripAbsoluteReferenceFallbacks(root);
   const path = join(directory, "input.svg");
   const stagedSvg =
-    dependencies.length === 0
+    dependencies.length === 0 && !strippedFallbacks
       ? source
       : new XMLSerializer().serializeToString(document);
   const transformedSvg = options.transformSvg?.(stagedSvg);
@@ -190,7 +201,7 @@ function collectLocalReferences(root: XmlElement): readonly LocalReference[] {
     for (let index = 0; index < element.attributes.length; index += 1) {
       const attribute = element.attributes.item(index);
       if (!attribute) continue;
-      if (isDirectReferenceAttribute(attribute.name)) {
+      if (isDirectReferenceAttribute(attribute)) {
         const parsed = parseLocalReference(attribute.value);
         if (parsed) references.push(parsed);
       }
@@ -262,6 +273,25 @@ async function stageDependencies(
   return dependencies;
 }
 
+/**
+ * Inkscape loads `sodipodi:absref` when an image href cannot be opened. The
+ * staged copy already points at copied dependencies, so the fallback can only
+ * reach outside the bundle and is removed rather than trusted.
+ */
+function stripAbsoluteReferenceFallbacks(root: XmlElement): boolean {
+  let stripped = false;
+  for (const element of walk(root)) {
+    for (let index = element.attributes.length - 1; index >= 0; index -= 1) {
+      const attribute = element.attributes.item(index);
+      if (attribute && svgReferenceAttributeKind(attribute) === "absref") {
+        element.removeAttribute(attribute.name);
+        stripped = true;
+      }
+    }
+  }
+  return stripped;
+}
+
 function rewriteReferences(
   root: XmlElement,
   dependencies: readonly StagedDependency[],
@@ -273,7 +303,7 @@ function rewriteReferences(
     for (let index = 0; index < element.attributes.length; index += 1) {
       const attribute = element.attributes.item(index);
       if (!attribute) continue;
-      const value = isDirectReferenceAttribute(attribute.name)
+      const value = isDirectReferenceAttribute(attribute)
         ? rewriteReference(attribute.value, byOriginal)
         : rewriteCssReferences(attribute.value, (reference) =>
             rewrittenUri(reference, byOriginal),
@@ -373,11 +403,9 @@ function uniqueReferences(
     return true;
   });
 }
-function isDirectReferenceAttribute(name: string): boolean {
-  const normalized = name.toLowerCase();
-  return (
-    normalized === "href" || normalized === "xlink:href" || normalized === "src"
-  );
+function isDirectReferenceAttribute(attribute: XmlAttribute): boolean {
+  const kind = svgReferenceAttributeKind(attribute);
+  return kind === "href" || kind === "src";
 }
 function safeBasename(path: string): string {
   return (

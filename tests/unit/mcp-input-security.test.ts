@@ -63,7 +63,9 @@ describe("MCP public input security", () => {
     } finally {
       await client.close();
     }
-  });
+    // Starts a real stdio server, like the other MCP process tests; the 5 s
+    // default is too tight for that while the whole suite runs in parallel.
+  }, 30_000);
 });
 
 function collectPublicProperties(

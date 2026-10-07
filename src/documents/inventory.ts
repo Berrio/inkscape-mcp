@@ -1,6 +1,6 @@
 import { DOMParser, type Element as XmlElement } from "@xmldom/xmldom";
 
-import { sanitizeSvg } from "../svg/index.js";
+import { sanitizeSvg, svgReferenceAttributeKind } from "../svg/index.js";
 
 const INKSCAPE_NAMESPACE = "http://www.inkscape.org/namespaces/inkscape";
 const SODIPODI_NAMESPACE = "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd";
@@ -190,7 +190,7 @@ export function inspectSvgInventory(
       if (!attribute) continue;
       if (attribute.name === "xmlns" || attribute.prefix === "xmlns")
         namespaces.add(attribute.value);
-      if (attribute.name === "href" || attribute.name === "xlink:href") {
+      if (svgReferenceAttributeKind(attribute) === "href") {
         const target = attribute.value.trim();
         if (target.startsWith("#")) references.add(target.slice(1));
         else if (isExternalReference(target)) externalResourceCount += 1;

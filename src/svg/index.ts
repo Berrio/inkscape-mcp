@@ -1,9 +1,14 @@
 export {
+  configureSvgSecurityPolicy,
+  decodeCssEscapes,
   sanitizeSvg,
+  svgReferenceAttributeKind,
   SvgSecurityError,
   type SafeSvgOptions,
   type SafeSvgResult,
   type SanitizeMode,
+  type SvgReferenceAttributeKind,
+  type SvgSecurityPolicy,
 } from "./safe-dom.js";
 export {
   normalizeSvgIds,

@@ -117,6 +117,48 @@ describe("file revisions and atomic store", () => {
       root,
     );
   });
+  it("stages prefixed XLink references and strips absref fallbacks from native input", async () => {
+    const root = await temporaryDirectory();
+    const outside = await temporaryDirectory();
+    const source = join(root, "source.svg");
+    const staging = join(root, "staging");
+    await mkdir(staging);
+    await writeFile(join(root, "local.png"), "local");
+    await writeFile(join(outside, "secret.png"), "secret");
+    await writeFile(
+      source,
+      `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xl="http://www.w3.org/1999/xlink" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"><image xl:href="local.png" sodipodi:absref="${join(outside, "secret.png")}"/></svg>`,
+    );
+    const bundle = await createNativeInputBundle(
+      source,
+      await sha256File(source),
+      staging,
+      { allowedRoot: root },
+    );
+    const staged = await readFile(bundle.path, "utf8");
+    expect(staged).toContain('xl:href="assets/0000-local.png"');
+    expect(staged).not.toContain("absref");
+    expect(staged).not.toContain("secret.png");
+
+    await writeFile(
+      source,
+      `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xl="http://www.w3.org/1999/xlink"><image xl:href="../${join(outside, "secret.png").split(/[\\/]/u).slice(-2).join("/")}"/></svg>`,
+    );
+    await expect(
+      createNativeInputBundle(source, await sha256File(source), staging, {
+        allowedRoot: root,
+      }),
+    ).rejects.toThrow(/leaves workspace|unavailable/u);
+    await writeFile(
+      source,
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xl="http://www.w3.org/1999/xlink"><image xl:href="file:///C:/secret.png"/></svg>',
+    );
+    await expect(
+      createNativeInputBundle(source, await sha256File(source), staging, {
+        allowedRoot: root,
+      }),
+    ).rejects.toThrow("violates the SVG safety policy");
+  });
   it("keeps an approved embedded raster inside the native SVG without staging it", async () => {
     const root = await temporaryDirectory();
     const source = join(root, "source.svg");
@@ -650,6 +692,150 @@ describe("file revisions and atomic store", () => {
       }),
     ).rejects.toThrow("cancelled");
     await expect(readFile(failedPath)).rejects.toBeDefined();
+  });
+  it("enforces artifact count and byte quotas and frees space on expiry", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "out.png");
+    await writeFile(source, "1234567890");
+    const byCount = new ArtifactStore(join(root, "count"), 100, {
+      maxCount: 2,
+    });
+    await byCount.publish(source, "owner", 60_000);
+    await byCount.publish(source, "owner", 1);
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 5));
+    await expect(
+      byCount.publish(source, "owner", 60_000),
+    ).resolves.toBeDefined();
+    await expect(byCount.publish(source, "owner", 60_000)).rejects.toThrow(
+      "quota is exhausted",
+    );
+    const byBytes = new ArtifactStore(join(root, "bytes"), 100, {
+      maxTotalBytes: 25,
+    });
+    await byBytes.publish(source, "owner", 60_000);
+    await byBytes.publish(source, "owner", 60_000);
+    await expect(byBytes.publish(source, "owner", 60_000)).rejects.toThrow(
+      "quota is exhausted",
+    );
+  });
+  it("removes only stale untracked artifact files left by an earlier run", async () => {
+    const root = await temporaryDirectory();
+    const artifactsRoot = join(root, "artifacts");
+    await mkdir(artifactsRoot);
+    const stale = join(artifactsRoot, `art_${"a".repeat(32)}`);
+    const fresh = join(artifactsRoot, `art_${"b".repeat(32)}`);
+    const unrelated = join(artifactsRoot, "notes.txt");
+    for (const path of [stale, fresh, unrelated]) await writeFile(path, "x");
+    const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1_000);
+    await utimes(stale, old, old);
+    await utimes(unrelated, old, old);
+    const source = join(root, "out.png");
+    await writeFile(source, "png");
+    await new ArtifactStore(artifactsRoot, 100).publish(source, "o", 60_000);
+    const remaining = await readdir(artifactsRoot);
+    expect(remaining).not.toContain(`art_${"a".repeat(32)}`);
+    expect(remaining).toContain(`art_${"b".repeat(32)}`);
+    expect(remaining).toContain("notes.txt");
+  });
+  it("serializes stores that share a lock directory, as separate processes do", async () => {
+    const root = await temporaryDirectory();
+    const lockDirectory = join(root, "locks");
+    const first = new CanonicalPathLocks({ lockDirectory });
+    const second = new CanonicalPathLocks({ lockDirectory });
+    const events: string[] = [];
+    let releaseFirst!: () => void;
+    const firstHolding = first.withLocks([join(root, "doc.svg")], async () => {
+      events.push("first:start");
+      await new Promise<void>((resolveHold) => {
+        releaseFirst = resolveHold;
+      });
+      events.push("first:end");
+    });
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+    const secondHolding = second.withLocks(
+      [join(root, "DOC.svg")],
+      async () => {
+        events.push("second");
+      },
+    );
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+    expect(events).toEqual(["first:start"]);
+    releaseFirst();
+    await Promise.all([firstHolding, secondHolding]);
+    expect(events).toEqual(["first:start", "first:end", "second"]);
+    await expect(readdir(lockDirectory)).resolves.toEqual([]);
+  });
+  it("reclaims a lock left by a dead process and times out on a live one", async () => {
+    const root = await temporaryDirectory();
+    const lockDirectory = join(root, "locks");
+    const holder = new CanonicalPathLocks({ lockDirectory });
+    const release = await holder.acquire([join(root, "doc.svg")]);
+    const [lockFile] = await readdir(lockDirectory);
+    const impatient = new CanonicalPathLocks({ lockDirectory, timeoutMs: 50 });
+    await expect(
+      impatient.withLocks([join(root, "doc.svg")], async () => undefined),
+    ).rejects.toThrow("locked by another inkscape-mcp process");
+    await release();
+    await writeFile(
+      join(lockDirectory, lockFile!),
+      JSON.stringify({ createdAt: Date.now(), pid: 2_147_483_646, token: "x" }),
+    );
+    await expect(
+      impatient.withLocks([join(root, "doc.svg")], async () => "reclaimed"),
+    ).resolves.toBe("reclaimed");
+  });
+  it("keeps only the newest in-place backups and never touches unrelated files", async () => {
+    const root = await temporaryDirectory();
+    const target = join(root, "doc.svg");
+    await writeFile(target, "v0");
+    await writeFile(join(root, "doc.svg.bak-manual"), "user file");
+    const store = new AtomicFileStore(undefined, undefined, {
+      backupRetention: 3,
+    });
+    for (let version = 1; version <= 6; version += 1) {
+      await store.commit({
+        contents: Buffer.from(`v${version}`),
+        expectedOutputRevision: await sha256File(target),
+        targetPath: target,
+      });
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 2));
+    }
+    const names = (await readdir(root)).sort();
+    const backups = names.filter((name) => /^doc\.svg\.bak-\d/u.test(name));
+    expect(backups).toHaveLength(3);
+    expect(names).toContain("doc.svg.bak-manual");
+    const contents = await Promise.all(
+      backups.map((name) => readFile(join(root, name), "utf8")),
+    );
+    expect(contents).toEqual(["v3", "v4", "v5"]);
+    expect(
+      () => new AtomicFileStore(undefined, undefined, { backupRetention: 0 }),
+    ).toThrow();
+  });
+  it("rejects malformed revision strings instead of skipping the check", async () => {
+    const root = await temporaryDirectory();
+    const target = join(root, "doc.svg");
+    await writeFile(target, "v0");
+    const store = new AtomicFileStore();
+    await expect(
+      store.commit({
+        contents: Buffer.from("v1"),
+        expectedOutputRevision: "",
+        targetPath: target,
+      }),
+    ).rejects.toThrow("SHA-256");
+    await expect(
+      store.commitBatch({
+        files: [
+          {
+            contents: Buffer.from("v1"),
+            expectedOutputRevision: "abc",
+            targetPath: target,
+          },
+        ],
+      }),
+    ).rejects.toThrow("SHA-256");
+    await expect(readFile(target, "utf8")).resolves.toBe("v0");
   });
   it("restores an opaque owner-bound snapshot only against the expected revision", async () => {
     const root = await temporaryDirectory();

@@ -5,7 +5,11 @@ import {
   type Element as XmlElement,
 } from "@xmldom/xmldom";
 
-import { rewriteSvgElementReferences, sanitizeSvg } from "../svg/index.js";
+import {
+  rewriteSvgElementReferences,
+  sanitizeSvg,
+  svgReferenceAttributeKind,
+} from "../svg/index.js";
 import {
   editAbsoluteLinearSvgPathNode,
   moveAbsoluteSvgPathNode,
@@ -1486,7 +1490,7 @@ export function groupSvgShapes(
       const attribute = element.attributes.item(index);
       if (
         attribute &&
-        (attribute.name === "href" || attribute.name === "xlink:href") &&
+        svgReferenceAttributeKind(attribute) === "href" &&
         attribute.value.trim() === `#${request.groupId}`
       )
         throw new Error("Ungrouping this group would break an SVG reference");
@@ -2134,7 +2138,7 @@ function referencesDeletedId(
     const name = attribute.name.toLowerCase();
     const value = attribute.value.trim();
     if (
-      (name === "href" || name === "xlink:href") &&
+      svgReferenceAttributeKind(attribute) === "href" &&
       value.startsWith("#") &&
       deletedIds.has(value.slice(1))
     )

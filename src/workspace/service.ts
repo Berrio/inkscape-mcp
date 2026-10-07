@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, opendir, readFile, realpath, stat } from "node:fs/promises";
+import { mkdir, open, opendir, realpath, stat } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -188,13 +188,65 @@ export function assertSafeRelativePath(value: string): void {
         segment.length === 0 ||
         segment === "." ||
         segment === ".." ||
-        segment.includes(":"),
+        segment.includes(":") ||
+        // Win32 silently strips a trailing dot/space, so `out.svg.` would
+        // name `out.svg` and defeat existence and extension checks.
+        /[. ]$/u.test(segment) ||
+        WINDOWS_RESERVED_NAME.test(segment),
     )
   )
     throw new WorkspacePathError(
       "PATH_INVALID",
       "Path contains a forbidden segment",
     );
+}
+
+/** DOS device names stay reserved with any extension (`NUL.svg`). */
+const WINDOWS_RESERVED_NAME =
+  /^(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[0-9¹²³]|LPT[0-9¹²³])(?:\..*)?$/iu;
+
+/**
+ * Reads at most `maxBytes` from a resolved workspace file. The size is
+ * checked on the open handle before any allocation, so an oversized document
+ * is rejected without being loaded into memory.
+ */
+export async function readBoundedFile(
+  path: string,
+  maxBytes: number,
+): Promise<Buffer> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1)
+    throw new Error("maxBytes must be a positive integer");
+  const handle = await open(path, "r");
+  try {
+    const { size } = await handle.stat();
+    if (size > maxBytes)
+      throw new WorkspacePathError(
+        "PATH_INVALID",
+        "Document exceeds the configured input size limit",
+      );
+    const buffer = Buffer.alloc(size);
+    let offset = 0;
+    while (offset < size) {
+      const { bytesRead } = await handle.read(
+        buffer,
+        offset,
+        size - offset,
+        offset,
+      );
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    return buffer.subarray(0, offset);
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function readBoundedText(
+  path: string,
+  maxBytes: number,
+): Promise<string> {
+  return (await readBoundedFile(path, maxBytes)).toString("utf8");
 }
 
 export async function sniffSvgDocument(path: string): Promise<"svg" | "svgz"> {
@@ -204,7 +256,7 @@ export async function sniffSvgDocument(path: string): Promise<"svg" | "svgz"> {
       "PATH_INVALID",
       "Only .svg and .svgz documents are allowed",
     );
-  const prefix = (await readFile(path)).subarray(0, 8192);
+  const prefix = await readPrefix(path, 8192);
   if (extension === "svgz" && prefix[0] === 0x1f && prefix[1] === 0x8b)
     return "svgz";
   if (extension === "svg" && /<svg(?:\s|>)/iu.test(prefix.toString("utf8")))
@@ -213,6 +265,17 @@ export async function sniffSvgDocument(path: string): Promise<"svg" | "svgz"> {
     "PATH_INVALID",
     "Document content does not match its SVG extension",
   );
+}
+
+async function readPrefix(path: string, length: number): Promise<Buffer> {
+  const handle = await open(path, "r");
+  try {
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, 0);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
 }
 
 function isInside(root: string, candidate: string): boolean {
@@ -241,19 +304,35 @@ function workspaceId(root: string, index: number): string {
   return `ws_${createHash("sha256").update(`${index}\0${root}`).digest("hex").slice(0, 16)}`;
 }
 
-async function walkSvgDocuments(
-  root: string,
-  current = root,
-): Promise<string[]> {
-  const directory = await opendir(current);
+/** Bounds for one document listing; a larger tree needs a narrower root. */
+export const MAX_LISTED_WORKSPACE_ENTRIES = 100_000;
+export const MAX_LISTED_WORKSPACE_DEPTH = 32;
+
+async function walkSvgDocuments(root: string): Promise<string[]> {
   const documents: string[] = [];
-  for await (const entry of directory) {
-    const path = resolve(current, entry.name);
-    if (entry.isSymbolicLink()) continue;
-    if (entry.isDirectory())
-      documents.push(...(await walkSvgDocuments(root, path)));
-    else if (entry.isFile() && /\.svgz?$/iu.test(entry.name))
-      documents.push(relative(root, path).split(sep).join("/"));
+  const pending: { depth: number; path: string }[] = [{ depth: 0, path: root }];
+  let visited = 0;
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    for await (const entry of await opendir(current.path)) {
+      visited += 1;
+      if (visited > MAX_LISTED_WORKSPACE_ENTRIES)
+        throw new WorkspacePathError(
+          "PATH_INVALID",
+          "Workspace has too many entries to list; configure a narrower workspace root",
+        );
+      const path = resolve(current.path, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) {
+        if (current.depth + 1 > MAX_LISTED_WORKSPACE_DEPTH)
+          throw new WorkspacePathError(
+            "PATH_INVALID",
+            "Workspace is nested too deeply to list; configure a narrower workspace root",
+          );
+        pending.push({ depth: current.depth + 1, path });
+      } else if (entry.isFile() && /\.svgz?$/iu.test(entry.name))
+        documents.push(relative(root, path).split(sep).join("/"));
+    }
   }
   return documents;
 }

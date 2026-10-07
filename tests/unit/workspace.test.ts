@@ -12,10 +12,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   assertSafeRelativePath,
+  readBoundedFile,
+  readBoundedText,
   WorkspacePathError,
   WorkspaceService,
   sniffSvgDocument,
 } from "../../src/workspace/index.js";
+import { MAX_LISTED_WORKSPACE_DEPTH } from "../../src/workspace/service.js";
 
 const temporaryDirectories: string[] = [];
 async function temporaryDirectory(): Promise<string> {
@@ -150,5 +153,40 @@ describe("workspace boundary", () => {
         pageSize: 1,
       }),
     ).resolves.toMatchObject({ documents: ["b.svg"] });
+  });
+  it("rejects Windows device names and segments Win32 would silently rename", () => {
+    for (const value of [
+      "NUL",
+      "con.svg",
+      "out/COM1.png",
+      "LPT9.pdf",
+      "out.svg.",
+      "dir /x.svg",
+      "dir./x.svg",
+    ])
+      expect(() => assertSafeRelativePath(value)).toThrow(WorkspacePathError);
+    for (const value of ["console.svg", "null.svg", ".hidden/a.svg", "a b.svg"])
+      expect(() => assertSafeRelativePath(value)).not.toThrow();
+  });
+  it("reads documents only within the configured byte limit", async () => {
+    const root = await temporaryDirectory();
+    const path = join(root, "a.svg");
+    await writeFile(path, "<svg/>");
+    await expect(readBoundedText(path, 6)).resolves.toBe("<svg/>");
+    await expect(readBoundedFile(path, 5)).rejects.toMatchObject({
+      code: "PATH_INVALID",
+    });
+  });
+  it("bounds the depth of a workspace listing", async () => {
+    const root = await temporaryDirectory();
+    let current = root;
+    for (let depth = 0; depth <= MAX_LISTED_WORKSPACE_DEPTH; depth += 1) {
+      current = join(current, "d");
+      await mkdir(current);
+    }
+    const service = await WorkspaceService.create([root]);
+    await expect(
+      service.listDocuments(service.list()[0]!.id, { pageSize: 10 }),
+    ).rejects.toThrow("nested too deeply");
   });
 });

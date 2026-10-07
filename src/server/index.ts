@@ -146,6 +146,7 @@ import {
   type LayoutReference,
 } from "../geometry/index.js";
 import {
+  configureSvgSecurityPolicy,
   normalizeSvgIds,
   remapSvgIdsForNativeQuery,
   sanitizeSvg,
@@ -194,10 +195,12 @@ import {
   ExportManifestResourceStore,
 } from "./document-resources.js";
 import { JobStore } from "./jobs.js";
+import { withPublicErrors } from "./public-errors.js";
 import { type OwnerScope } from "./ownership.js";
 import {
   AtomicFileStore,
   ArtifactStore,
+  CanonicalPathLocks,
   createNativeInputBundle,
   ScratchManager,
   sha256File,
@@ -205,6 +208,8 @@ import {
 } from "../storage/index.js";
 import {
   assertSafeRelativePath,
+  readBoundedFile,
+  readBoundedText,
   WorkspaceService,
   type ResolvedWorkspacePath,
 } from "../workspace/index.js";
@@ -1226,11 +1231,21 @@ export type ServerRuntime = {
 
 /** Creates process-owned state shared by stateless HTTP server instances. */
 export function createServerRuntime(config: ServerConfig): ServerRuntime {
-  const fileStore = new AtomicFileStore(undefined, undefined, {
-    workspaceRoots: config.workspaceRoots,
+  configureSvgSecurityPolicy({
+    maxInputBytes: config.maxInputBytes,
+    maximumMode: config.maximumSanitizeMode,
   });
   const stateRoot =
     config.scratchRoot === "auto" ? tmpdir() : config.scratchRoot;
+  const fileStore = new AtomicFileStore(
+    new CanonicalPathLocks({
+      lockDirectory: join(stateRoot, "inkscape-mcp-locks"),
+    }),
+    undefined,
+    {
+      workspaceRoots: config.workspaceRoots,
+    },
+  );
   return {
     artifacts: new ArtifactStore(
       join(stateRoot, "inkscape-mcp-artifacts"),
@@ -1256,6 +1271,35 @@ export function createServerRuntime(config: ServerConfig): ServerRuntime {
   };
 }
 
+/**
+ * Every tool and resource handler is registered through a wrapper that maps
+ * failures to {@link publicErrorMessage}, so a raw Node.js error carrying an
+ * absolute workspace, scratch or root path can never reach an MCP client.
+ */
+function routeHandlerErrorsThroughPublicMessages(server: McpServer): void {
+  type Register = (...args: unknown[]) => unknown;
+  const wrapLastCallback = (register: Register): Register => {
+    return (...args: unknown[]) => {
+      const callback = args.at(-1);
+      if (typeof callback === "function")
+        args[args.length - 1] = withPublicErrors(
+          callback as (...callbackArgs: unknown[]) => unknown,
+        );
+      return register(...args);
+    };
+  };
+  const registry = server as unknown as {
+    registerResource: Register;
+    registerTool: Register;
+  };
+  registry.registerTool = wrapLastCallback(
+    registry.registerTool.bind(server) as Register,
+  );
+  registry.registerResource = wrapLastCallback(
+    registry.registerResource.bind(server) as Register,
+  );
+}
+
 export function buildServer(
   config: ServerConfig,
   runtime: ServerRuntime = createServerRuntime(config),
@@ -1270,6 +1314,7 @@ export function buildServer(
       instructions: SERVER_INSTRUCTIONS,
     },
   );
+  routeHandlerErrorsThroughPublicMessages(server);
   const {
     artifacts,
     capabilities,
@@ -1689,7 +1734,7 @@ export function buildServer(
       ).resolveExisting(workspaceId, path);
       const fonts = await systemFonts(refreshFonts);
       const preflight = preflightSvgFonts(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         fonts.families,
       );
       const output = {
@@ -1810,7 +1855,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const updated = updateSvgShapes(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         elements,
       );
       const committed = await fileStore.commit({
@@ -1894,7 +1939,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const arranged = arrangeSvgShapes(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         ids,
         action,
         arrangeOptions,
@@ -1959,7 +2004,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(request.workspaceId, request.path);
       const grouped = groupSvgShapes(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         request.action === "group"
           ? {
               action: "group",
@@ -2029,7 +2074,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const duplicated = duplicateSvgShape(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         { id, mode, newId, ...(parentId === undefined ? {} : { parentId }) },
       );
       const committed = await fileStore.commit({
@@ -2080,7 +2125,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const reparented = reparentSvgShapes(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         { ids, parentId },
       );
       const committed = await fileStore.commit({
@@ -2215,12 +2260,15 @@ export function buildServer(
       const inputStats = await stat(input.absolutePath);
       if (!inputStats.isFile() || inputStats.size > config.maxInputBytes)
         throw new Error("SVG import exceeds the configured size limit");
-      const imported = importSanitizedSvg(await readFile(input.absolutePath), {
-        format,
-        maxInputBytes: config.maxInputBytes,
-        maximumMode: config.maximumSanitizeMode,
-        mode: sanitizeMode,
-      });
+      const imported = importSanitizedSvg(
+        await readBoundedFile(input.absolutePath, config.maxInputBytes),
+        {
+          format,
+          maxInputBytes: config.maxInputBytes,
+          maximumMode: config.maximumSanitizeMode,
+          mode: sanitizeMode,
+        },
+      );
       const contents = Buffer.from(imported.svg, "utf8");
       const manifest = {
         format,
@@ -2925,7 +2973,10 @@ export function buildServer(
         throw new Error("PDF import source is not a regular non-empty file");
       if (sourceStats.size > config.maxInputBytes)
         throw new Error("PDF import exceeds the configured size limit");
-      const sourceBytes = await readFile(source.absolutePath);
+      const sourceBytes = await readBoundedFile(
+        source.absolutePath,
+        config.maxInputBytes,
+      );
       if (!sourceBytes.subarray(0, 5).equals(Buffer.from("%PDF-")))
         throw new Error("PDF import source does not have a PDF signature");
       if (isLikelyEncryptedPdf(sourceBytes))
@@ -3102,7 +3153,10 @@ export function buildServer(
       const output = await workspace.resolveNewOutput(workspaceId, outputPath);
       if (!/\.svg$/iu.test(output.relativePath))
         throw new Error("document_import_svg requires a .svg output path");
-      const source = await readFile(input.absolutePath, "utf8");
+      const source = await readBoundedText(
+        input.absolutePath,
+        config.maxInputBytes,
+      );
       const sanitized = sanitizeSvg(source, {
         maxElements: 100_000,
         maxInputBytes: config.maxInputBytes,
@@ -3415,7 +3469,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const safety = sanitizeSvg(source, {
         maxElements: 100_000,
         maxInputBytes: config.maxInputBytes,
@@ -3470,7 +3527,7 @@ export function buildServer(
       const workspace = await workspaces();
       const document = await workspace.resolveExisting(workspaceId, path);
       const created = createSvgShapes(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         await prepareShapeSpecs(elements, document, workspace, config),
       );
       const committed = await fileStore.commit({
@@ -3520,7 +3577,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const changed = retargetSvgConnector(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         id,
         fromId,
         toId,
@@ -3589,7 +3646,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const changed = routeSvgConnector(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         { axis, clearance, fromId, id, obstacleIds, toId },
       );
       const committed = await fileStore.commit({
@@ -3653,7 +3710,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const svg = createSvgConnector(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         { fromId, id, points, toId },
       );
       const committed = await fileStore.commit({
@@ -3712,7 +3769,10 @@ export function buildServer(
       assertDocumentWorkspace(config);
       const workspace = await workspaces();
       const document = await workspace.resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const estimatedCost = estimateDesignOperationCost(operations);
       const aliases = new Map<string, string>();
       let svg = source;
@@ -3935,7 +3995,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const queried = querySvgElementTargets(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         {
           ...(ids === undefined ? {} : { ids }),
           includeComputedStyle,
@@ -4017,7 +4077,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const deleted = deleteSvgShapes(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         ids,
       );
       const committed = await fileStore.commit({
@@ -4065,7 +4125,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const transformed = transformSvgShapes(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         ids,
         transform,
       );
@@ -4116,7 +4176,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const result = combineSvgPaths(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         ids,
       );
       const committed = await fileStore.commit({
@@ -4195,7 +4255,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(input.workspaceId, input.path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const changed =
         input.action === "create"
           ? createSvgRectMask(source, input.spec)
@@ -4282,7 +4345,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(input.workspaceId, input.path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const changed =
         input.action === "create"
           ? createSvgRectClipPath(source, input.spec)
@@ -4354,7 +4420,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const changed = cropSvgImage(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         { clipId, height, imageId, width, x, y },
       );
       const committed = await fileStore.commit({
@@ -4421,7 +4487,10 @@ export function buildServer(
         input.workspaceId,
         input.path,
       );
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       if (input.action === "relink") {
         const asset = await workspace.resolveExisting(
           input.workspaceId,
@@ -4552,7 +4621,10 @@ export function buildServer(
       assertDocumentWorkspace(config);
       const workspace = await workspaces();
       const document = await workspace.resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const targets = querySvgElementTargets(source, {
         ids: [imageId],
         limit: 2,
@@ -4648,7 +4720,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const output = inspectSvgImageDpi(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
       );
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
@@ -4690,7 +4762,7 @@ export function buildServer(
         remediation:
           "Use images_manage with a workspace-local assetPath; remote downloads are intentionally unsupported." as const,
         resources: inspectSvgRemoteResources(
-          await readFile(document.absolutePath, "utf8"),
+          await readBoundedText(document.absolutePath, config.maxInputBytes),
         ),
       };
       return {
@@ -4731,7 +4803,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const output = inspectSvgAccessibility(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
       );
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
@@ -4783,7 +4855,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(input.workspaceId, input.path);
       const changed = updateSvgText(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         input,
       );
       const committed = await fileStore.commit({
@@ -4842,7 +4914,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(input.workspaceId, input.path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const changed =
         input.action === "attach"
           ? attachSvgTextToPath(
@@ -4899,7 +4974,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const output = inspectSvgFlowedText(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
       );
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
@@ -4936,7 +5011,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const changed = convertSimpleSvgFlowedText(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         id,
       );
       const committed = await fileStore.commit({
@@ -5035,7 +5110,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(input.workspaceId, input.path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const changed =
         input.action === "document"
           ? updateSvgDocumentMetadata(source, input)
@@ -5093,7 +5171,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       if (dryRun) {
         const plan = planUnusedSvgDefs(source);
         const output = { ...plan, dryRun: true };
@@ -5200,7 +5281,10 @@ export function buildServer(
         throw new Error("document_optimize requires an SVG source path");
       const derivedOutputPath =
         outputPath ?? deriveOptimizationOutputPath(document.relativePath);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const optimized = vacuumUnusedSvgDefs(source);
       if (dryRun) {
         const result = {
@@ -5309,7 +5393,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(input.workspaceId, input.path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       let changed: string;
       let id: string | undefined;
       let targetIds: readonly string[] | undefined;
@@ -5402,7 +5489,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(input.workspaceId, input.path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       let changed: string;
       let id: string;
       let targetIds: readonly string[] | undefined;
@@ -5497,7 +5587,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(input.workspaceId, input.path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       let changed: string;
       let id: string;
       let targetIds: readonly string[] | undefined;
@@ -5605,7 +5698,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(input.workspaceId, input.path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       if (input.action === "list") {
         const output = {
           action: "list" as const,
@@ -5753,7 +5849,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(input.workspaceId, input.path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       if (input.action === "inspect") {
         const output = {
           action: "inspect" as const,
@@ -5842,7 +5941,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const output = inspectSvgPathEffects(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
       );
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
@@ -5902,7 +6001,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const changed = manageSvgPathEffect(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         action === "delete"
           ? { action, effectId }
           : { action, effectId, pathIds: pathIds! },
@@ -5963,7 +6062,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const output = inspectSvgColorManagement(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
       );
       return {
         content: [{ type: "text", text: JSON.stringify(output) }],
@@ -6008,7 +6107,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const changed = applySvgPalette(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         replacements,
       );
       const committed = await fileStore.commit({
@@ -6073,7 +6172,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const output = inspectSvgPalette(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         limit,
       );
       return {
@@ -6114,7 +6213,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const output = inspectSvgMeshGradients(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         limit,
       );
       return {
@@ -6175,7 +6274,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(input.workspaceId, input.path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       let changed: string;
       let id: string;
       let targetIds: readonly string[] | undefined;
@@ -6249,7 +6351,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const targets = querySvgElementTargets(source, {
         ids,
         limit: 100,
@@ -6321,7 +6426,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const targets = querySvgElementTargets(source, {
         ids,
         limit: 100,
@@ -6421,7 +6529,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       assertNativePathTargets(source, ids, {
         directional:
           operation === "difference" ||
@@ -6490,7 +6601,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       assertNativePathTargets(source, [id]);
       if (operation !== "simplify")
         throw new Error(
@@ -6565,7 +6679,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       assertNativePathTargets(source, ids);
       const result = await runNativePathBoolean({
         config,
@@ -6626,7 +6743,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const result = breakApartSvgPath(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         id,
         newIds,
       );
@@ -6675,7 +6792,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const result = reverseSvgPath(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         id,
       );
       const committed = await fileStore.commit({
@@ -6806,7 +6923,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const changed = editSvgPathNode(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         id,
         operation,
       );
@@ -6859,7 +6976,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const changed = moveSvgPathNode(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         id,
         index,
         point,
@@ -6909,7 +7026,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const flattened = flattenSvgShapeTransforms(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         ids,
       );
       const committed = await fileStore.commit({
@@ -6973,7 +7090,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       assertNoNestedLayoutSelection(source, ids);
       const nativeBounds = await queryNativeBounds({
         config,
@@ -7041,7 +7161,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       assertNoNestedLayoutSelection(source, ids);
       const nativeBounds = await queryNativeBounds({
         config,
@@ -7106,7 +7229,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       assertNoNestedLayoutSelection(source, ids);
       const nativeBounds = await queryNativeBounds({
         config,
@@ -7237,7 +7363,10 @@ export function buildServer(
         throw new Error("Document revision no longer matches");
       if (includeVisualBounds && expectedRevision === undefined)
         throw new Error("Inkscape bounds require expectedRevision");
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const settings = inspectSvgSettings(source);
       const explicitPages = listSvgPages(source);
       const visualBounds =
@@ -7347,7 +7476,7 @@ export function buildServer(
         await workspaces()
       ).resolveExisting(workspaceId, path);
       const preflight = preflightSvg(
-        await readFile(document.absolutePath, "utf8"),
+        await readBoundedText(document.absolutePath, config.maxInputBytes),
         profile,
         {
           ...(bleed === undefined ? {} : { bleed }),
@@ -7453,7 +7582,10 @@ export function buildServer(
       assertDocumentWorkspace(config);
       const workspace = await workspaces();
       const document = await workspace.resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const currentRevision = await sha256File(document.absolutePath);
       if (currentRevision !== expectedRevision)
         throw new Error("Document revision no longer matches");
@@ -7581,7 +7713,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const settings = inspectSvgSettings(source);
       const nativeBounds = await queryNativeBounds({
         config,
@@ -7694,7 +7829,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const settings = inspectSvgSettings(source);
       const currentPage = {
         height: parseViewportLength(settings.height),
@@ -7798,7 +7936,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const currentRevision = await sha256File(document.absolutePath);
       if (action === "list") {
         if (
@@ -7897,7 +8038,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const currentRevision = await sha256File(document.absolutePath);
       if (currentRevision !== expectedRevision)
         throw new Error("Document revision no longer matches");
@@ -7973,7 +8117,10 @@ export function buildServer(
       const document = await (
         await workspaces()
       ).resolveExisting(workspaceId, path);
-      const source = await readFile(document.absolutePath, "utf8");
+      const source = await readBoundedText(
+        document.absolutePath,
+        config.maxInputBytes,
+      );
       const currentRevision = await sha256File(document.absolutePath);
       if (settings === undefined) {
         if (
@@ -8095,7 +8242,10 @@ export function buildServer(
         throw new Error("document_render_preview requires a .png output path");
       if ((await sha256File(input.absolutePath)) !== expectedRevision)
         throw new Error("Document revision no longer matches");
-      const source = await readFile(input.absolutePath, "utf8");
+      const source = await readBoundedText(
+        input.absolutePath,
+        config.maxInputBytes,
+      );
       const normalizedArea = normalizeExportArea(
         area === "selection"
           ? { elementId: selectionId!, kind: "selection" }
@@ -8335,7 +8485,7 @@ export function buildServer(
               ? "interchange"
               : "basic";
       const preflightResult = preflightSvg(
-        await readFile(source.absolutePath, "utf8"),
+        await readBoundedText(source.absolutePath, config.maxInputBytes),
         preflightProfile,
         { rasterMegapixelThreshold: config.maxRasterMegapixels },
       );
@@ -8985,7 +9135,10 @@ export function buildServer(
         throw new Error(
           "Output extension does not match the requested export format",
         );
-      const source = await readFile(input.absolutePath, "utf8");
+      const source = await readBoundedText(
+        input.absolutePath,
+        config.maxInputBytes,
+      );
       const area = normalizeExportArea(
         spec.area.kind === "pages"
           ? { kind: "page", pageIds: spec.area.pageIds }
@@ -9328,7 +9481,10 @@ export function buildServer(
         throw new Error(
           "backgroundOpacity is only valid with a solid PNG background",
         );
-      const source = await readFile(input.absolutePath, "utf8");
+      const source = await readBoundedText(
+        input.absolutePath,
+        config.maxInputBytes,
+      );
       const exportArea =
         area === "custom"
           ? { kind: "custom" as const, rect: customArea! }
@@ -9613,9 +9769,9 @@ export function buildServer(
         : undefined;
       if (pageIds !== undefined) {
         const available = new Set(
-          listSvgPages(await readFile(input.absolutePath, "utf8")).map(
-            (page) => page.id,
-          ),
+          listSvgPages(
+            await readBoundedText(input.absolutePath, config.maxInputBytes),
+          ).map((page) => page.id),
         );
         if (pageIds.some((id) => !available.has(id)))
           throw new Error("Requested PDF subset page does not exist");
@@ -9887,7 +10043,10 @@ export function buildServer(
       assertDocumentWorkspace(config);
       const workspace = await workspaces();
       const input = await workspace.resolveExisting(workspaceId, path);
-      const source = await readFile(input.absolutePath, "utf8");
+      const source = await readBoundedText(
+        input.absolutePath,
+        config.maxInputBytes,
+      );
       const pages = listSvgPages(source);
       if (pages.length === 0)
         throw new Error("PDF page export requires explicit Inkscape pages");
@@ -10694,7 +10853,10 @@ async function prepareShapeSpecs(
     const metadata = await stat(asset.absolutePath);
     if (metadata.size > config.maxInputBytes)
       throw new Error("Image asset exceeds the configured size limit");
-    const bytes = await readFile(asset.absolutePath);
+    const bytes = await readBoundedFile(
+      asset.absolutePath,
+      config.maxInputBytes,
+    );
     const mime = sniffRasterMime(bytes);
     const href =
       element.embedding === "embed"

@@ -153,6 +153,34 @@ describe("secure local HTTP transport", () => {
     expect(rejected.status).toBe(429);
   });
 
+  it("keeps unauthenticated floods from exhausting an authenticated client", async () => {
+    const handler = createSecureHttpHandler(
+      config,
+      token,
+      {
+        close: async () => undefined,
+        fetch: async () => new Response("ok"),
+      },
+      { log: () => undefined },
+    );
+    const request = (authorization?: string) =>
+      new Request("http://127.0.0.1:3000/mcp", {
+        headers: {
+          ...(authorization === undefined
+            ? {}
+            : { Authorization: authorization }),
+          Host: "127.0.0.1:3000",
+        },
+      });
+    for (let index = 0; index < 120; index += 1)
+      expect(
+        (await handler.fetch(request(`Bearer ${"x".repeat(32)}`))).status,
+      ).toBe(401);
+    expect((await handler.fetch(request())).status).toBe(429);
+    expect((await handler.fetch(request(`Bearer ${token}`))).status).toBe(200);
+    expect((await handler.fetch(request("Bearer bad"))).status).toBe(429);
+  });
+
   it("rotates a local multi-principal credential file without restart", async () => {
     const directory = await mkdtemp(join(tmpdir(), "inkscape-mcp-http-auth-"));
     const credentialPath = join(directory, "credentials.json");

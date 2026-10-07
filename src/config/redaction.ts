@@ -1,6 +1,9 @@
 import type { ServerConfig } from "./schema.js";
 
 const WINDOWS_PATH = /(?:[A-Za-z]:[\\/]|\\\\[^\\/\s]+[\\/])[^\s"'`;,]*/gu;
+/** An absolute POSIX path with at least two segments, e.g. `/home/u/x.svg`;
+ * the look-behind keeps MIME types and ratios such as `image/png` intact. */
+const POSIX_PATH = /(?<![\w.:/-])\/(?:[^\s"'`;,/]+\/)+[^\s"'`;,]*/gu;
 const SENSITIVE_VALUE =
   /\b(api[-_]?key|authorization|password|secret|token)\b\s*([=:])\s*[^\s"'`;,]+/giu;
 const BEARER_VALUE = /\bbearer\s+[^\s"'`;,]+/giu;
@@ -66,6 +69,7 @@ export function redactConfig(config: ServerConfig): RedactedConfig {
 export function redactDiagnostic(value: string): string {
   return value
     .replace(WINDOWS_PATH, "<redacted-path>")
+    .replace(POSIX_PATH, "<redacted-path>")
     .replace(SENSITIVE_VALUE, "$1$2<redacted>")
     .replace(BEARER_VALUE, "Bearer <redacted>");
 }

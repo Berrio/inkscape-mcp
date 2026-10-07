@@ -5242,7 +5242,10 @@ try {
   });
   if (cancelledJob.isError) throw new Error("job_cancel rejected an owned job");
   let completedCancellation;
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  // Terminating the MSIX Inkscape tree and cleaning staging takes ~1.5 s on
+  // the Windows baseline, so wait on a deadline instead of a fixed poll count.
+  const cancellationDeadline = Date.now() + 10_000;
+  while (Date.now() < cancellationDeadline) {
     const status = await workspaceClient.callTool({
       arguments: { jobId, workspaceId: workspace.id },
       name: "job_get",
@@ -5252,6 +5255,8 @@ try {
       completedCancellation = status.structuredContent;
       break;
     }
+    if (status.structuredContent?.status === "completed")
+      throw new Error("cancelled export job completed instead of cancelling");
     await delay(25);
   }
   const cancelOutputExists = await readFile(

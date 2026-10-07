@@ -110,10 +110,13 @@ export class CapabilityService {
       versionSupport,
       warnings,
     };
-    this.cache.set(fingerprint, {
-      expiresAt: Date.now() + CACHE_TTL_MS,
-      value,
-    });
+    // A failed probe is an observation, not a stable property of the binary:
+    // never cache it, so the next request can observe the recovered state.
+    if (helpAll.available && inputTypes.available && actionList.available)
+      this.cache.set(fingerprint, {
+        expiresAt: Date.now() + CACHE_TTL_MS,
+        value,
+      });
     return value;
   }
 
@@ -144,12 +147,36 @@ function capabilityWarnings(
 
 type CollectedCommand = CapabilityObservation & { output: string };
 
+/** Attempts per capability probe; Inkscape startup under concurrent load can
+ * fail transiently, and a single miss would publish a misleading warning. */
+const PROBE_ATTEMPTS = 2;
+
 async function collect(
   runner: Pick<ProcessExecutor, "run">,
   executable: string,
   args: readonly string[],
   cwd: string,
 ): Promise<CollectedCommand> {
+  let attempt = await collectOnce(runner, executable, args, cwd);
+  for (
+    let count = 1;
+    count < PROBE_ATTEMPTS && !attempt.available && attempt.retryable;
+    count += 1
+  )
+    attempt = await collectOnce(runner, executable, args, cwd);
+  return {
+    available: attempt.available,
+    output: attempt.output,
+    stderr: attempt.stderr,
+  };
+}
+
+async function collectOnce(
+  runner: Pick<ProcessExecutor, "run">,
+  executable: string,
+  args: readonly string[],
+  cwd: string,
+): Promise<CollectedCommand & { retryable: boolean }> {
   try {
     const result = await runner.run(executable, {
       args,
@@ -158,19 +185,22 @@ async function collect(
       maxStdoutBytes: OUTPUT_LIMIT_BYTES,
       timeoutMs: 30_000,
     });
+    const truncated = result.stdoutTruncated || result.stderrTruncated;
     return {
       available:
         result.exitCode === 0 &&
         result.terminationReason === "completed" &&
-        !result.stdoutTruncated &&
-        !result.stderrTruncated,
+        !truncated,
       output: result.stdout.toString("utf8"),
+      // An oversized listing is deterministic; retrying cannot change it.
+      retryable: !truncated && result.terminationReason !== "aborted",
       stderr: result.stderr.toString("utf8"),
     };
   } catch (error: unknown) {
     return {
       available: false,
       output: "",
+      retryable: false,
       stderr:
         error instanceof Error ? error.message : "unknown execution error",
     };

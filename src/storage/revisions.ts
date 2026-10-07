@@ -3,7 +3,10 @@ import { createReadStream } from "node:fs";
 import {
   copyFile,
   lstat,
+  mkdir,
   open,
+  readdir,
+  readFile,
   realpath,
   rename,
   rm,
@@ -48,31 +51,113 @@ export async function assertRevision(
   }
 }
 
+export type CanonicalPathLockOptions = {
+  /**
+   * Server-owned directory for advisory lock files shared by every local
+   * inkscape-mcp process (stdio, HTTP, CLI recipes and queue workers). When
+   * omitted, locks only serialize callers inside this process.
+   */
+  lockDirectory?: string | undefined;
+  /** A lock whose owner PID is alive is still reclaimed after this age. */
+  staleAfterMs?: number | undefined;
+  /** Maximum wait for a lock held by another process. */
+  timeoutMs?: number | undefined;
+};
+
 export class CanonicalPathLocks {
   private readonly tails = new Map<string, Promise<void>>();
+  private readonly lockDirectory: string | undefined;
+  private readonly staleAfterMs: number;
+  private readonly timeoutMs: number;
 
-  public async acquire(paths: readonly string[]): Promise<() => void> {
+  public constructor(options: CanonicalPathLockOptions = {}) {
+    this.lockDirectory =
+      options.lockDirectory === undefined
+        ? undefined
+        : resolve(options.lockDirectory);
+    this.staleAfterMs = options.staleAfterMs ?? 10 * 60_000;
+    this.timeoutMs = options.timeoutMs ?? 60_000;
+  }
+
+  public async acquire(paths: readonly string[]): Promise<() => Promise<void>> {
     const keys = [
       ...new Set(paths.map((path) => resolve(path).toLocaleLowerCase())),
     ].sort();
-    const releases: (() => void)[] = [];
-    for (const key of keys) {
-      const prior = this.tails.get(key) ?? Promise.resolve();
-      let release!: () => void;
-      const current = new Promise<void>((resolveCurrent) => {
-        release = resolveCurrent;
-      });
-      const tail = prior.then(() => current);
-      this.tails.set(key, tail);
-      await prior;
-      releases.push(() => {
-        release();
-        if (this.tails.get(key) === tail) this.tails.delete(key);
-      });
+    const releases: (() => Promise<void> | void)[] = [];
+    try {
+      for (const key of keys) {
+        const prior = this.tails.get(key) ?? Promise.resolve();
+        let release!: () => void;
+        const current = new Promise<void>((resolveCurrent) => {
+          release = resolveCurrent;
+        });
+        const tail = prior.then(() => current);
+        this.tails.set(key, tail);
+        await prior;
+        releases.push(() => {
+          release();
+          if (this.tails.get(key) === tail) this.tails.delete(key);
+        });
+        if (this.lockDirectory !== undefined)
+          releases.push(await this.acquireFileLock(key));
+      }
+    } catch (error) {
+      for (const release of releases.reverse()) await release();
+      throw error;
     }
-    return () => {
-      for (const release of releases.reverse()) release();
+    return async () => {
+      for (const release of releases.reverse()) await release();
     };
+  }
+
+  /** Cross-process exclusion through an O_EXCL file; a lock left by a
+   * crashed process is reclaimed when its PID is gone or it is stale. */
+  private async acquireFileLock(key: string): Promise<() => Promise<void>> {
+    const directory = this.lockDirectory!;
+    await mkdir(directory, { recursive: true });
+    const path = join(
+      directory,
+      `${createHash("sha256").update(key).digest("hex").slice(0, 32)}.lock`,
+    );
+    const token = crypto.randomUUID();
+    const deadline = Date.now() + this.timeoutMs;
+    let delayMs = 10;
+    for (;;) {
+      try {
+        const handle = await open(path, "wx");
+        try {
+          await handle.writeFile(
+            JSON.stringify({ createdAt: Date.now(), pid: process.pid, token }),
+          );
+        } finally {
+          await handle.close();
+        }
+        return async () => {
+          const owner = await readLockOwner(path);
+          if (typeof owner === "object" && owner.token === token)
+            await rm(path, { force: true });
+        };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      }
+      const owner = await readLockOwner(path);
+      if (owner === "missing") continue;
+      if (
+        owner === "unreadable"
+          ? await isOlderThan(path, this.staleAfterMs)
+          : !isProcessAlive(owner.pid) ||
+            Date.now() - owner.createdAt > this.staleAfterMs
+      ) {
+        await rm(path, { force: true });
+        continue;
+      }
+      if (Date.now() >= deadline)
+        throw new RevisionConflictError(
+          "Document is locked by another inkscape-mcp process",
+        );
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, delayMs));
+      delayMs = Math.min(delayMs * 2, 250);
+    }
   }
 
   public async withLocks<T>(
@@ -83,8 +168,54 @@ export class CanonicalPathLocks {
     try {
       return await action();
     } finally {
-      release();
+      await release();
     }
+  }
+}
+
+type LockOwner = { createdAt: number; pid: number; token: string };
+
+async function readLockOwner(
+  path: string,
+): Promise<LockOwner | "missing" | "unreadable"> {
+  let contents: string;
+  try {
+    contents = await readFile(path, "utf8");
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT"
+      ? "missing"
+      : "unreadable";
+  }
+  try {
+    const value: unknown = JSON.parse(contents);
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "createdAt" in value &&
+      "pid" in value &&
+      "token" in value &&
+      Number.isSafeInteger(value.createdAt) &&
+      Number.isSafeInteger(value.pid) &&
+      typeof value.token === "string"
+    )
+      return value as LockOwner;
+  } catch {
+    /* a lock is unreadable while its creator is still writing it */
+  }
+  return "unreadable";
+}
+
+async function isOlderThan(path: string, ageMs: number): Promise<boolean> {
+  const metadata = await stat(path).catch(() => undefined);
+  return metadata === undefined || Date.now() - metadata.mtimeMs > ageMs;
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
@@ -122,10 +253,20 @@ export type AtomicFileStoreOptions = {
    * live target parent so a swapped junction cannot redirect a staged output.
    */
   workspaceRoots?: readonly string[];
+  /**
+   * Number of timestamped in-place backups kept per target. Older backups
+   * created by this store (`<name>.bak-<ISO>-<id>`) are pruned after a
+   * successful publication; unrelated files are never touched.
+   */
+  backupRetention?: number;
 };
+
+/** Default number of in-place backups retained per document. */
+export const DEFAULT_BACKUP_RETENTION = 10;
 
 export class AtomicFileStore {
   private readonly canonicalWorkspaceRoots: Promise<readonly string[]>;
+  private readonly backupRetention: number;
 
   public constructor(
     private readonly locks = new CanonicalPathLocks(),
@@ -133,25 +274,30 @@ export class AtomicFileStore {
     options: AtomicFileStoreOptions = {},
     private readonly moveTemporary: TemporaryMover = rename,
   ) {
+    this.backupRetention = options.backupRetention ?? DEFAULT_BACKUP_RETENTION;
+    if (!Number.isSafeInteger(this.backupRetention) || this.backupRetention < 1)
+      throw new Error("backupRetention must be a positive integer");
     this.canonicalWorkspaceRoots = Promise.all(
       (options.workspaceRoots ?? []).map(async (root) => realpath(root)),
     );
   }
 
   public async commit(request: CommitFileRequest): Promise<CommitFileResult> {
+    assertRevisionFormat(request.expectedRevision);
+    assertRevisionFormat(request.expectedOutputRevision);
     const target = resolve(request.targetPath);
     return this.locks.withLocks(
       [target, ...(request.sourcePath ? [request.sourcePath] : [])],
       async () => {
         await this.assertPublishTargets([target]);
-        if (request.sourcePath && request.expectedRevision)
+        if (request.sourcePath && request.expectedRevision !== undefined)
           await assertRevision(request.sourcePath, request.expectedRevision);
         const exists = await fileExists(target);
         if (exists && request.expectedOutputRevision === undefined)
           throw new RevisionConflictError(
             "Overwriting an output requires expectedOutputRevision",
           );
-        if (exists && request.expectedOutputRevision)
+        if (exists && request.expectedOutputRevision !== undefined)
           await assertRevision(target, request.expectedOutputRevision);
         const temporary = join(
           dirname(target),
@@ -160,7 +306,7 @@ export class AtomicFileStore {
         let backupPath: string | undefined;
         try {
           await this.writeTemporary(temporary, request.contents);
-          if (request.sourcePath && request.expectedRevision)
+          if (request.sourcePath && request.expectedRevision !== undefined)
             await assertRevision(request.sourcePath, request.expectedRevision);
           await this.assertPublishTargets([target]);
           const finalExists = await fileExists(target);
@@ -168,13 +314,15 @@ export class AtomicFileStore {
             throw new RevisionConflictError(
               "Output existence changed before publication",
             );
-          if (finalExists && request.expectedOutputRevision)
+          if (finalExists && request.expectedOutputRevision !== undefined)
             await assertRevision(target, request.expectedOutputRevision);
           if (exists) {
             backupPath = uniqueBackupPath(target);
             await copyFile(target, backupPath, 0);
           }
           await this.moveTemporary(temporary, target);
+          if (backupPath !== undefined)
+            await pruneBackups(target, this.backupRetention);
           return {
             ...(backupPath === undefined ? {} : { backupPath }),
             revision: await sha256File(target),
@@ -196,6 +344,9 @@ export class AtomicFileStore {
   ): Promise<CommitFileBatchResult> {
     if (request.files.length < 1 || request.files.length > 100)
       throw new Error("A commit batch must contain between 1 and 100 files");
+    assertRevisionFormat(request.expectedRevision);
+    for (const file of request.files)
+      assertRevisionFormat(file.expectedOutputRevision);
     const files = request.files.map((file) => ({
       ...file,
       targetPath: resolve(file.targetPath),
@@ -212,7 +363,7 @@ export class AtomicFileStore {
       ],
       async () => {
         await this.assertPublishTargets(files.map((file) => file.targetPath));
-        if (request.sourcePath && request.expectedRevision)
+        if (request.sourcePath && request.expectedRevision !== undefined)
           await assertRevision(request.sourcePath, request.expectedRevision);
         const staged = await Promise.all(
           files.map(async (file) => ({
@@ -225,7 +376,7 @@ export class AtomicFileStore {
             throw new RevisionConflictError(
               "Overwriting an output requires expectedOutputRevision",
             );
-          if (file.exists && file.expectedOutputRevision)
+          if (file.exists && file.expectedOutputRevision !== undefined)
             await assertRevision(file.targetPath, file.expectedOutputRevision);
         }
         const temporaries = staged.map((file) =>
@@ -242,7 +393,7 @@ export class AtomicFileStore {
               temporaries[index]!,
               staged[index]!.contents,
             );
-          if (request.sourcePath && request.expectedRevision)
+          if (request.sourcePath && request.expectedRevision !== undefined)
             await assertRevision(request.sourcePath, request.expectedRevision);
           await this.assertPublishTargets(
             staged.map((file) => file.targetPath),
@@ -253,7 +404,7 @@ export class AtomicFileStore {
               throw new RevisionConflictError(
                 "Output existence changed before publication",
               );
-            if (finalExists && file.expectedOutputRevision)
+            if (finalExists && file.expectedOutputRevision !== undefined)
               await assertRevision(
                 file.targetPath,
                 file.expectedOutputRevision,
@@ -273,6 +424,12 @@ export class AtomicFileStore {
             );
             published.push(index);
           }
+          for (let index = 0; index < staged.length; index += 1)
+            if (backups[index] !== undefined)
+              await pruneBackups(
+                staged[index]!.targetPath,
+                this.backupRetention,
+              );
           return {
             files: await Promise.all(
               staged.map(async (file, index) => ({
@@ -336,6 +493,41 @@ async function writeDurableTemporary(
     await handle.sync();
   } finally {
     await handle.close();
+  }
+}
+
+function assertRevisionFormat(revision: string | undefined): void {
+  if (revision !== undefined && !/^[a-f0-9]{64}$/u.test(revision))
+    throw new RevisionConflictError("Revision must be a SHA-256 hex digest");
+}
+
+/**
+ * Keeps the newest `retain` backups this store created for `target`. Pruning
+ * is best effort after a successful publication: it never fails or rolls back
+ * the commit, and it only matches the store's own timestamped names.
+ */
+async function pruneBackups(target: string, retain: number): Promise<void> {
+  const prefix = `${basename(target)}.bak-`;
+  const backupSuffix =
+    /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{8}$/u;
+  const directory = dirname(target);
+  try {
+    const backups = (await readdir(directory, { withFileTypes: true }))
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          entry.name.startsWith(prefix) &&
+          backupSuffix.test(entry.name.slice(prefix.length)),
+      )
+      .map((entry) => entry.name)
+      .sort();
+    await Promise.all(
+      backups
+        .slice(0, Math.max(0, backups.length - retain))
+        .map((name) => rm(join(directory, name), { force: true })),
+    );
+  } catch {
+    /* retention is housekeeping; the committed document is already durable */
   }
 }
 

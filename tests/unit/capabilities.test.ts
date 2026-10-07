@@ -103,6 +103,101 @@ describe("Inkscape capabilities", () => {
     expect(calls).toBe(3);
   });
 
+  it("retries a transient probe failure once and does not cache failures", async () => {
+    const attempts = new Map<string, number>();
+    let failActionList = 1;
+    const runner = {
+      run: async (
+        _executable: string,
+        request: { args: readonly string[] },
+      ) => {
+        const name = request.args[0]!;
+        attempts.set(name, (attempts.get(name) ?? 0) + 1);
+        const failing = name === "--action-list" && failActionList > 0;
+        if (failing) failActionList -= 1;
+        return {
+          durationMs: 1,
+          exitCode: failing ? null : 0,
+          pid: 1,
+          signal: null,
+          stderr: Buffer.alloc(0),
+          stderrTruncated: false,
+          stdout: Buffer.from(
+            name === "--action-list" ? "export-do : Export\n" : "",
+          ),
+          stdoutTruncated: false,
+          terminationReason: failing
+            ? ("timeout" as const)
+            : ("completed" as const),
+        };
+      },
+    };
+    const candidate = {
+      executablePath: process.execPath,
+      installKind: "system" as const,
+      sources: ["path" as const],
+    };
+    const service = new CapabilityService();
+    const recovered = await service.inspect(
+      runner,
+      candidate,
+      "1.4.4",
+      process.cwd(),
+    );
+    expect(attempts.get("--action-list")).toBe(2);
+    expect(recovered.warnings).not.toContain(
+      "INKSCAPE_ACTION_LIST_UNAVAILABLE",
+    );
+
+    failActionList = 2;
+    const failedService = new CapabilityService();
+    const failed = await failedService.inspect(
+      runner,
+      candidate,
+      "1.4.4",
+      process.cwd(),
+    );
+    expect(failed.warnings).toContain("INKSCAPE_ACTION_LIST_UNAVAILABLE");
+    const next = await failedService.inspect(
+      runner,
+      candidate,
+      "1.4.4",
+      process.cwd(),
+    );
+    expect(next).not.toBe(failed);
+    expect(next.warnings).not.toContain("INKSCAPE_ACTION_LIST_UNAVAILABLE");
+  });
+
+  it("does not retry deterministic output-limit failures", async () => {
+    let calls = 0;
+    await new CapabilityService().inspect(
+      {
+        run: async () => {
+          calls += 1;
+          return {
+            durationMs: 1,
+            exitCode: null,
+            pid: 1,
+            signal: null,
+            stderr: Buffer.alloc(0),
+            stderrTruncated: false,
+            stdout: Buffer.alloc(0),
+            stdoutTruncated: true,
+            terminationReason: "output-limit" as const,
+          };
+        },
+      },
+      {
+        executablePath: process.execPath,
+        installKind: "system",
+        sources: ["path"],
+      },
+      "1.4.4",
+      process.cwd(),
+    );
+    expect(calls).toBe(3);
+  });
+
   it("reports flag and action drift instead of assuming a matching version is compatible", async () => {
     const service = new CapabilityService();
     const result = await service.inspect(

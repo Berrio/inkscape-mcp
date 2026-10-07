@@ -4,11 +4,10 @@ import {
   type Element as XmlElement,
 } from "@xmldom/xmldom";
 
-import { sanitizeSvg } from "./safe-dom.js";
+import { sanitizeSvg, svgReferenceAttributeKind } from "./safe-dom.js";
 
 const PUBLIC_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u;
 const URL_FRAGMENT = /url\(\s*(?:(['"])#([^'"]+)\1|#([^)]*?))\s*\)/giu;
-const DIRECT_REFERENCE_ATTRIBUTES = new Set(["href", "xlink:href"]);
 const ID_LIST_ATTRIBUTES = new Set(["aria-describedby", "aria-labelledby"]);
 
 export type SvgIdNormalizationOptions = {
@@ -131,11 +130,12 @@ export function rewriteSvgElementReferences(
     if (!attribute) continue;
     const name = attribute.name.toLowerCase();
     const value = attribute.value;
-    const rewritten = DIRECT_REFERENCE_ATTRIBUTES.has(name)
-      ? rewriteDirectReference(value, renames)
-      : ID_LIST_ATTRIBUTES.has(name)
-        ? rewriteIdList(value, renames)
-        : rewriteUrlFragments(value, renames);
+    const rewritten =
+      svgReferenceAttributeKind(attribute) === "href"
+        ? rewriteDirectReference(value, renames)
+        : ID_LIST_ATTRIBUTES.has(name)
+          ? rewriteIdList(value, renames)
+          : rewriteUrlFragments(value, renames);
     if (rewritten !== value) element.setAttribute(attribute.name, rewritten);
   }
   if (element.localName === "style" && element.textContent) {

@@ -6,7 +6,7 @@ import {
   type McpHttpHandler,
 } from "@modelcontextprotocol/server";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import {
   createServer,
   type IncomingMessage,
@@ -26,6 +26,8 @@ const HTTP_PATH = "/mcp";
 const LOCAL_HOSTNAMES = ["127.0.0.1", "localhost"];
 const MAX_REQUESTS_PER_MINUTE = 120;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,256}$/u;
+const UNAUTHENTICATED_BUCKET = "unauthenticated";
+const MAX_CREDENTIAL_FILE_BYTES = 64 * 1024;
 
 export type HttpMcpServer = {
   close: () => Promise<void>;
@@ -129,7 +131,7 @@ export function createSecureHttpHandler(
           });
           return respond(rejected);
         }
-        if (!limiter.allow("loopback")) {
+        const tooManyRequests = () => {
           log({ event: "http_request_rejected", status: 429 });
           return respond(
             new Response("Too many requests", {
@@ -137,7 +139,11 @@ export function createSecureHttpHandler(
               status: 429,
             }),
           );
-        }
+        };
+        // Authentication is in-memory (or one cached `stat` for a token
+        // file), so it runs first: failed attempts share one budget and every
+        // principal gets its own, so a flood without a valid token cannot
+        // exhaust an authenticated client's budget.
         const auth = await authenticateBearer(
           request.headers.get("authorization"),
           credentialProvider,
@@ -151,9 +157,11 @@ export function createSecureHttpHandler(
           );
         }
         if (auth instanceof Response) {
+          if (!limiter.allow(UNAUTHENTICATED_BUCKET)) return tooManyRequests();
           log({ event: "http_request_rejected", status: 401 });
           return respond(auth);
         }
+        if (!limiter.allow(`client:${auth.clientId}`)) return tooManyRequests();
         const ownerScope = httpOwnerScope(auth.clientId);
         requestSpan.setPrincipal(ownerScope.id);
         return respond(await securedHandler.fetch(request, { authInfo: auth }));
@@ -239,6 +247,15 @@ class StaticHttpCredentialProvider implements HttpCredentialProvider {
 }
 
 class FileHttpCredentialProvider implements HttpCredentialProvider {
+  #cache:
+    | {
+        credentials: readonly HttpCredential[];
+        ino: number;
+        mtimeMs: number;
+        size: number;
+      }
+    | undefined;
+
   public constructor(private readonly path: string) {}
 
   public async authenticate(
@@ -247,9 +264,32 @@ class FileHttpCredentialProvider implements HttpCredentialProvider {
     return authenticateCredentials(authorization, await this.credentials());
   }
 
+  /** Re-parses the token file only when it changed, so rotation still needs
+   * no restart while repeated requests cost one `stat`. */
   private async credentials(): Promise<readonly HttpCredential[]> {
+    const metadata = await stat(this.path);
+    if (!metadata.isFile() || metadata.size > MAX_CREDENTIAL_FILE_BYTES)
+      throw new Error("HTTP credential source is invalid");
+    if (
+      this.#cache !== undefined &&
+      this.#cache.ino === metadata.ino &&
+      this.#cache.mtimeMs === metadata.mtimeMs &&
+      this.#cache.size === metadata.size
+    )
+      return this.#cache.credentials;
+    const credentials = await this.parse();
+    this.#cache = {
+      credentials,
+      ino: metadata.ino,
+      mtimeMs: metadata.mtimeMs,
+      size: metadata.size,
+    };
+    return credentials;
+  }
+
+  private async parse(): Promise<readonly HttpCredential[]> {
     const contents = await readFile(this.path, "utf8");
-    if (Buffer.byteLength(contents, "utf8") > 64 * 1024)
+    if (Buffer.byteLength(contents, "utf8") > MAX_CREDENTIAL_FILE_BYTES)
       throw new Error("HTTP credential source is invalid");
     const parsed: unknown = JSON.parse(contents);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
@@ -371,14 +411,31 @@ async function writeWebResponse(
     return;
   }
   const reader = webResponse.body.getReader();
+  // A client that disconnects during backpressure never emits `drain`; the
+  // close must also stop the (possibly endless SSE) source stream.
+  const closed = once(response, "close").then(() => "closed" as const);
+  let clientClosed = false;
   try {
     for (;;) {
-      const next = await reader.read();
+      const next = await Promise.race([reader.read(), closed]);
+      if (next === "closed") {
+        clientClosed = true;
+        break;
+      }
       if (next.done) break;
-      if (!response.write(Buffer.from(next.value)))
-        await once(response, "drain");
+      if (!response.write(Buffer.from(next.value))) {
+        const state = await Promise.race([
+          once(response, "drain").then(() => "drained" as const),
+          closed,
+        ]);
+        if (state === "closed") {
+          clientClosed = true;
+          break;
+        }
+      }
     }
   } finally {
+    if (clientClosed) await reader.cancel().catch(() => undefined);
     reader.releaseLock();
     response.end();
   }

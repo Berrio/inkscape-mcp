@@ -20,6 +20,8 @@ import {
 } from "./recipe-command.js";
 import { WorkspaceService } from "../workspace/index.js";
 
+const REMOVE_RETRIES = 5;
+const REMOVE_RETRY_DELAY_MS = 50;
 const jobIdSchema = z.string().regex(/^recipe_job_[a-f0-9]{32}$/u);
 const jobStatusSchema = z.enum([
   "cancelled",
@@ -404,7 +406,14 @@ export class DurableRecipeQueue {
       }),
     );
     return async () => {
-      await rm(lock, { force: true, recursive: true });
+      // Windows can keep a just-written file "delete pending" for a moment
+      // (antivirus, indexer), making the recursive removal see ENOTEMPTY/EBUSY.
+      await rm(lock, {
+        force: true,
+        maxRetries: REMOVE_RETRIES,
+        recursive: true,
+        retryDelay: REMOVE_RETRY_DELAY_MS,
+      });
     };
   }
 }

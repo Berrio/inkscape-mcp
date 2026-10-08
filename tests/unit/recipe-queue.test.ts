@@ -34,7 +34,12 @@ it("persists queued recipes, supports cancellation/retry, and records a receipt"
       status: "completed",
     });
   } finally {
-    await rm(root, { force: true, recursive: true });
+    await rm(root, {
+      force: true,
+      maxRetries: 5,
+      recursive: true,
+      retryDelay: 50,
+    });
   }
 });
 
@@ -66,7 +71,12 @@ it("lists compact queue metadata in reverse activity order and supports status f
       expect.objectContaining({ id: second.id, status: "queued" }),
     ]);
   } finally {
-    await rm(root, { force: true, recursive: true });
+    await rm(root, {
+      force: true,
+      maxRetries: 5,
+      recursive: true,
+      retryDelay: 50,
+    });
   }
 });
 
@@ -102,7 +112,12 @@ it("records a running cancellation and stops after the current atomic operation"
     });
     expect(await queue.get(queued.id)).toMatchObject({ status: "cancelled" });
   } finally {
-    await rm(root, { force: true, recursive: true });
+    await rm(root, {
+      force: true,
+      maxRetries: 5,
+      recursive: true,
+      retryDelay: 50,
+    });
   }
 });
 
@@ -123,6 +138,11 @@ it("keeps execution failures durable until an explicit retry", async () => {
     });
     expect((await queue.retry(queued.id)).status).toBe("queued");
   } finally {
-    await rm(root, { force: true, recursive: true });
+    await rm(root, {
+      force: true,
+      maxRetries: 5,
+      recursive: true,
+      retryDelay: 50,
+    });
   }
 });

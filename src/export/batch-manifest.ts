@@ -12,9 +12,12 @@ export type ExportBatchManifest = {
   source: ExportSpec["source"];
   variants: readonly {
     format: ExportSpec["format"];
+    /** Verified pixel size, present for PNG variants. */
+    height?: number;
     index: number;
     outputPath: string;
     revision: string;
+    width?: number;
   }[];
 };
 

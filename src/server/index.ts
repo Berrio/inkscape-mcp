@@ -1102,6 +1102,25 @@ const designOperationSchema = z.discriminatedUnion("kind", [
     kind: z.literal("delete"),
     ids: z.array(transactionReferenceSchema).min(1).max(100),
   }),
+  // Gradients and text paths can be created and linked to elements made
+  // earlier in the same transaction through local aliases.
+  z.object({
+    kind: z.literal("gradient"),
+    alias: transactionAliasSchema.optional(),
+    spec: gradientSpecSchema,
+  }),
+  z.object({
+    kind: z.literal("apply_gradient"),
+    gradientId: transactionReferenceSchema,
+    paint: z.enum(["fill", "stroke"]),
+    targetIds: z.array(transactionReferenceSchema).min(1).max(100),
+  }),
+  z.object({
+    kind: z.literal("text_path"),
+    pathId: transactionReferenceSchema,
+    startOffset: z.number().finite().optional(),
+    textId: transactionReferenceSchema,
+  }),
 ]);
 type DesignOperation = baseZ.infer<typeof designOperationSchema>;
 const semanticDiffSchema = z.object({
@@ -3897,6 +3916,31 @@ export function buildServer(
               svg,
               resolveTransactionReferences(operation.ids, aliases),
             ).svg;
+            break;
+          case "gradient":
+            svg = createSvgGradient(svg, operation.spec);
+            if (operation.alias !== undefined)
+              registerTransactionAlias(
+                aliases,
+                operation.alias,
+                operation.spec.id,
+              );
+            break;
+          case "apply_gradient":
+            svg = applySvgGradient(
+              svg,
+              resolveTransactionReference(operation.gradientId, aliases),
+              resolveTransactionReferences(operation.targetIds, aliases),
+              operation.paint,
+            );
+            break;
+          case "text_path":
+            svg = attachSvgTextToPath(
+              svg,
+              resolveTransactionReference(operation.textId, aliases),
+              resolveTransactionReference(operation.pathId, aliases),
+              operation.startOffset,
+            );
             break;
         }
       }
@@ -7369,7 +7413,9 @@ export function buildServer(
       const document = await workspace.resolveExisting(workspaceId, path);
       const revision = await sha256File(document.absolutePath);
       if (expectedRevision !== undefined && expectedRevision !== revision)
-        throw new Error("Document revision no longer matches");
+        throw new Error(
+          "REVISION_CONFLICT: Document revision no longer matches",
+        );
       if (includeVisualBounds && expectedRevision === undefined)
         throw new Error("Inkscape bounds require expectedRevision");
       const source = await readBoundedText(
@@ -7597,7 +7643,9 @@ export function buildServer(
       );
       const currentRevision = await sha256File(document.absolutePath);
       if (currentRevision !== expectedRevision)
-        throw new Error("Document revision no longer matches");
+        throw new Error(
+          "REVISION_CONFLICT: Document revision no longer matches",
+        );
       const settings = inspectSvgSettings(source);
       const currentPage = {
         width: parseViewportLength(settings.width),
@@ -7621,6 +7669,24 @@ export function buildServer(
       const diff = summarizeSvgDiff(source, resized.svg);
       if (dryRun) {
         const predictedSettings = inspectSvgSettings(resized.svg);
+        // page_only keeps user coordinates, so current visual bounds compare
+        // directly with the predicted viewBox; cover already warns itself.
+        const predictionWarnings = [
+          ...resized.warnings,
+          ...(mode === "page_only"
+            ? await contentOutsidePageWarnings(
+                {
+                  config,
+                  documentPath: document.absolutePath,
+                  expectedRevision,
+                  runner,
+                  scratch,
+                  workspaceRoot: document.workspaceRoot,
+                },
+                predictedSettings.viewBox,
+              )
+            : []),
+        ];
         const output = {
           backupCreated: false,
           ...contentStatus,
@@ -7636,10 +7702,10 @@ export function buildServer(
             ...(resized.transform === undefined
               ? {}
               : { transform: resized.transform }),
-            warnings: resized.warnings,
+            warnings: predictionWarnings,
           },
           revision: currentRevision,
-          warnings: resized.warnings,
+          warnings: predictionWarnings,
         };
         return {
           content: [{ type: "text", text: JSON.stringify(output) }],
@@ -7955,7 +8021,9 @@ export function buildServer(
           expectedRevision !== undefined &&
           expectedRevision !== currentRevision
         )
-          throw new Error("Document revision no longer matches");
+          throw new Error(
+            "REVISION_CONFLICT: Document revision no longer matches",
+          );
         const output = {
           pages: listSvgPages(source),
           revision: currentRevision,
@@ -8053,7 +8121,9 @@ export function buildServer(
       );
       const currentRevision = await sha256File(document.absolutePath);
       if (currentRevision !== expectedRevision)
-        throw new Error("Document revision no longer matches");
+        throw new Error(
+          "REVISION_CONFLICT: Document revision no longer matches",
+        );
       const pages = listSvgPages(source);
       const nativeBounds = await queryNativeBounds({
         config,
@@ -8136,7 +8206,9 @@ export function buildServer(
           expectedRevision !== undefined &&
           expectedRevision !== currentRevision
         )
-          throw new Error("Document revision no longer matches");
+          throw new Error(
+            "REVISION_CONFLICT: Document revision no longer matches",
+          );
         const output = {
           revision: currentRevision,
           settings: inspectDocumentDisplaySettings(source),
@@ -8250,7 +8322,9 @@ export function buildServer(
       if (!/\.png$/iu.test(output.relativePath))
         throw new Error("document_render_preview requires a .png output path");
       if ((await sha256File(input.absolutePath)) !== expectedRevision)
-        throw new Error("Document revision no longer matches");
+        throw new Error(
+          "REVISION_CONFLICT: Document revision no longer matches",
+        );
       const source = await readBoundedText(
         input.absolutePath,
         config.maxInputBytes,
@@ -8484,7 +8558,9 @@ export function buildServer(
         (await sha256File(source.absolutePath)) !==
         preset.source.expectedRevision
       )
-        throw new Error("Preset source revision no longer matches");
+        throw new Error(
+          "REVISION_CONFLICT: Preset source revision no longer matches",
+        );
       const preflightProfile =
         preset.name === "print-a4-pdf" || preset.name === "print-pdf-300dpi"
           ? "print"
@@ -8640,9 +8716,11 @@ export function buildServer(
             variants: z.array(
               z.object({
                 format: z.enum(["pdf", "plain-svg", "png", "svg"]),
+                height: z.number().int().positive().optional(),
                 index: z.number().int(),
                 outputPath: z.string(),
                 revision: z.string().regex(/^[a-f0-9]{64}$/u),
+                width: z.number().int().positive().optional(),
               }),
             ),
           }),
@@ -8733,7 +8811,9 @@ export function buildServer(
           savedPlan !== undefined &&
           (await sha256File(input.absolutePath)) !== source.expectedRevision
         )
-          throw new Error("Preset plan source revision no longer matches");
+          throw new Error(
+            "REVISION_CONFLICT: Preset plan source revision no longer matches",
+          );
         if (savedPlan !== undefined) {
           const discovery = await locateInkscape({
             config,
@@ -8814,6 +8894,7 @@ export function buildServer(
           const anticipatedSuccesses = staged.successes.map(
             (stagedVariant) => ({
               format: stagedVariant.value.variant.format,
+              ...(stagedVariant.value.pixels ?? {}),
               index: stagedVariant.index,
               outputPath: outputs[stagedVariant.index]!.relativePath,
               revision: createHash("sha256")
@@ -8896,6 +8977,9 @@ export function buildServer(
             source,
             variants: successes.map((success) => ({
               format: variants[success.index]!.format,
+              ...(staged.successes.find(
+                (stagedVariant) => stagedVariant.index === success.index,
+              )?.value.pixels ?? {}),
               index: success.index,
               outputPath: success.outputPath,
               revision: success.revision,
@@ -10640,7 +10724,11 @@ async function renderGenericExport(request: {
   signal?: AbortSignal;
   spec: Extract<ExportSpec, { format: "pdf" | "plain-svg" | "png" | "svg" }>;
   timeoutMs?: number;
-}): Promise<{ bytes: Buffer; inkscapeVersion: string }> {
+}): Promise<{
+  bytes: Buffer;
+  inkscapeVersion: string;
+  pixels?: { height: number; width: number };
+}> {
   const source = await readFile(request.inputPath, "utf8");
   const area = normalizeExportArea(
     request.spec.area.kind === "pages"
@@ -10741,11 +10829,23 @@ async function renderGenericExport(request: {
     });
     if (run.exitCode !== 0 || run.terminationReason !== "completed")
       throw new Error("Inkscape document export failed");
-    await verifyExportArtifact(request.spec.format, temporaryOutput);
+    const verification = await verifyExportArtifact(
+      request.spec.format,
+      temporaryOutput,
+    );
     await nativeInput.assertCurrent();
     return {
       bytes: await readFile(temporaryOutput),
       inkscapeVersion: probe.version,
+      // PNG dimensions come from the verified IHDR, not from the request.
+      ...(verification.format === "png"
+        ? {
+            pixels: {
+              height: verification.metadata.height,
+              width: verification.metadata.width,
+            },
+          }
+        : {}),
     };
   });
 }
@@ -10817,7 +10917,11 @@ function estimateDesignOperationCost(
             : 1)
         );
       case "duplicate":
+      case "gradient":
+      case "text_path":
         return total + 1;
+      case "apply_gradient":
+        return total + operation.targetIds.length;
     }
   }, 0);
 }
@@ -11380,6 +11484,34 @@ function inventoryVisualBounds(
     }),
     source: nativeVisualBounds.source,
   };
+}
+
+/**
+ * Anticipates, for a page_only dry run, whether the drawing's visual bounds
+ * fall outside the predicted page. The check needs Inkscape; if it cannot run
+ * the dry run says so instead of implying the content fits.
+ */
+async function contentOutsidePageWarnings(
+  request: Parameters<typeof queryNativeBounds>[0],
+  viewBox: { height: number; width: number; x: number; y: number },
+): Promise<readonly string[]> {
+  let bounds: InkscapeBounds[];
+  try {
+    bounds = [...(await queryNativeBounds(request)).values()].filter(
+      (value) => value.width > 0 && value.height > 0,
+    );
+  } catch {
+    return ["CONTENT_OUTSIDE_PAGE_CHECK_UNAVAILABLE"];
+  }
+  if (bounds.length === 0) return [];
+  const drawing = unionBounds(bounds);
+  const tolerance = 1e-6 * Math.max(viewBox.width, viewBox.height);
+  const outside =
+    drawing.x < viewBox.x - tolerance ||
+    drawing.y < viewBox.y - tolerance ||
+    drawing.x + drawing.width > viewBox.x + viewBox.width + tolerance ||
+    drawing.y + drawing.height > viewBox.y + viewBox.height + tolerance;
+  return outside ? ["CONTENT_OUTSIDE_PAGE"] : [];
 }
 
 function unionAvailableBounds(

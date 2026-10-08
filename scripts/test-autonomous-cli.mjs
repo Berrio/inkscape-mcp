@@ -5,13 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+import { serverEntry } from "./lib/server-entry.mjs";
+
 const executeFile = promisify(execFile);
 const workspaceRoot = await mkdtemp(join(tmpdir(), "inkscape-mcp-cli-test-"));
 
 async function runExport(argumentsList) {
   const result = await executeFile(
     process.execPath,
-    ["dist/cli.js", "export", ...argumentsList],
+    [serverEntry, "export", ...argumentsList],
     {
       cwd: process.cwd(),
       maxBuffer: 1024 * 1024,
@@ -24,7 +26,7 @@ async function runExport(argumentsList) {
 async function runRecipe(recipePath) {
   const result = await executeFile(
     process.execPath,
-    ["dist/cli.js", "run", recipePath, "--workspace-root", workspaceRoot],
+    [serverEntry, "run", recipePath, "--workspace-root", workspaceRoot],
     {
       cwd: process.cwd(),
       maxBuffer: 1024 * 1024,
@@ -37,13 +39,7 @@ async function runRecipe(recipePath) {
 async function runQueue(argumentsList) {
   const result = await executeFile(
     process.execPath,
-    [
-      "dist/cli.js",
-      "queue",
-      ...argumentsList,
-      "--workspace-root",
-      workspaceRoot,
-    ],
+    [serverEntry, "queue", ...argumentsList, "--workspace-root", workspaceRoot],
     {
       cwd: process.cwd(),
       maxBuffer: 1024 * 1024,

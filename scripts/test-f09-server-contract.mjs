@@ -9,8 +9,10 @@ import { clearTimeout, setTimeout } from "node:timers";
 import { setTimeout as delay } from "node:timers/promises";
 import packageMetadata from "../package.json" with { type: "json" };
 
+import { serverEntry } from "./lib/server-entry.mjs";
+
 const server = {
-  args: ["dist/cli.js"],
+  args: [serverEntry],
   command: process.execPath,
   cwd: process.cwd(),
   stderr: "pipe",
@@ -277,7 +279,7 @@ async function assertJobProgressIsObservable() {
   );
   const transport = new StdioClientTransport({
     ...server,
-    args: ["dist/cli.js", "--workspace-root", workspaceRoot],
+    args: [serverEntry, "--workspace-root", workspaceRoot],
   });
   try {
     await client.connect(transport);

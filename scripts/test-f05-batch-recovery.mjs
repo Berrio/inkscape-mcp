@@ -15,6 +15,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packageMetadata from "../package.json" with { type: "json" };
 
+import { serverEntry } from "./lib/server-entry.mjs";
+
 const root = await mkdtemp(join(tmpdir(), "inkscape-mcp-f05-batch-recovery-"));
 const workspaceRoot = join(root, "workspace");
 const scratchRoot = join(root, "scratch");
@@ -26,7 +28,7 @@ await utimes(staleScratch, new Date(0), new Date(0));
 
 const server = {
   args: [
-    "dist/cli.js",
+    serverEntry,
     "--workspace-root",
     workspaceRoot,
     "--scratch-root",

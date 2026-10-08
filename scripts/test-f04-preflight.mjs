@@ -6,11 +6,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packageMetadata from "../package.json" with { type: "json" };
 
+import { serverEntry } from "./lib/server-entry.mjs";
+
 const workspaceRoot = await mkdtemp(
   join(tmpdir(), "inkscape-mcp-f04-preflight-"),
 );
 const server = {
-  args: ["dist/cli.js", "--workspace-root", workspaceRoot],
+  args: [serverEntry, "--workspace-root", workspaceRoot],
   command: process.execPath,
   cwd: process.cwd(),
   stderr: "pipe",

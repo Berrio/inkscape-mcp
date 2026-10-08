@@ -96,6 +96,14 @@ npm run check
 npm run test:mcp
 ```
 
+Para comprobar el paquete tal como lo instalaría un usuario (empaqueta con
+`npm pack`, lo instala en un directorio temporal y ejecuta contra él todas las
+puertas end-to-end, el Inspector y los scripts PowerShell):
+
+```powershell
+npm run test:installed
+```
+
 Después inicia el servidor para el workspace autorizado:
 
 ```powershell

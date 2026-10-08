@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 
+import { serverEntry } from "./lib/server-entry.mjs";
+
 const inspectorEntry = join(
   process.cwd(),
   "node_modules",
@@ -17,7 +19,7 @@ const child = spawn(
     inspectorEntry,
     "--cli",
     "node",
-    "dist/cli.js",
+    serverEntry,
     "--method",
     "tools/list",
     "--format",

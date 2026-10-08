@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import packageMetadata from "../package.json" with { type: "json" };
 
+import { serverEntry } from "./lib/server-entry.mjs";
+
 const server = {
   command: process.execPath,
   cwd: process.cwd(),
@@ -43,7 +45,7 @@ async function run() {
   );
   const transport = new StdioClientTransport({
     ...server,
-    args: ["dist/cli.js", "--workspace-root", workspaceRoot],
+    args: [serverEntry, "--workspace-root", workspaceRoot],
   });
   try {
     await client.connect(transport);

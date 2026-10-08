@@ -5,26 +5,32 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
+import { packageRoot, serverEntry } from "./lib/server-entry.mjs";
+
 const executeFile = promisify(execFile);
 const workspaceRoot = await mkdtemp(
   join(tmpdir(), "inkscape mcp powershell test-"),
 );
 const runnerPath = resolve(
+  packageRoot,
   "scripts",
   "windows",
   "Invoke-InkscapeMcpRecipe.ps1",
 );
 const queueRunnerPath = resolve(
+  packageRoot,
   "scripts",
   "windows",
   "Invoke-InkscapeMcpQueue.ps1",
 );
 const registrationPath = resolve(
+  packageRoot,
   "scripts",
   "windows",
   "Register-InkscapeMcpDailyTask.ps1",
 );
 const queueRegistrationPath = resolve(
+  packageRoot,
   "scripts",
   "windows",
   "Register-InkscapeMcpQueueDailyTask.ps1",
@@ -111,7 +117,7 @@ try {
   const queued = await executeFile(
     process.execPath,
     [
-      "dist/cli.js",
+      serverEntry,
       "queue",
       "enqueue",
       queueRecipePath,

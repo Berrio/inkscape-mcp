@@ -16,6 +16,8 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import packageMetadata from "../package.json" with { type: "json" };
 
+import { serverEntry } from "./lib/server-entry.mjs";
+
 const root = await mkdtemp(join(tmpdir(), "inkscape-mcp-f05-cancel-restart-"));
 const workspaceRoot = join(root, "workspace");
 const scratchRoot = join(root, "scratch");
@@ -30,7 +32,7 @@ const expectedRevision = createHash("sha256").update(source).digest("hex");
 
 const server = {
   args: [
-    "dist/cli.js",
+    serverEntry,
     "--workspace-root",
     workspaceRoot,
     "--scratch-root",

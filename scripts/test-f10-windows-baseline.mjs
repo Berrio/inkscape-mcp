@@ -17,6 +17,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+import { serverEntry } from "./lib/server-entry.mjs";
+
 if (process.platform !== "win32")
   throw new Error("F10 Windows baseline smoke requires Windows");
 
@@ -45,7 +47,7 @@ const client = new Client(
   { versionNegotiation: { mode: { pin: "2026-07-28" } } },
 );
 const transport = new StdioClientTransport({
-  args: ["dist/cli.js", "--workspace-root", workspaceRoot],
+  args: [serverEntry, "--workspace-root", workspaceRoot],
   command: process.execPath,
   cwd: process.cwd(),
   stderr: "pipe",

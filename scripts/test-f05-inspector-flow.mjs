@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import { Buffer } from "node:buffer";
 
+import { serverEntry } from "./lib/server-entry.mjs";
+
 const workspaceRoot = await mkdtemp(
   join(tmpdir(), "inkscape-mcp-f05-inspector-"),
 );
@@ -26,7 +28,7 @@ async function callThroughInspector(toolName, toolArgs) {
       inspectorEntry,
       "--cli",
       "node",
-      "dist/cli.js",
+      serverEntry,
       "--workspace-root",
       workspaceRoot,
       "--",

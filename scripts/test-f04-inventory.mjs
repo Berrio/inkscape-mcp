@@ -10,13 +10,15 @@ const workspaceRoot = await mkdtemp(
   join(tmpdir(), "inkscape-mcp-f04-inventory-"),
 );
 const server = {
-  args: ["dist/cli.js", "--workspace-root", workspaceRoot],
+  args: [serverEntry, "--workspace-root", workspaceRoot],
   command: process.execPath,
   cwd: process.cwd(),
   stderr: "pipe",
 };
 const source =
   '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:private="urn:private"><style>.label { font-family: Forte, serif; }</style><defs><linearGradient id="gradient"><stop/><stop/></linearGradient><pattern id="pattern" width="4" height="5"/><filter id="blur"><feGaussianBlur/></filter></defs><g id="layer" inkscape:groupmode="layer" inkscape:label="Main" sodipodi:insensitive="true" style="display:none"><rect id="rect_first" fill="url(#gradient)" stroke="url(#pattern)" filter="url(#blur)" opacity="0.5"/><rect id="rect_second"/><rect id="rect_third"/><circle/><text class="label">SENSITIVE DOCUMENT CONTENT</text><use href="#missing"/></g><image href="private/assets/secret.png" width="12"/><image href="https://example.test/private.png"/><image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"/></svg>';
+
+import { serverEntry } from "./lib/server-entry.mjs";
 
 function revision(bytes) {
   return createHash("sha256").update(bytes).digest("hex");

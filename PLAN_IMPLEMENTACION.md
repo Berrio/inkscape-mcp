@@ -2042,7 +2042,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 #### Puerta F10
 
-- [ ] `F10-G01` Conformance moderno HTTP pasa con seguridad local activa. — Abierta: Inspector 2.9.0 y Conformance 0.1.16 (última publicada) aún no soportan el protocolo HTTP `2026-07-28` (`npm run test:f10-inspector`, 2026-10-07).
+- [w] `F10-G01` Conformance moderno HTTP pasa con seguridad local activa. — Diferida por decisión explícita del usuario (2026-10-07): ninguna herramienta oficial de conformance soporta aún HTTP `2026-07-28` (Inspector 2.9.0 y Conformance 0.1.16, comprobado con `npm run test:f10-inspector`). Se reabre cuando exista.
 - [x] `F10-G02` stdio sigue siendo default y no cambia su stdout. — 2026-10-07: `DEFAULT_CONFIG.transport` es `stdio`; `node dist/cli.js` sin argumentos escribe 0 bytes en stdout y sólo `stdio_listening` a stderr; `stdio-logging`/`config` tests, `test:mcp` y `test:installed` (27/27) pasan por stdio.
 - [x] `F10-G03` Matriz publica versión/plataforma/formato con evidencia real. — 2026-10-07: `docs/compatibility-matrix.md` separa baseline probado (Windows/MSIX 1.4.4, stdio, adapters con smoke), experimental (Linux/macOS sólo CI, 1.5+) y cada exporter INX con su motivo.
 - [x] `F10-G04` 1.5 no se anuncia estable hasta superar fixtures multipágina. — 2026-10-07: 1.5+ sigue devolviendo `INKSCAPE_1_5_EXPERIMENTAL`/`PAGES_V15_NOT_IMPLEMENTED` (F10-T12), sin anuncio estable.
@@ -2084,8 +2084,8 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [x] `F11-T20` Probar instalación con npm limpio y sin source tree. — `scripts/pack-smoke.mjs` usa un prefijo temporal independiente, instala sólo el `.tgz` con npm y ejecuta el binario publicado, recetas y cola durable.
 - [x] `F11-T21` Sincronizar versión package/server/changelog/server.json. — `0.1.0` alinea `package.json`, lockfile, CLI, server manifest y changelog; el test de metadata evita divergencias y el paquete queda preparado para publicación pública. La publicación efectiva sigue siendo `F11-T23`.
 - [x] `F11-T22` Crear provenance/SBOM/checksums según infraestructura disponible. — `npm run release:provenance` crea localmente tarball, SPDX, provenance y `SHA256SUMS` de un árbol Git limpio, sin publicar artefactos.
-- [ ] `F11-T23` Publicar npm solo con autorización explícita del usuario.
-- [ ] `F11-T24` Preparar/publicar MCP Registry solo después de npm y con autorización explícita.
+- [w] `F11-T23` Publicar npm solo con autorización explícita del usuario. — Diferida por decisión explícita del usuario (2026-10-07): se publica primero en GitHub; npm queda pendiente hasta que el usuario inicie sesión (`npm whoami` devolvió 401). El nombre `inkscape-mcp` está libre en el registry.
+- [w] `F11-T24` Preparar/publicar MCP Registry solo después de npm y con autorización explícita. — Diferida por decisión explícita del usuario (2026-10-07): depende de la publicación npm (`F11-T23`).
 - [ ] `F11-T25` Tag/release/announcement solo con autorización explícita.
 - [x] `F11-T26` CLI autónoma `export` sin IA: schema cerrado para SVG/preset/output, revisión automática, `--dry-run`, selección de workspace y salida JSON; reutiliza el MCP privado por stdio, sin bypass de políticas.
 - [x] `F11-T27` Recetas declarativas `run`: JSON `inkscape-mcp-recipe/v1` cerrado para inspección, preflight y hasta 20 exports; se validan source, capabilities y colisiones antes de publicar, y devuelve un recibo JSON con códigos de salida estables.
@@ -2113,7 +2113,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [x] `F12-T04` Definir handshake/versionado entre extensión y MCP. — ADR-014: named pipe con ACL del usuario, token de un solo uso, protocolo `inkscape-mcp-gui/1` con política de versión de Inkscape y catálogo contenido en el allowlist.
 - [x] `F12-T05` Mantener GUI bridge deshabilitado por defecto y con permisos separados. — No existe puente: `configInputSchema` estricto sin opción GUI y ninguna tool/proceso; ADR-014 exige opción de arranque explícita, permiso `gui` separado por principal y aviso en doctor/status.
 - [x] `F12-T06` Evaluar sandbox de SO/contenedor para documentos no confiables. — ADR-015: AppContainer recomendado; Windows Sandbox no habilitado; Docker 29.6.1 (Linux) aísla pero es otra plataforma; WSL sin aislamiento. 1.0 mantiene `trusted-local-only`.
-- [~] `F12-T07` Evaluar pipeline profesional CMYK/PDF-X/preprensa externo con especialista y fixtures. — `color_management_inspect` inventaría perfiles SVG locales, referencias `icc-color()`, candidatas CMYK de cuatro componentes y nombres sin declaración local; declara que no convierte CMYK ni valida output intents. Falta el pipeline externo, especialista y fixtures PDF/X.
+- [w] `F12-T07` Evaluar pipeline profesional CMYK/PDF-X/preprensa externo con especialista y fixtures. — `color_management_inspect` inventaría perfiles SVG locales, referencias `icc-color()`, candidatas CMYK de cuatro componentes y nombres sin declaración local; declara que no convierte CMYK ni valida output intents. Falta el pipeline externo, especialista y fixtures PDF/X. — Diferida por decisión explícita del usuario (2026-10-07): requiere un especialista de preprensa y fixtures PDF/X reales; se mantiene sólo el inventario de color existente.
 - [x] `F12-T08` Evaluar adapters de optimización/render externos sin sustituir Inkscape silenciosamente. — ADR-016: Scour/SVGO/resvg/rsvg/CairoSVG/ImageMagick ausentes en el host; reglas de nombre/versión propios, sin sustitución silenciosa, probe y regresión visual obligatorios.
 - [x] `F12-T09` Diseñar plugin API interna allowlisted sin carga arbitraria desde el cliente. — ADR-016: plugins compilados y registrados de forma estática, schemas estrictos, servicios seguros en lugar de filesystem/runner crudos y allowlist de arranque; sin carga dinámica.
 - [x] `F12-T10` Evaluar helper handle-based/ACL/sandbox nativo si se exige resistencia a un atacante local concurrente que altera reparse points. — ADR-017: prueba con `koffi` (`FILE_FLAG_OPEN_REPARSE_POINT` detecta la junction y `GetFinalPathNameByHandleW` revela el destino externo); diseño con `NtCreateFile` relativo a handles, no implementado mientras los roots deban ser privados.
@@ -2683,8 +2683,8 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 - [x] F08 Importación/formatos/presets.
 - [x] F09 MCP completo.
 - [~] F11 Release Windows/stdio 1.0: todas las puertas cerradas (`F11-G01`–`G07`); falta únicamente la publicación `F11-T23–T25`, que requiere autorización explícita del usuario.
-- [~] F10 Expansión HTTP/versiones/plataformas (P2; no bloquea 1.0): G02–G05 cerradas; G01 bloqueada por herramientas de conformance sin HTTP `2026-07-28`.
-- [~] F12 Opcionales: T01–T06, T08–T10 y G01 cerrados con ADR 013–017; `F12-T07` (CMYK/PDF-X) requiere especialista y fixtures externos.
+- [x] F10 Expansión HTTP/versiones/plataformas (P2): G02–G05 cerradas; `F10-G01` `[w]` hasta que exista conformance HTTP `2026-07-28`.
+- [x] F12 Opcionales: T01–T06, T08–T10 y G01 cerrados con ADR 013–017; `F12-T07` `[w]` (especialista/fixtures PDF/X).
 
 ### Continuidad sin tokens
 

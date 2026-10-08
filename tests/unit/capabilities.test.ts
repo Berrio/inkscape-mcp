@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -101,6 +104,67 @@ describe("Inkscape capabilities", () => {
     }
     expect(second).toBe(first);
     expect(calls).toBe(3);
+  });
+
+  it("re-probes when the executable changes even though its hash is memoized", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "inkscape-mcp-cap-"));
+    try {
+      const executable = join(directory, "inkscape.exe");
+      await writeFile(executable, "binary-v1");
+      let calls = 0;
+      const runner = {
+        run: async (
+          _executable: string,
+          request: { args: readonly string[] },
+        ) => {
+          calls += 1;
+          return {
+            durationMs: 1,
+            exitCode: 0,
+            pid: 1,
+            signal: null,
+            stderr: Buffer.alloc(0),
+            stderrTruncated: false,
+            stdout: Buffer.from(
+              request.args[0] === "--action-list" ? "export-do : Export\n" : "",
+            ),
+            stdoutTruncated: false,
+            terminationReason: "completed" as const,
+          };
+        },
+      };
+      const candidate = {
+        executablePath: executable,
+        installKind: "system" as const,
+        sources: ["path" as const],
+      };
+      const service = new CapabilityService();
+      const context = { extensionDirectories: [] };
+      const first = await service.inspect(
+        runner,
+        candidate,
+        "1.4.4",
+        directory,
+        context,
+      );
+      expect(
+        await service.inspect(runner, candidate, "1.4.4", directory, context),
+      ).toBe(first);
+      expect(calls).toBe(3);
+      await writeFile(executable, "binary-v2-with-another-size");
+      const changed = await service.inspect(
+        runner,
+        candidate,
+        "1.4.4",
+        directory,
+        context,
+      );
+      expect(changed).not.toBe(first);
+      expect(changed.fingerprint).not.toBe(first.fingerprint);
+      expect(calls).toBe(6);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
   });
 
   it("retries a transient probe failure once and does not cache failures", async () => {

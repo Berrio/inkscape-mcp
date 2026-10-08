@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 import {
@@ -217,9 +218,7 @@ async function capabilityFingerprint(
   context: CapabilityCacheContext,
 ): Promise<string> {
   const metadata = await stat(executablePath);
-  const executableHash = createHash("sha256")
-    .update(await readFile(executablePath))
-    .digest("hex");
+  const executableHash = await executableDigest(executablePath, metadata);
   const contextPaths = [
     context.profileDirectory,
     ...(context.dataDirectories ?? []),
@@ -236,6 +235,46 @@ async function capabilityFingerprint(
       `${executablePath}\0${executableHash}\0${metadata.size}\0${metadata.mtimeMs}\0${version}\0${contextState.join("\0")}`,
     )
     .digest("hex");
+}
+
+/**
+ * Content hash of an executable, memoized by path, size and mtime. Every
+ * capability lookup computes a fingerprint before consulting the cache, so
+ * re-reading a large binary on each call would dominate tool latency; the
+ * hash is recomputed only when the file's identity changes, and streamed
+ * instead of loaded whole into memory.
+ */
+const executableDigests = new Map<
+  string,
+  { digest: Promise<string>; mtimeMs: number; size: number }
+>();
+
+function executableDigest(
+  executablePath: string,
+  metadata: { mtimeMs: number; size: number },
+): Promise<string> {
+  const cached = executableDigests.get(executablePath);
+  if (
+    cached !== undefined &&
+    cached.size === metadata.size &&
+    cached.mtimeMs === metadata.mtimeMs
+  )
+    return cached.digest;
+  const digest = new Promise<string>((resolveDigest, reject) => {
+    const hash = createHash("sha256");
+    createReadStream(executablePath)
+      .on("data", (chunk) => hash.update(chunk))
+      .once("error", reject)
+      .once("end", () => resolveDigest(hash.digest("hex")));
+  });
+  executableDigests.set(executablePath, {
+    digest,
+    mtimeMs: metadata.mtimeMs,
+    size: metadata.size,
+  });
+  // A failed read must not poison later lookups.
+  digest.catch(() => executableDigests.delete(executablePath));
+  return digest;
 }
 
 function defaultCacheContext(executablePath: string): CapabilityCacheContext {

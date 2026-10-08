@@ -4,6 +4,29 @@ Este proyecto sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-07
+
+Primera versión publicada (tag `v0.1.0` en GitHub). La publicación en npm y en el MCP Registry queda pendiente.
+
+### Added
+
+- Servidor MCP local por `stdio` para Inkscape headless, con 90 tools de
+  documento, diseño vectorial, recursos, imágenes, importación y exportación.
+- Workspaces autorizados, revisiones SHA-256, locks, staging y publicación
+  atómica para evitar rutas libres y sobrescrituras accidentales.
+- Flujos autónomos de exportación y recetas, junto con scripts PowerShell para
+  automatización Windows no interactiva.
+- Hardening reproducible: corpus adversarial, límites de carga y concurrencia,
+  recuperación de staging obsoleto, auditoría de dependencias y revisión de
+  logs/superficie de seguridad.
+- Metadatos de paquete y `server.json` coherentes para la publicación de npm
+  y del registro MCP.
+- `document_export` exporta la paleta de colores GIMP (`.gpl`) mediante el
+  adapter fijo `inkscape-gpl/v1` (sólo área `drawing`, con acknowledgement de
+  fidelidad limitada).
+- `npm run test:installed`: ejecuta todas las puertas end-to-end, el Inspector
+  y los scripts PowerShell contra el paquete empaquetado e instalado.
+
 ### Security
 
 - El saneamiento SVG clasifica las referencias por namespace: un prefijo XLink
@@ -16,6 +39,10 @@ Este proyecto sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) 
   código.
 - `maxInputBytes` y `maximumSanitizeMode` se aplican a todas las tools, y los
   documentos se leen con un límite de tamaño previo a la carga.
+- Windows: cada proceso nativo corre en un Job Object con kill-on-close desde
+  su lanzamiento (ADR-012, dependencia `koffi`). Los descendientes desacoplados
+  y el árbol de un servidor que muere abruptamente ya no quedan huérfanos;
+  `--doctor` informa `processContainment`.
 - El runner resuelve `taskkill.exe` desde el directorio del sistema, comprueba
   su resultado, mata grupos de procesos en POSIX y no queda bloqueado si un
   descendiente escapado mantiene abiertos los pipes.
@@ -25,21 +52,13 @@ Este proyecto sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) 
 - Rutas que Windows reinterpreta (`CON`, `NUL.svg`, `out.svg.`) se rechazan.
 - SDK MCP 2.3.1 e Inspector 2.9.0: `npm audit` sin vulnerabilidades.
 
-- Windows: cada proceso nativo corre en un Job Object con kill-on-close desde
-  su lanzamiento (ADR-012, dependencia `koffi`). Los descendientes desacoplados
-  y el árbol de un servidor que muere abruptamente ya no quedan huérfanos;
-  `--doctor` informa `processContainment`.
-
-### Added
-
-- `document_export` exporta la paleta de colores GIMP (`.gpl`) mediante el
-  adapter fijo `inkscape-gpl/v1` (sólo área `drawing`, con acknowledgement de
-  fidelidad limitada).
-- `npm run test:installed`: ejecuta todas las puertas end-to-end, el Inspector
-  y los scripts PowerShell contra el paquete empaquetado e instalado.
-
 ### Fixed
 
+- La consulta de capacidades ya no lee y hashea el binario de Inkscape entero
+  en cada llamada: el hash se memoriza por ruta, tamaño y `mtime` y se calcula
+  por streaming.
+- La suite de tests ya no falla de forma intermitente en máquinas cargadas:
+  timeout de 20 s para los tests que lanzan procesos reales.
 - Un ejecutable inexistente ya no provoca una excepción no capturada en el
   runner.
 - `document_export_batch` rechaza al validar, con un mensaje que remite a
@@ -57,19 +76,3 @@ Este proyecto sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) 
   huérfanas de ejecuciones anteriores.
 - El probe de capacidades reintenta fallos transitorios y no cachea fallos.
 - El listado de documentos está limitado a 100.000 entradas y 32 niveles.
-
-## [0.1.0] - 2026-08-27
-
-### Added
-
-- Servidor MCP local por `stdio` para Inkscape headless, con 68 tools de
-  documento, diseño vectorial, recursos, imágenes, importación y exportación.
-- Workspaces autorizados, revisiones SHA-256, locks, staging y publicación
-  atómica para evitar rutas libres y sobrescrituras accidentales.
-- Flujos autónomos de exportación y recetas, junto con scripts PowerShell para
-  automatización Windows no interactiva.
-- Hardening reproducible: corpus adversarial, límites de carga y concurrencia,
-  recuperación de staging obsoleto, auditoría de dependencias y revisión de
-  logs/superficie de seguridad.
-- Metadatos de paquete y `server.json` coherentes para la publicación de npm
-  y del registro MCP.

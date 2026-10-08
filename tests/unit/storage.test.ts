@@ -784,6 +784,84 @@ describe("file revisions and atomic store", () => {
       impatient.withLocks([join(root, "doc.svg")], async () => "reclaimed"),
     ).resolves.toBe("reclaimed");
   });
+  it("never reclaims a live holder that keeps heartbeating past staleAfterMs", async () => {
+    const root = await temporaryDirectory();
+    const lockDirectory = join(root, "locks");
+    const options = { heartbeatMs: 40, lockDirectory, staleAfterMs: 150 };
+    const holder = new CanonicalPathLocks(options);
+    const release = await holder.acquire([join(root, "doc.svg")]);
+    // Hold for several stale windows, as a long batch export would.
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+    const contender = new CanonicalPathLocks({ ...options, timeoutMs: 300 });
+    await expect(
+      contender.withLocks([join(root, "doc.svg")], async () => "stolen"),
+    ).rejects.toThrow("locked by another inkscape-mcp process");
+    await release();
+    await expect(
+      contender.withLocks([join(root, "doc.svg")], async () => "after release"),
+    ).resolves.toBe("after release");
+    expect(
+      () =>
+        new CanonicalPathLocks({
+          heartbeatMs: 100,
+          lockDirectory,
+          staleAfterMs: 200,
+        }),
+    ).toThrow("three heartbeats");
+  });
+  it("reclaims a lock whose PID looks alive but whose heartbeat stopped", async () => {
+    const root = await temporaryDirectory();
+    const lockDirectory = join(root, "locks");
+    const locks = new CanonicalPathLocks({
+      heartbeatMs: 40,
+      lockDirectory,
+      staleAfterMs: 150,
+      timeoutMs: 2_000,
+    });
+    const release = await locks.acquire([join(root, "doc.svg")]);
+    const [lockFile] = await readdir(lockDirectory);
+    await release();
+    // A crashed holder whose PID was reused: alive PID, no heartbeat.
+    const lockPath = join(lockDirectory, lockFile!);
+    await writeFile(
+      lockPath,
+      JSON.stringify({ createdAt: 0, pid: process.pid, token: "crashed" }),
+    );
+    const old = new Date(Date.now() - 60_000);
+    await utimes(lockPath, old, old);
+    await expect(
+      locks.withLocks([join(root, "doc.svg")], async () => "reclaimed"),
+    ).resolves.toBe("reclaimed");
+  });
+  it("never lets two contenders hold a reclaimed lock at the same time", async () => {
+    const root = await temporaryDirectory();
+    const lockDirectory = join(root, "locks");
+    const seed = new CanonicalPathLocks({ lockDirectory });
+    const release = await seed.acquire([join(root, "doc.svg")]);
+    const [lockFile] = await readdir(lockDirectory);
+    await release();
+    await writeFile(
+      join(lockDirectory, lockFile!),
+      JSON.stringify({ createdAt: 0, pid: 2_147_483_646, token: "dead" }),
+    );
+    let inside = 0;
+    let maxInside = 0;
+    const contenders = Array.from(
+      { length: 6 },
+      () => new CanonicalPathLocks({ lockDirectory, timeoutMs: 10_000 }),
+    );
+    await Promise.all(
+      contenders.map((contender) =>
+        contender.withLocks([join(root, "doc.svg")], async () => {
+          inside += 1;
+          maxInside = Math.max(maxInside, inside);
+          await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+          inside -= 1;
+        }),
+      ),
+    );
+    expect(maxInside).toBe(1);
+  });
   it("keeps only the newest in-place backups and never touches unrelated files", async () => {
     const root = await temporaryDirectory();
     const target = join(root, "doc.svg");

@@ -11,6 +11,7 @@ import {
   rename,
   rm,
   stat,
+  utimes,
 } from "node:fs/promises";
 import {
   basename,
@@ -58,7 +59,16 @@ export type CanonicalPathLockOptions = {
    * omitted, locks only serialize callers inside this process.
    */
   lockDirectory?: string | undefined;
-  /** A lock whose owner PID is alive is still reclaimed after this age. */
+  /**
+   * The holder refreshes its lock file's mtime at this interval for as long
+   * as it holds the lock, however long the operation takes.
+   */
+  heartbeatMs?: number | undefined;
+  /**
+   * A lock whose heartbeat is older than this is abandoned even if its PID
+   * looks alive (the PID may have been reused after a crash). Must exceed
+   * several heartbeats so a busy holder is never mistaken for a dead one.
+   */
   staleAfterMs?: number | undefined;
   /** Maximum wait for a lock held by another process. */
   timeoutMs?: number | undefined;
@@ -67,6 +77,7 @@ export type CanonicalPathLockOptions = {
 export class CanonicalPathLocks {
   private readonly tails = new Map<string, Promise<void>>();
   private readonly lockDirectory: string | undefined;
+  private readonly heartbeatMs: number;
   private readonly staleAfterMs: number;
   private readonly timeoutMs: number;
 
@@ -75,8 +86,11 @@ export class CanonicalPathLocks {
       options.lockDirectory === undefined
         ? undefined
         : resolve(options.lockDirectory);
-    this.staleAfterMs = options.staleAfterMs ?? 10 * 60_000;
+    this.heartbeatMs = options.heartbeatMs ?? 15_000;
+    this.staleAfterMs = options.staleAfterMs ?? 60_000;
     this.timeoutMs = options.timeoutMs ?? 60_000;
+    if (this.staleAfterMs < this.heartbeatMs * 3)
+      throw new Error("staleAfterMs must cover at least three heartbeats");
   }
 
   public async acquire(paths: readonly string[]): Promise<() => Promise<void>> {
@@ -132,23 +146,38 @@ export class CanonicalPathLocks {
         } finally {
           await handle.close();
         }
+        // Keep the lock visibly alive during long operations (batches can
+        // run for many minutes), so it is never reclaimed while held.
+        const heartbeat = setInterval(() => {
+          const now = new Date();
+          void utimes(path, now, now).catch(() => undefined);
+        }, this.heartbeatMs);
+        heartbeat.unref();
         return async () => {
+          clearInterval(heartbeat);
           const owner = await readLockOwner(path);
           if (typeof owner === "object" && owner.token === token)
             await rm(path, { force: true });
         };
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        const code = (error as NodeJS.ErrnoException).code;
+        // On Windows a lock file that was just removed while another
+        // process still had it open stays "delete pending", and creating it
+        // again fails with EPERM/EACCES instead of EEXIST: treat it as busy.
+        if (code === "EPERM" || code === "EACCES") {
+          if (Date.now() >= deadline) throw error;
+          await new Promise((resolveDelay) =>
+            setTimeout(resolveDelay, delayMs),
+          );
+          delayMs = Math.min(delayMs * 2, 250);
+          continue;
+        }
+        if (code !== "EEXIST") throw error;
       }
       const owner = await readLockOwner(path);
       if (owner === "missing") continue;
-      if (
-        owner === "unreadable"
-          ? await isOlderThan(path, this.staleAfterMs)
-          : !isProcessAlive(owner.pid) ||
-            Date.now() - owner.createdAt > this.staleAfterMs
-      ) {
-        await rm(path, { force: true });
+      if (await this.isAbandoned(path, owner)) {
+        await reclaimAbandonedLock(path, owner);
         continue;
       }
       if (Date.now() >= deadline)
@@ -158,6 +187,15 @@ export class CanonicalPathLocks {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, delayMs));
       delayMs = Math.min(delayMs * 2, 250);
     }
+  }
+
+  /** A lock is abandoned when its holder is gone or stopped heartbeating. */
+  private async isAbandoned(
+    path: string,
+    owner: LockOwner | "unreadable",
+  ): Promise<boolean> {
+    if (owner !== "unreadable" && !isProcessAlive(owner.pid)) return true;
+    return isOlderThan(path, this.staleAfterMs);
   }
 
   public async withLocks<T>(
@@ -203,6 +241,50 @@ async function readLockOwner(
     /* a lock is unreadable while its creator is still writing it */
   }
   return "unreadable";
+}
+
+/** A reclaim guard older than this belongs to a crashed reclaimer. */
+const RECLAIM_GUARD_STALE_MS = 5_000;
+
+/**
+ * Removes an abandoned lock without ever deleting a fresh one. Reclaimers
+ * serialize on an exclusive `<lock>.reclaim` guard and re-read the owner
+ * inside it. While the abandoned file exists nobody can create a new lock
+ * (`wx` fails), so the only writer that could replace it is another
+ * reclaimer, which the guard excludes: a token match inside the guard proves
+ * the file is still the abandoned one.
+ */
+async function reclaimAbandonedLock(
+  path: string,
+  judged: LockOwner | "unreadable",
+): Promise<void> {
+  const guard = `${path}.reclaim`;
+  try {
+    await (await open(guard, "wx")).close();
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    // Delete-pending guard (Windows): another reclaimer just finished.
+    if (code === "EPERM" || code === "EACCES") return;
+    if (code !== "EEXIST") throw error;
+    if (await isOlderThan(guard, RECLAIM_GUARD_STALE_MS))
+      await rm(guard, { force: true });
+    return;
+  }
+  try {
+    if (sameLockOwner(judged, await readLockOwner(path)))
+      await rm(path, { force: true });
+  } finally {
+    await rm(guard, { force: true });
+  }
+}
+
+function sameLockOwner(
+  judged: LockOwner | "unreadable",
+  current: LockOwner | "missing" | "unreadable",
+): boolean {
+  if (typeof judged === "object")
+    return typeof current === "object" && current.token === judged.token;
+  return current === "unreadable";
 }
 
 async function isOlderThan(path: string, ageMs: number): Promise<boolean> {

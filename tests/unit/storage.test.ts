@@ -1,6 +1,7 @@
 import {
   mkdir,
   mkdtemp,
+  open,
   readdir,
   readFile,
   rename,
@@ -13,6 +14,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import {
+  RENAME_RETRY_ATTEMPTS,
+  renameWithTransientRetry,
+} from "../../src/storage/revisions.js";
 import {
   AtomicFileStore,
   ArtifactStore,
@@ -32,9 +37,14 @@ async function temporaryDirectory(): Promise<string> {
 }
 afterEach(async () => {
   await Promise.all(
-    temporaryDirectories
-      .splice(0)
-      .map((path) => rm(path, { force: true, recursive: true })),
+    temporaryDirectories.splice(0).map((path) =>
+      rm(path, {
+        force: true,
+        maxRetries: 5,
+        recursive: true,
+        retryDelay: 50,
+      }),
+    ),
   );
 });
 
@@ -606,7 +616,12 @@ describe("file revisions and atomic store", () => {
       new CanonicalPathLocks(),
       async (temporaryPath, contents) => {
         await writeFile(temporaryPath, contents);
-        await rm(destination, { force: true, recursive: true });
+        await rm(destination, {
+          force: true,
+          maxRetries: 5,
+          recursive: true,
+          retryDelay: 50,
+        });
         await symlink(outside, destination, "junction");
       },
       { workspaceRoots: [root] },
@@ -638,7 +653,12 @@ describe("file revisions and atomic store", () => {
         await writeFile(temporaryPath, contents);
         writes += 1;
         if (writes !== 2) return;
-        await rm(swappedDestination, { force: true, recursive: true });
+        await rm(swappedDestination, {
+          force: true,
+          maxRetries: 5,
+          recursive: true,
+          retryDelay: 50,
+        });
         await symlink(outside, swappedDestination, "junction");
       },
       { workspaceRoots: [root] },
@@ -889,6 +909,92 @@ describe("file revisions and atomic store", () => {
     expect(
       () => new AtomicFileStore(undefined, undefined, { backupRetention: 0 }),
     ).toThrow();
+  });
+  it("reports stable codes that tell a stale source from a stale output", async () => {
+    const root = await temporaryDirectory();
+    const source = join(root, "doc.svg");
+    const output = join(root, "out.png");
+    await writeFile(source, "source");
+    await writeFile(output, "first export");
+    const store = new AtomicFileStore();
+    const sourceRevision = await sha256File(source);
+    const outputRevision = await sha256File(output);
+    await store.commit({
+      contents: Buffer.from("second export"),
+      expectedOutputRevision: outputRevision,
+      expectedRevision: sourceRevision,
+      sourcePath: source,
+      targetPath: output,
+    });
+    // A second writer still holding the old output revision loses cleanly.
+    await expect(
+      store.commit({
+        contents: Buffer.from("third export"),
+        expectedOutputRevision: outputRevision,
+        expectedRevision: sourceRevision,
+        sourcePath: source,
+        targetPath: output,
+      }),
+    ).rejects.toThrow(/^OUTPUT_REVISION_CONFLICT: /u);
+    await writeFile(source, "edited source");
+    await expect(
+      store.commit({
+        contents: Buffer.from("fourth export"),
+        expectedOutputRevision: await sha256File(output),
+        expectedRevision: sourceRevision,
+        sourcePath: source,
+        targetPath: output,
+      }),
+    ).rejects.toThrow(/^REVISION_CONFLICT: /u);
+    await expect(readFile(output, "utf8")).resolves.toBe("second export");
+  });
+  it.runIf(process.platform === "win32")(
+    "publishes once a concurrent reader releases the target on Windows",
+    async () => {
+      const root = await temporaryDirectory();
+      const target = join(root, "doc.svg");
+      await writeFile(target, "v0");
+      const store = new AtomicFileStore();
+      // A reader such as another process's revision check holds the target.
+      const reader = await open(target, "r");
+      const released = new Promise((resolveRelease) =>
+        setTimeout(() => resolveRelease(reader.close()), 60),
+      );
+      const result = await store.commit({
+        contents: Buffer.from("v1"),
+        expectedOutputRevision: await sha256File(target),
+        targetPath: target,
+      });
+      await released;
+      await expect(readFile(target, "utf8")).resolves.toBe("v1");
+      expect(result.revision).toBe(await sha256File(target));
+    },
+  );
+  it("retries only transient replacement errors, and only a bounded number of times", async () => {
+    const transient = (code: string) =>
+      Object.assign(new Error(code), { code }) as NodeJS.ErrnoException;
+    let calls = 0;
+    await renameWithTransientRetry("a", "b", async () => {
+      calls += 1;
+      if (calls < 3) throw transient("EPERM");
+    });
+    expect(calls).toBe(3);
+    calls = 0;
+    await expect(
+      renameWithTransientRetry("a", "b", async () => {
+        calls += 1;
+        throw transient("ENOENT");
+      }),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(calls).toBe(1);
+    calls = 0;
+    await expect(
+      renameWithTransientRetry("a", "b", async () => {
+        calls += 1;
+        throw transient("EBUSY");
+      }),
+    ).rejects.toMatchObject({ code: "EBUSY" });
+    expect(calls).toBe(RENAME_RETRY_ATTEMPTS);
   });
   it("rejects malformed revision strings instead of skipping the check", async () => {
     const root = await temporaryDirectory();

@@ -41,6 +41,7 @@
     "test:cli": "npm run build --silent && node scripts/test-autonomous-cli.mjs",
     "test:windows": "npm run build --silent && node scripts/test-windows-automation.mjs",
     "test:mcp": "node scripts/test-mcp.mjs",
+    "test:acceptance": "npm run build --silent && node scripts/test-acceptance.mjs",
     "evidence:f03": "npm run build --silent && node scripts/generate-f03-preview-evidence.mjs",
     "test:f03-g08": "npm run build --silent && node scripts/test-f03-css-resize.mjs",
     "test:f03-g09": "npm run build --silent && node scripts/test-f03-page-settings.mjs",

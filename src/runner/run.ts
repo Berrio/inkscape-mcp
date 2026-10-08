@@ -8,6 +8,8 @@ import { AsyncSemaphore } from "./semaphore.js";
 
 /** Bound on waiting for stdio to close once a process tree was terminated. */
 const POST_TERMINATION_CLOSE_TIMEOUT_MS = 5_000;
+/** Bound on waiting for stdio to close after the process exited by itself. */
+const POST_EXIT_CLOSE_TIMEOUT_MS = 2_000;
 
 export type ProcessTerminationReason =
   "completed" | "aborted" | "output-limit" | "timeout";
@@ -300,6 +302,19 @@ function runChildProcess(
     });
     child.once("close", (exitCode, signal) => {
       void finish(exitCode, signal);
+    });
+    // `close` waits for stdio to close. If the process exited on its own but
+    // left a descendant holding the pipes (possible without a Job Object),
+    // report the real exit instead of waiting for — and misreporting — a
+    // timeout.
+    child.once("exit", (exitCode, signal) => {
+      const grace = setTimeout(() => {
+        if (settled || terminationPromise !== undefined) return;
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        void finish(exitCode, signal);
+      }, POST_EXIT_CLOSE_TIMEOUT_MS);
+      grace.unref();
     });
 
     function terminate(

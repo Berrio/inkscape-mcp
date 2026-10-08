@@ -4,6 +4,18 @@ Este proyecto sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- Locks entre procesos: el poseedor renueva el lock con un heartbeat, así que
+  una operación larga (batch de muchos minutos) ya no puede perder su lock
+  frente a otro proceso. La recuperación de locks abandonados se serializa con
+  un guard exclusivo y ya no puede borrar el lock recién creado por otro
+  contendiente; el estado _delete-pending_ de Windows (`EPERM`) se trata como
+  ocupado transitorio.
+- Runner: un proceso que termina normalmente dejando un descendiente con los
+  pipes abiertos (modo sin Job Object) se informa como completado con su
+  código de salida, en lugar de esperar al timeout y reportarlo como tal.
+
 ## [0.1.0] - 2026-10-07
 
 Primera versión publicada (tag `v0.1.0` en GitHub). La publicación en npm y en el MCP Registry queda pendiente.

@@ -349,6 +349,37 @@ describe("ProcessRunner", () => {
     ).rejects.toMatchObject({ name: "ProcessSpawnError" });
   });
 
+  it("reports a normal exit even when a leftover descendant keeps stdio open", async () => {
+    const cwd = await temporaryDirectory("inkscape-mcp-runner-");
+    const orphanPidPath = join(cwd, "orphan.pid");
+    // Without a Job Object the orphan survives the parent's exit.
+    const runner = new ProcessRunner(1, { containment: "process-tree" });
+    let orphanPid: number | undefined;
+    try {
+      const startedAt = Date.now();
+      const result = await runner.run(process.execPath, {
+        ...request(cwd, ["orphan-pipe", "--orphan-pid", orphanPidPath]),
+        timeoutMs: 15_000,
+      });
+      orphanPid = await waitForPid(orphanPidPath);
+      expect(result.terminationReason).toBe("completed");
+      expect(result.exitCode).toBe(0);
+      // Far below the 15 s timeout the run used to wait for.
+      expect(Date.now() - startedAt).toBeLessThan(8_000);
+      expect(runner.activeCount).toBe(0);
+    } finally {
+      orphanPid ??= await waitForPid(orphanPidPath).catch(() => undefined);
+      if (orphanPid !== undefined) {
+        try {
+          process.kill(orphanPid);
+        } catch {
+          // Already gone.
+        }
+        await expectProcessesGone([orphanPid]);
+      }
+    }
+  }, 30_000);
+
   it("releases a run whose escaped descendant keeps stdio open", async () => {
     const cwd = await temporaryDirectory("inkscape-mcp-runner-");
     const orphanPidPath = join(cwd, "orphan.pid");

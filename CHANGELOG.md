@@ -12,6 +12,8 @@ Este proyecto sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) 
   un guard exclusivo y ya no puede borrar el lock recién creado por otro
   contendiente; el estado _delete-pending_ de Windows (`EPERM`) se trata como
   ocupado transitorio.
+- Artifacts: si el hash de una copia falla, la copia se elimina en vez de
+  quedar huérfana hasta el barrido de 24 h.
 - Runner: un proceso que termina normalmente dejando un descendiente con los
   pipes abiertos (modo sin Job Object) se informa como completado con su
   código de salida, en lugar de esperar al timeout y reportarlo como tal.

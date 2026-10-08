@@ -38,7 +38,7 @@ Revisión del código cambiado desde `5cc6498`.
 
 ## 3. Hallazgos no corregidos (baja prioridad)
 
-- `ArtifactStore.copyAndRecord`: si el hash fallara después de copiar, la copia quedaría en el directorio de artifacts sin registrar hasta el barrido de huérfanos (24 h). No se pudo provocar de forma determinista para darle un test, y la regla es «cada corrección con su test», así que se deja anotado. El impacto está acotado por el barrido de huérfanos.
+- `ArtifactStore.copyAndRecord`: **corregido después de la sesión** (commit siguiente): si el hash falla tras copiar, la copia se elimina. El test `artifact-hash-failure.test.ts` simula el fallo con un mock de `sha256File`; falla sin el arreglo y pasa con él.
 - Tras `exit`, el runner espera 2 s a que se vacíen los pipes. Un volcado de salida que siguiera llegando más de 2 s después de que el proceso terminara se truncaría. No se observó (los pipes se vacían en milisegundos) y los límites de salida son de pocos MB.
 
 ## 4. Decisiones tomadas (opción recomendada)

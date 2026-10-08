@@ -125,7 +125,14 @@ export class ArtifactStore {
       await rm(path, { force: true });
       throw new RevisionConflictError("Artifact exceeds allowed size");
     }
-    const hash = await sha256File(path);
+    let hash: string;
+    try {
+      hash = await sha256File(path);
+    } catch (error) {
+      // An unrecorded copy would only be reclaimed by the 24 h orphan sweep.
+      await rm(path, { force: true });
+      throw error;
+    }
     this.records.set(id, {
       expiresAt: Date.now() + ttlMs,
       hash,

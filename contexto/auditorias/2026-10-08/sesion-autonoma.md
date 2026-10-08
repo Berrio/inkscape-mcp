@@ -60,3 +60,13 @@ Revisión del código cambiado desde `5cc6498`.
 ## Resumen
 
 La suite es estable: la causa raíz quedó confirmada y hubo tres o más ejecuciones seguidas en verde. Se corrigieron cuatro bugs reales de concurrencia y procesos, todos con tests, en dos commits locales (`864618e` y `f906970`). Además se registró la evidencia en `docs/progress/F01.md` y `F02.md`. No se publicó nada. Lo único que necesita al usuario es completar la publicación en GitHub (y, más adelante, npm).
+
+## Actualización posterior a la sesión (2026-10-08)
+
+- Se completó la publicación en GitHub que el usuario autorizó el
+  2026-10-07: `main` subido sin `--force` (`5cc6498..456bdca`), tag anotado
+  `v0.1.0` sobre `fa6ceb3` y release
+  https://github.com/Berrio/inkscape-mcp/releases/tag/v0.1.0 con los 4
+  artefactos, verificados byte a byte tras descargarlos.
+- Queda sólo `npm publish` y el MCP Registry (`F11-T23/T24`, `[w]`), que
+  requieren `npm login` del usuario.

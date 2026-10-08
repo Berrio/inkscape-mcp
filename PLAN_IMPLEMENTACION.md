@@ -2086,7 +2086,7 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 - [x] `F11-T22` Crear provenance/SBOM/checksums según infraestructura disponible. — `npm run release:provenance` crea localmente tarball, SPDX, provenance y `SHA256SUMS` de un árbol Git limpio, sin publicar artefactos.
 - [w] `F11-T23` Publicar npm solo con autorización explícita del usuario. — Diferida por decisión explícita del usuario (2026-10-07): se publica primero en GitHub; npm queda pendiente hasta que el usuario inicie sesión (`npm whoami` devolvió 401). El nombre `inkscape-mcp` está libre en el registry.
 - [w] `F11-T24` Preparar/publicar MCP Registry solo después de npm y con autorización explícita. — Diferida por decisión explícita del usuario (2026-10-07): depende de la publicación npm (`F11-T23`).
-- [ ] `F11-T25` Tag/release/announcement solo con autorización explícita.
+- [x] `F11-T25` Tag/release/announcement solo con autorización explícita. — Autorizado por el usuario el 2026-10-07 (push, tag y GitHub Release; npm/Registry diferidos). Publicado el 2026-10-08: tag anotado `v0.1.0` sobre `fa6ceb3` y release https://github.com/Berrio/inkscape-mcp/releases/tag/v0.1.0 con tarball, SBOM SPDX, provenance y SHA256SUMS (provenance: `fa6ceb3`, árbol limpio). Los 4 assets descargados coinciden byte a byte con los locales.
 - [x] `F11-T26` CLI autónoma `export` sin IA: schema cerrado para SVG/preset/output, revisión automática, `--dry-run`, selección de workspace y salida JSON; reutiliza el MCP privado por stdio, sin bypass de políticas.
 - [x] `F11-T27` Recetas declarativas `run`: JSON `inkscape-mcp-recipe/v1` cerrado para inspección, preflight y hasta 20 exports; se validan source, capabilities y colisiones antes de publicar, y devuelve un recibo JSON con códigos de salida estables.
 - [x] `F11-T28` Automatización Windows sin IA: runner PowerShell no interactivo con log, rutas con espacios y propagación de exit code; script opt-in para tarea diaria del usuario actual con `-WhatIf`, sin GUI ni credenciales almacenadas.
@@ -2682,7 +2682,7 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 - [x] F07 Diseño avanzado.
 - [x] F08 Importación/formatos/presets.
 - [x] F09 MCP completo.
-- [~] F11 Release Windows/stdio 1.0: todas las puertas cerradas (`F11-G01`–`G07`); falta únicamente la publicación `F11-T23–T25`, que requiere autorización explícita del usuario.
+- [x] F11 Release Windows/stdio 1.0: puertas `F11-G01`–`G07` cerradas y release GitHub `v0.1.0` publicada (2026-10-08); npm y MCP Registry (`F11-T23/T24`) `[w]` hasta que el usuario inicie sesión en npm.
 - [x] F10 Expansión HTTP/versiones/plataformas (P2): G02–G05 cerradas; `F10-G01` `[w]` hasta que exista conformance HTTP `2026-07-28`.
 - [x] F12 Opcionales: T01–T06, T08–T10 y G01 cerrados con ADR 013–017; `F12-T07` `[w]` (especialista/fixtures PDF/X).
 

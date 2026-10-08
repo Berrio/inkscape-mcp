@@ -52,12 +52,13 @@ configured workspace root`.
 
 ## Revisión u output en conflicto
 
-| Mensaje o resultado                                     | Qué significa                                                          | Recuperación                                                                                   |
-| ------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `Document revision no longer matches`                   | El SVG cambió desde `document_inspect`.                                | Inspecciona otra vez, revisa el cambio y repite usando la nueva revisión.                      |
-| `Overwriting an output requires expectedOutputRevision` | El output ya existe y no se permite reemplazarlo sin comparar su hash. | Elige otro nombre o calcula/obtén la revisión actual y envíala como `expectedOutputRevision`.  |
-| `Output existence changed before publication`           | Otro proceso creó o borró el output durante la operación.              | Detén el proceso competidor, reinspecciona y reintenta; no borres outputs indiscriminadamente. |
-| Plan token inválido/expirado                            | El plan es de un solo uso y caduca.                                    | Ejecuta de nuevo el preflight/preset; no intentes reutilizar el token.                         |
+| Mensaje o resultado                                           | Qué significa                                                          | Recuperación                                                                                   |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `REVISION_CONFLICT: Document revision no longer matches`      | El SVG cambió desde `document_inspect`.                                | Inspecciona otra vez, revisa el cambio y repite usando la nueva revisión.                      |
+| `OUTPUT_REVISION_CONFLICT: Output revision no longer matches` | El output existente cambió desde que obtuviste su revisión.            | Obtén la revisión actual del output y repite con ese `expectedOutputRevision`.                 |
+| `Overwriting an output requires expectedOutputRevision`       | El output ya existe y no se permite reemplazarlo sin comparar su hash. | Elige otro nombre o calcula/obtén la revisión actual y envíala como `expectedOutputRevision`.  |
+| `Output existence changed before publication`                 | Otro proceso creó o borró el output durante la operación.              | Detén el proceso competidor, reinspecciona y reintenta; no borres outputs indiscriminadamente. |
+| Plan token inválido/expirado                                  | El plan es de un solo uso y caduca.                                    | Ejecuta de nuevo el preflight/preset; no intentes reutilizar el token.                         |
 
 Las mutaciones in-place crean backup bajo `on-in-place-mutation`. Antes de un
 cambio importante, crea además un `document_snapshot`; restaura sólo mediante

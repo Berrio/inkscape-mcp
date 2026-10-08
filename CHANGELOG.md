@@ -4,7 +4,33 @@ Este proyecto sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- `document_apply_operations` acepta las operaciones transaccionales
+  `gradient`, `apply_gradient` y `text_path` (con alias dentro de la misma
+  transacción).
+- `document_resize` en `dryRun` con modo `page_only` advierte
+  `CONTENT_OUTSIDE_PAGE` cuando el dibujo queda fuera de la nueva página (o
+  `CONTENT_OUTSIDE_PAGE_CHECK_UNAVAILABLE` si no puede comprobarse).
+- El manifest de `document_export_batch` incluye `width`/`height` verificados
+  de cada variante PNG.
+- Los conflictos de revisión llevan códigos estables al inicio del mensaje:
+  `REVISION_CONFLICT:` (documento/origen) y `OUTPUT_REVISION_CONFLICT:`
+  (output existente).
+- `npm run test:acceptance`: suite end-to-end de los criterios A01–A15 del plan
+  (49 criterios) con dos clientes stdio contra el servidor compilado.
+
 ### Fixed
+
+- Inkscape concurrente: cada invocación usa un `--app-id-tag` propio; con una
+  etiqueta compartida el registro GApplication fallaba de forma intermitente
+  (16/24 probes concurrentes) y el ejecutable se reportaba como no validable.
+- Publicación atómica en Windows: el `rename` final reintenta con backoff
+  acotado (~2,5 s) los errores transitorios `EPERM`/`EBUSY`/`EACCES` que
+  aparecen cuando otro proceso tiene el destino abierto (por ejemplo, la
+  comprobación de revisión de un cliente concurrente), en lugar de devolver
+  `EPERM` al cliente.
+- La cola de recetas libera su lock con reintentos acotados de `rm`.
 
 - Locks entre procesos: el poseedor renueva el lock con un heartbeat, así que
   una operación larga (batch de muchos minutos) ya no puede perder su lock

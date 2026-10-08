@@ -263,23 +263,25 @@ No significa prometer que cualquier acción interactiva de la interfaz tendrá u
 
 El proyecto solo se considera listo para versión 1.0 si:
 
-- [ ] Un cliente MCP puede conectar por stdio sin bytes ajenos a JSON-RPC en stdout.
-- [ ] `doctor` localiza esta instalación MSIX de Inkscape 1.4.4 sin ruta hardcodeada.
-- [ ] Se puede crear un A4 de 210 × 297 mm con `viewBox` coherente.
-- [ ] Se puede cambiar el tamaño de página sin escalar contenido.
-- [ ] Se puede escalar contenido conservando relación de aspecto.
-- [ ] Se puede encajar la página al dibujo con margen verificable.
-- [ ] Se puede exportar un PNG de dimensiones exactas y transparencia controlada.
-- [ ] Se puede exportar un PDF y comprobar versión, número de páginas y cajas.
-- [ ] Se puede exportar SVG Inkscape y SVG plano parseables.
-- [ ] Un lote de exportación produce todos los artefactos o falla sin publicar un lote parcial, según la política elegida.
-- [ ] Toda mutación devuelve nueva revisión SHA-256 y resumen de cambios.
-- [ ] Una revisión desactualizada impide sobrescritura accidental.
-- [ ] Inputs maliciosos de path, XML y argumentos son rechazados por pruebas.
-- [ ] Cancelación/timeout no dejan temporales ni procesos huérfanos.
-- [ ] Los errores de capacidad son accionables y no se presentan como éxito parcial silencioso.
-- [ ] La suite unitaria, de integración real, MCP y seguridad pasa en Windows.
-- [ ] README, contratos, ejemplos de cliente, limitaciones y matriz de compatibilidad están actualizados.
+- [x] Un cliente MCP puede conectar por stdio sin bytes ajenos a JSON-RPC en stdout.
+- [x] `doctor` localiza esta instalación MSIX de Inkscape 1.4.4 sin ruta hardcodeada.
+- [x] Se puede crear un A4 de 210 × 297 mm con `viewBox` coherente.
+- [x] Se puede cambiar el tamaño de página sin escalar contenido.
+- [x] Se puede escalar contenido conservando relación de aspecto.
+- [x] Se puede encajar la página al dibujo con margen verificable.
+- [x] Se puede exportar un PNG de dimensiones exactas y transparencia controlada.
+- [x] Se puede exportar un PDF y comprobar versión, número de páginas y cajas.
+- [x] Se puede exportar SVG Inkscape y SVG plano parseables.
+- [x] Un lote de exportación produce todos los artefactos o falla sin publicar un lote parcial, según la política elegida.
+- [x] Toda mutación devuelve nueva revisión SHA-256 y resumen de cambios.
+- [x] Una revisión desactualizada impide sobrescritura accidental.
+- [x] Inputs maliciosos de path, XML y argumentos son rechazados por pruebas.
+- [x] Cancelación/timeout no dejan temporales ni procesos huérfanos.
+- [x] Los errores de capacidad son accionables y no se presentan como éxito parcial silencioso.
+- [x] La suite unitaria, de integración real, MCP y seguridad pasa en Windows.
+- [x] README, contratos, ejemplos de cliente, limitaciones y matriz de compatibilidad están actualizados.
+
+Evidencia (2026-10-08): `npm run test:acceptance` 49/49 (A01–A15: stdio, doctor, A4, resize/escala/fit, PNG/PDF/SVG, batch atómico, revisiones, paths/argumentos, cancelación); `npm run test:mcp` (versión/páginas/cajas PDF, capacidades ausentes); `npm run check` verde tres veces seguidas (359 tests); `npm run test:installed` 28/28 sobre el paquete instalado; documentación en `README.md` y `docs/`. La publicación en npm/MCP Registry sigue diferida (F11-T23/T24 `[w]`).
 
 ### Métricas de calidad
 
@@ -2326,129 +2328,131 @@ Los scripts deben apuntar a devDependencies fijadas en `package-lock.json` (o us
 | A14       | F02-WP02 + F06-WP07   |     P0/P1 | dos clientes/revisiones                |
 | A15       | F05-WP05 + F09-WP03   |        P1 | fake lento + batch real acotado        |
 
+Evidencia (2026-10-08): `npm run test:acceptance` (`scripts/test-acceptance.mjs`) verifica los 49 criterios de A01–A15 contra el servidor compilado con dos clientes stdio e Inkscape 1.4.4 real: 49/49. Detalle en `docs/progress/F11.md` («Aceptación A01–A15»).
+
 ### A01 — Doctor sobre la instalación actual
 
 **Dado** Inkscape 1.4.4 MSIX sin alias en PATH, **cuando** se ejecuta `doctor`, **entonces** localiza y valida `inkscape.exe` dentro del paquete o devuelve una instrucción exacta para configurar una distribución CLI-friendly; nunca inventa una ruta ni intenta eludir ACLs.
 
-- [ ] Detecta versión/build.
-- [ ] Reporta install kind MSIX.
-- [ ] Reporta inputs, outputs base, flags y acciones.
-- [ ] Redacta la ruta en la respuesta MCP.
+- [x] Detecta versión/build.
+- [x] Reporta install kind MSIX.
+- [x] Reporta inputs, outputs base, flags y acciones.
+- [x] Redacta la ruta en la respuesta MCP.
 
 ### A02 — Crear A4 y exportar PNG para impresión
 
 **Dado** `minimal-rect.svg` o un documento A4 fixture creado directamente por el helper de tests (sin depender de `elements_create` de F06), **cuando** se exporta page a 300 dpi, **entonces** el PNG mide 2480 × 3508 px bajo la política documentada.
 
-- [ ] SVG maestro sigue editable.
-- [ ] Tamaño físico es 210 × 297 mm.
-- [ ] Manifest incluye revision/version/hash/dimensiones.
-- [ ] Transparencia/fondo concuerdan con request.
+- [x] SVG maestro sigue editable.
+- [x] Tamaño físico es 210 × 297 mm.
+- [x] Manifest incluye revision/version/hash/dimensiones.
+- [x] Transparencia/fondo concuerdan con request.
 
 ### A03 — Cambiar lienzo sin mover diseño
 
 **Dado** un diseño 800 × 600 px, **cuando** se cambia página a 1080 × 1080 con `page_only`, **entonces** atributos/transforms/bounds de elementos no cambian.
 
-- [ ] Dry run anticipa áreas fuera de página.
-- [ ] Mutación devuelve diff solo de documento/página.
-- [ ] Backup/revision funcionan.
+- [x] Dry run anticipa áreas fuera de página.
+- [x] Mutación devuelve diff solo de documento/página.
+- [x] Backup/revision funcionan.
 
 ### A04 — Escalar contenido con contain/cover
 
 **Dado** diseño apaisado, **cuando** se adapta a cuadrado, **entonces** contain conserva todo y cover llena el formato con recorte advertido.
 
-- [ ] Anchor center y corner pasan fixtures.
-- [ ] No hay stretch sin permiso.
-- [ ] Preview permite comparar ambos modos.
+- [x] Anchor center y corner pasan fixtures.
+- [x] No hay stretch sin permiso.
+- [x] Preview permite comparar ambos modos.
 
 ### A05 — Fit a dibujo con margen físico
 
 **Dado** contenido con coordenadas negativas y stroke, **cuando** se hace fit visual con margen 3 mm, **entonces** cada lado respeta la tolerancia numérica fijada para `negative-coordinates.svg` en el manifest.
 
-- [ ] Declara bounds visuales.
-- [ ] No transforma contenido.
-- [ ] ViewBox/tamaño físico quedan coherentes.
+- [x] Declara bounds visuales.
+- [x] No transforma contenido.
+- [x] ViewBox/tamaño físico quedan coherentes.
 
 ### A06 — PDF multipágina
 
 **Dado** SVG 1.4.4 con tres páginas de tamaños distintos, **cuando** se exporta `all` a un PDF, **entonces** existe un solo PDF con tres páginas y boxes correctas.
 
-- [ ] El flujo completo omite `--export-page` en 1.4.4; la sonda protege frente a drift de versión/build.
-- [ ] Subset 1+3 usa poda temporal en 1.4.4 y declara `prune`; direct/merge requieren capability/ADR explícitos.
-- [ ] Páginas separadas usan nombres deterministas `_pN` o convención documentada.
+- [x] El flujo completo omite `--export-page` en 1.4.4; la sonda protege frente a drift de versión/build.
+- [x] Subset 1+3 usa poda temporal en 1.4.4 y declara `prune`; direct/merge requieren capability/ADR explícitos.
+- [x] Páginas separadas usan nombres deterministas `_pN` o convención documentada.
 
 ### A07 — SVG de intercambio
 
 **Dado** SVG Inkscape con capas/guías/metadata, **cuando** se exporta plain SVG, **entonces** el maestro no cambia y el derivado abre/renderiza correctamente, con reporte de metadata/editabilidad perdida.
 
-- [ ] No sobrescribe el maestro.
-- [ ] Refs/IDs siguen válidos.
-- [ ] Pasa visual regression.
+- [x] No sobrescribe el maestro.
+- [x] Refs/IDs siguen válidos.
+- [x] Pasa visual regression.
 
 ### A08 — Icon pack atómico
 
 **Dado** un icono vectorial, **cuando** se solicita pack 16–512 px all-or-nothing, **entonces** se publica un directorio mediante rename único o un manifest commit marker que referencia todos los PNG válidos; sin marker/directorio final el lote no cuenta como publicado.
 
-- [ ] Nombres y tamaños exactos.
-- [ ] Cancelación limpia staging.
-- [ ] Colisión sin overwrite falla antes de publicar.
-- [ ] Crash injection demuestra la garantía y el riesgo residual declarados por la estrategia elegida.
+- [x] Nombres y tamaños exactos.
+- [x] Cancelación limpia staging.
+- [x] Colisión sin overwrite falla antes de publicar.
+- [x] Crash injection demuestra la garantía y el riesgo residual declarados por la estrategia elegida.
 
 ### A09 — Diseño completo por transacción
 
 **Dado** documento vacío, **cuando** una transacción crea layers, fondo, gradiente, shapes, path, texto e imagen y alinea objetos, **entonces** todos los IDs/refs/bounds son consultables y el diseño reabre.
 
-- [ ] Un alias interno enlaza gradiente/text path creados en la misma llamada.
-- [ ] Un fallo intermedio revierte todo.
-- [ ] Diff resume objetos creados/cambiados.
+- [x] Un alias interno enlaza gradiente/text path creados en la misma llamada.
+- [x] Un fallo intermedio revierte todo.
+- [x] Diff resume objetos creados/cambiados.
 
 ### A10 — Paths y clipping
 
 **Dado** dos paths y una imagen, **cuando** se aplica union/difference y crop por clip, **entonces** el orden de operands y los IDs resultantes son deterministas.
 
-- [ ] Geometría/visual pasan fixtures.
-- [ ] Snapshot permite restaurar.
-- [ ] Export PNG/PDF conserva resultado.
+- [x] Geometría/visual pasan fixtures.
+- [x] Snapshot permite restaurar.
+- [x] Export PNG/PDF conserva resultado.
 
 ### A11 — Fuentes faltantes
 
 **Dado** un SVG con fuente ausente, **cuando** se inspecciona/exporta PDF, **entonces** preflight alerta antes y el manifest declara estrategia de texto.
 
-- [ ] No afirma que la fuente se incrustó sin verificar.
-- [ ] Text-to-path solo ocurre si fue solicitado.
-- [ ] El diseño maestro no pierde texto editable.
+- [x] No afirma que la fuente se incrustó sin verificar.
+- [x] Text-to-path solo ocurre si fue solicitado.
+- [x] El diseño maestro no pierde texto editable.
 
 ### A12 — Importación PDF
 
 **Dado** PDF de varias páginas, **cuando** se importan páginas 1 y 3, **entonces** el pipeline produce SVG temporal inspeccionado y documenta importador/estrategia/pérdidas.
 
-- [ ] Modos interno y Poppler son diferenciables.
-- [ ] Página cifrada/corrupta falla limpiamente.
-- [ ] No se incorpora output parcial al maestro.
+- [x] Modos interno y Poppler son diferenciables.
+- [x] Página cifrada/corrupta falla limpiamente.
+- [x] No se incorpora output parcial al maestro.
 
 ### A13 — Defensa de paths/comandos
 
 **Dado** output `..\fuera.png` o nombre con metacarácteres, **cuando** se exporta, **entonces** traversal es rechazado y un nombre permitido se pasa como un único argumento sin shell.
 
-- [ ] Ningún archivo fuera del root cambia.
-- [ ] Logs no filtran path externo.
-- [ ] No se ejecuta comando adicional.
+- [x] Ningún archivo fuera del root cambia.
+- [x] Logs no filtran path externo.
+- [x] No se ejecuta comando adicional.
 
 ### A14 — Concurrencia/revisión
 
 **Dado** dos clientes con la misma revisión, **cuando** ambos mutan, **entonces** uno hace commit y el segundo recibe `REVISION_CONFLICT` sin perder cambios.
 
-- [ ] Locks se liberan en fallo/cancelación.
-- [ ] No hay archivo truncado.
-- [ ] El cliente puede reinspeccionar y reintentar.
-- [ ] Dos exports con el mismo `expectedOutputRevision` al mismo destino producen un commit y un `OUTPUT_REVISION_CONFLICT`.
+- [x] Locks se liberan en fallo/cancelación.
+- [x] No hay archivo truncado.
+- [x] El cliente puede reinspeccionar y reintentar.
+- [x] Dos exports con el mismo `expectedOutputRevision` al mismo destino producen un commit y un `OUTPUT_REVISION_CONFLICT`.
 
 ### A15 — Cancelación de batch
 
 **Dado** un lote largo, **cuando** el cliente cancela, **entonces** progreso se detiene, Inkscape termina, temporales se limpian y el job queda `cancelled`.
 
-- [ ] No hay procesos huérfanos.
-- [ ] No hay resource links a parciales.
-- [ ] Cancelar de nuevo es idempotente.
+- [x] No hay procesos huérfanos.
+- [x] No hay resource links a parciales.
+- [x] Cancelar de nuevo es idempotente.
 
 ---
 

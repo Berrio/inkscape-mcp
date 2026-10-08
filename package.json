@@ -74,6 +74,7 @@
     "pack:check": "npm pack --dry-run --json",
     "test:pack": "npm run build --silent && node scripts/pack-smoke.mjs",
     "test:installed": "npm run build --silent && node scripts/test-installed-package.mjs",
+    "bench:f12-shell": "npm run build --silent && node scripts/bench-f12-shell.mjs",
     "release:provenance": "npm run build --silent && node scripts/release-provenance.mjs",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test"
   },

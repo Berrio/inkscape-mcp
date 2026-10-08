@@ -2107,17 +2107,17 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 **Objetivo:** investigar capacidades que no deben retrasar ni desestabilizar el núcleo.
 
-- [ ] `F12-T01` Benchmark de `inkscape --shell` con un worker aislado, reset, TTL, memory cap y recuperación.
-- [ ] `F12-T02` Decidir por ADR si shell persistente mejora latencia sin reducir fiabilidad.
-- [ ] `F12-T03` Diseñar extensión compañera para operaciones verdaderamente GUI-only.
-- [ ] `F12-T04` Definir handshake/versionado entre extensión y MCP.
-- [ ] `F12-T05` Mantener GUI bridge deshabilitado por defecto y con permisos separados.
-- [ ] `F12-T06` Evaluar sandbox de SO/contenedor para documentos no confiables.
+- [x] `F12-T01` Benchmark de `inkscape --shell` con un worker aislado, reset, TTL, memory cap y recuperación. — `npm run bench:f12-shell`: batch 1.598 ms/export frente a `--shell` 11 ms con reset por documento; arranque 1,3–2,3 s, +6,4 MiB en 30 exports y ~2 s de recuperación tras matar la sesión (Inkscape 1.4.4 MSIX). Detalle en `docs/progress/F12.md`.
+- [x] `F12-T02` Decidir por ADR si shell persistente mejora latencia sin reducir fiabilidad. — ADR-013: no se adopta en el núcleo (sin resultado por comando, inyección en cadena de acciones, estado compartido entre owners, sin modo de runner interactivo); se fijan condiciones para un worker opt-in sólo para previews.
+- [x] `F12-T03` Diseñar extensión compañera para operaciones verdaderamente GUI-only. — ADR-014: extensión instalada por el usuario, con catálogo cerrado de operaciones GUI-only sobre el documento abierto y persistencia sólo por commit con revisión.
+- [x] `F12-T04` Definir handshake/versionado entre extensión y MCP. — ADR-014: named pipe con ACL del usuario, token de un solo uso, protocolo `inkscape-mcp-gui/1` con política de versión de Inkscape y catálogo contenido en el allowlist.
+- [x] `F12-T05` Mantener GUI bridge deshabilitado por defecto y con permisos separados. — No existe puente: `configInputSchema` estricto sin opción GUI y ninguna tool/proceso; ADR-014 exige opción de arranque explícita, permiso `gui` separado por principal y aviso en doctor/status.
+- [x] `F12-T06` Evaluar sandbox de SO/contenedor para documentos no confiables. — ADR-015: AppContainer recomendado; Windows Sandbox no habilitado; Docker 29.6.1 (Linux) aísla pero es otra plataforma; WSL sin aislamiento. 1.0 mantiene `trusted-local-only`.
 - [~] `F12-T07` Evaluar pipeline profesional CMYK/PDF-X/preprensa externo con especialista y fixtures. — `color_management_inspect` inventaría perfiles SVG locales, referencias `icc-color()`, candidatas CMYK de cuatro componentes y nombres sin declaración local; declara que no convierte CMYK ni valida output intents. Falta el pipeline externo, especialista y fixtures PDF/X.
-- [ ] `F12-T08` Evaluar adapters de optimización/render externos sin sustituir Inkscape silenciosamente.
-- [ ] `F12-T09` Diseñar plugin API interna allowlisted sin carga arbitraria desde el cliente.
-- [ ] `F12-T10` Evaluar helper handle-based/ACL/sandbox nativo si se exige resistencia a un atacante local concurrente que altera reparse points.
-- [ ] `F12-G01` Cada opcional tiene ADR, threat model, capability gate, tests y documentación antes de publicarse.
+- [x] `F12-T08` Evaluar adapters de optimización/render externos sin sustituir Inkscape silenciosamente. — ADR-016: Scour/SVGO/resvg/rsvg/CairoSVG/ImageMagick ausentes en el host; reglas de nombre/versión propios, sin sustitución silenciosa, probe y regresión visual obligatorios.
+- [x] `F12-T09` Diseñar plugin API interna allowlisted sin carga arbitraria desde el cliente. — ADR-016: plugins compilados y registrados de forma estática, schemas estrictos, servicios seguros en lugar de filesystem/runner crudos y allowlist de arranque; sin carga dinámica.
+- [x] `F12-T10` Evaluar helper handle-based/ACL/sandbox nativo si se exige resistencia a un atacante local concurrente que altera reparse points. — ADR-017: prueba con `koffi` (`FILE_FLAG_OPEN_REPARSE_POINT` detecta la junction y `GetFinalPathNameByHandleW` revela el destino externo); diseño con `NtCreateFile` relativo a handles, no implementado mientras los roots deban ser privados.
+- [x] `F12-G01` Cada opcional tiene ADR, threat model, capability gate, tests y documentación antes de publicarse. — Ningún opcional F12 se publica en 1.0; los evaluados tienen ADR (013–017) con threat model y condiciones previas a publicación. `F12-T07` sigue `[~]` sin publicarse.
 
 ---
 
@@ -2684,7 +2684,7 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 - [x] F09 MCP completo.
 - [~] F11 Release Windows/stdio 1.0: todas las puertas cerradas (`F11-G01`–`G07`); falta únicamente la publicación `F11-T23–T25`, que requiere autorización explícita del usuario.
 - [~] F10 Expansión HTTP/versiones/plataformas (P2; no bloquea 1.0): G02–G05 cerradas; G01 bloqueada por herramientas de conformance sin HTTP `2026-07-28`.
-- [~] F12 Opcionales.
+- [~] F12 Opcionales: T01–T06, T08–T10 y G01 cerrados con ADR 013–017; `F12-T07` (CMYK/PDF-X) requiere especialista y fixtures externos.
 
 ### Continuidad sin tokens
 

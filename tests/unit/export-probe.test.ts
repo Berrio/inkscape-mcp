@@ -63,9 +63,26 @@ it("validates a bounded GIMP palette and rejects malformed palette output", () =
   ).toThrow("no palette colors");
   expect(() =>
     inspectGpl(
-      Buffer.from("GIMP Palette\nName: Invalid\nColumns: 33\n1 2 3\n"),
+      Buffer.from("GIMP Palette\nName: Invalid\nColumns: 257\n1 2 3\n"),
     ),
   ).toThrow("invalid palette columns");
+  expect(() =>
+    inspectGpl(Buffer.from("GIMP Palette\nName: Invalid\nColumns: x\n1 2 3\n")),
+  ).toThrow("invalid palette columns");
+  expect(() =>
+    inspectGpl(Buffer.from("GIMP Palette\nName: Bad\n256 0 0 too bright\n")),
+  ).toThrow("no palette colors");
+});
+
+it("accepts the Inkscape 1.4.4 palette, which has no Columns header", () => {
+  // Byte-for-byte output of `--export-type=gpl` from Inkscape 1.4.4 (MSIX).
+  const output =
+    "GIMP Palette\nName: probe\n#\n  0   0   0 BLACK\n 17  34  51 #112233\n170 187 204 #AABBCC\n";
+  expect(inspectGpl(Buffer.from(output, "utf8"))).toEqual({
+    byteLength: Buffer.byteLength(output),
+    colorCount: 3,
+    name: "probe",
+  });
 });
 
 it("validates FXG XML without allowing active declarations", () => {

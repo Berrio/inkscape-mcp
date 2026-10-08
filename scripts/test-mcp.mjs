@@ -20,8 +20,10 @@ import { setTimeout as delay } from "node:timers/promises";
 import { gzipSync } from "node:zlib";
 import { PDFDocument } from "pdf-lib";
 
+import { serverEntry } from "./lib/server-entry.mjs";
+
 const server = {
-  args: ["dist/cli.js"],
+  args: [serverEntry],
   command: process.execPath,
   cwd: process.cwd(),
   stderr: "pipe",
@@ -121,7 +123,7 @@ for (const { label, versionNegotiation } of [
 const workspaceRoot = await mkdtemp(join(tmpdir(), "inkscape-mcp-mcp-test-"));
 const workspaceTransport = new StdioClientTransport({
   ...server,
-  args: ["dist/cli.js", "--workspace-root", workspaceRoot],
+  args: [serverEntry, "--workspace-root", workspaceRoot],
 });
 const workspaceClient = new Client(
   { name: "inkscape-mcp-workspace-client", version: packageMetadata.version },
@@ -4570,6 +4572,65 @@ try {
   )
     throw new Error(
       "document_export did not publish the verified versioned SIF adapter",
+    );
+  const gplExport = await workspaceClient.callTool({
+    arguments: {
+      spec: {
+        area: { kind: "drawing" },
+        fidelityPolicy: "acknowledge-limited-fidelity",
+        format: "gpl",
+        source: { expectedRevision: settingsRevision, path: "a4.svg" },
+        target: { kind: "file", overwrite: false, path: "a4-palette.gpl" },
+      },
+      workspaceId: workspace.id,
+    },
+    name: "document_export",
+  });
+  const gplExportText = await readFile(
+    join(workspaceRoot, "a4-palette.gpl"),
+    "utf8",
+  );
+  if (
+    gplExport.isError ||
+    gplExport.structuredContent?.adapter !== "inkscape-gpl/v1" ||
+    gplExport.structuredContent?.format !== "gpl" ||
+    !gplExport.structuredContent?.warnings?.includes(
+      "GPL_PALETTE_ONLY_ACKNOWLEDGED",
+    ) ||
+    !gplExportText.startsWith("GIMP Palette") ||
+    !/^\s*\d{1,3}\s+\d{1,3}\s+\d{1,3}\b/mu.test(gplExportText)
+  )
+    throw new Error(
+      "document_export did not publish the verified versioned GPL adapter",
+    );
+  const gplBatch = await workspaceClient.callTool({
+    arguments: {
+      mode: "all_or_nothing",
+      specs: [
+        {
+          area: { kind: "drawing" },
+          fidelityPolicy: "acknowledge-limited-fidelity",
+          format: "gpl",
+          source: { expectedRevision: settingsRevision, path: "a4.svg" },
+          target: {
+            kind: "file",
+            overwrite: false,
+            path: "must-not-exist-batch.gpl",
+          },
+        },
+      ],
+      workspaceId: workspace.id,
+    },
+    name: "document_export_batch",
+  });
+  const gplBatchText = gplBatch.content?.map((item) => item.text).join("");
+  if (
+    !gplBatch.isError ||
+    !gplBatchText?.includes("use document_export for gpl") ||
+    existsSync(join(workspaceRoot, "must-not-exist-batch.gpl"))
+  )
+    throw new Error(
+      "document_export_batch did not reject an adapter format before rendering",
     );
   const reimportedEmf = await workspaceClient.callTool({
     arguments: {

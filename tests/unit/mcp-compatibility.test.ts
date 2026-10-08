@@ -138,8 +138,10 @@ describe("MCP compatibility contract", () => {
       const fingerprint = createHash("sha256")
         .update(JSON.stringify(tools))
         .digest("hex");
+      // Updated 2026-10-07: document_export/_batch gained the `gpl` format
+      // (inkscape-gpl/v1); no other tool contract changed.
       expect(fingerprint).toBe(
-        "8aae2e2f54fb5f996811a9032c3ca395d842f8b3ed95f488b65895743269df07",
+        "54b9316677adc4a96ac99c55cc466c2a1b997b1a8d496d53522673acd10626fc",
       );
     } finally {
       await client.close();

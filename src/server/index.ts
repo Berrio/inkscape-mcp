@@ -166,6 +166,7 @@ import {
   inspectEmf,
   HPGL_EXPORT_ADAPTER,
   SIF_EXPORT_ADAPTER,
+  GPL_EXPORT_ADAPTER,
   type ExportSpec,
   exportPresetSchema,
   exportSpecSchema,
@@ -1276,6 +1277,14 @@ export function createServerRuntime(config: ServerConfig): ServerRuntime {
  * failures to {@link publicErrorMessage}, so a raw Node.js error carrying an
  * absolute workspace, scratch or root path can never reach an MCP client.
  */
+/** Formats the document_export_batch renderer can produce. */
+const BATCH_RENDERABLE_FORMATS: ReadonlySet<ExportSpec["format"]> = new Set([
+  "pdf",
+  "plain-svg",
+  "png",
+  "svg",
+]);
+
 function routeHandlerErrorsThroughPublicMessages(server: McpServer): void {
   type Register = (...args: unknown[]) => unknown;
   const wrapLastCallback = (register: Register): Register => {
@@ -8688,6 +8697,15 @@ export function buildServer(
             : specs === undefined
               ? expandExportPreset(preset!)
               : specs.map(parseExportSpec);
+        // The batch renderer covers raster/document formats only; adapter and
+        // legacy formats must use document_export instead of failing late.
+        const unsupported = expandedSpecs.find(
+          (spec) => !BATCH_RENDERABLE_FORMATS.has(spec.format),
+        );
+        if (unsupported !== undefined)
+          throw new Error(
+            `document_export_batch supports png, pdf, svg and plain-svg; use document_export for ${unsupported.format}`,
+          );
         const variants = planExportBatch(expandedSpecs);
         const outputDirectory =
           savedPlan?.outputDirectory ?? preset?.outputDirectory;
@@ -9015,7 +9033,7 @@ export function buildServer(
     "document_export",
     {
       description:
-        "Exports one PNG, PDF, SVG, plain SVG, PS, EPS, EMF, experimental WMF, or a fixed versioned DXF/HPGL/FXG/SIF adapter from a validated ExportSpec through the bounded Inkscape pipeline. Legacy vector formats require explicit acknowledgement of fidelity limits.",
+        "Exports one PNG, PDF, SVG, plain SVG, PS, EPS, EMF, experimental WMF, or a fixed versioned DXF/HPGL/FXG/SIF/GPL adapter from a validated ExportSpec through the bounded Inkscape pipeline. Legacy vector formats require explicit acknowledgement of fidelity limits.",
       inputSchema: z
         .object({
           spec: exportSpecSchema,
@@ -9029,6 +9047,7 @@ export function buildServer(
             HPGL_EXPORT_ADAPTER,
             FXG_EXPORT_ADAPTER,
             SIF_EXPORT_ADAPTER,
+            GPL_EXPORT_ADAPTER,
           ])
           .optional(),
         artifact: artifactSchema,
@@ -9037,6 +9056,7 @@ export function buildServer(
           "dxf",
           "fxg",
           "sif",
+          "gpl",
           "hpgl",
           "eps",
           "pdf",
@@ -9070,7 +9090,8 @@ export function buildServer(
         spec.format !== "dxf" &&
         spec.format !== "hpgl" &&
         spec.format !== "fxg" &&
-        spec.format !== "sif"
+        spec.format !== "sif" &&
+        spec.format !== "gpl"
       )
         throw new Error("Use the specialized export tool for this format");
       if (spec.format === "png" && spec.margin !== undefined)
@@ -9130,7 +9151,9 @@ export function buildServer(
                           ? /\.fxg$/iu
                           : spec.format === "sif"
                             ? /\.sif$/iu
-                            : /\.svg$/iu;
+                            : spec.format === "gpl"
+                              ? /\.gpl$/iu
+                              : /\.svg$/iu;
       if (!expectedExtension.test(output.relativePath))
         throw new Error(
           "Output extension does not match the requested export format",
@@ -9203,7 +9226,9 @@ export function buildServer(
                               ? "export.fxg"
                               : spec.format === "sif"
                                 ? "export.sif"
-                                : "export.svg",
+                                : spec.format === "gpl"
+                                  ? "export.gpl"
+                                  : "export.svg",
           );
           const background =
             spec.format === "png" && spec.background.mode === "document"
@@ -9269,6 +9294,9 @@ export function buildServer(
               ...(spec.format === "sif"
                 ? ["SIF_LIMITED_FIDELITY_ACKNOWLEDGED"]
                 : []),
+              ...(spec.format === "gpl"
+                ? ["GPL_PALETTE_ONLY_ACKNOWLEDGED"]
+                : []),
             ],
           };
         },
@@ -9295,6 +9323,7 @@ export function buildServer(
         ...(spec.format === "hpgl" ? { adapter: HPGL_EXPORT_ADAPTER } : {}),
         ...(spec.format === "fxg" ? { adapter: FXG_EXPORT_ADAPTER } : {}),
         ...(spec.format === "sif" ? { adapter: SIF_EXPORT_ADAPTER } : {}),
+        ...(spec.format === "gpl" ? { adapter: GPL_EXPORT_ADAPTER } : {}),
         artifact,
         format: spec.format,
         outputPath: output.relativePath,

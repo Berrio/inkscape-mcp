@@ -1,10 +1,16 @@
+export const GPL_EXPORT_ADAPTER = "inkscape-gpl/v1" as const;
+
 export type GplMetadata = {
   byteLength: number;
   colorCount: number;
   name: string;
 };
 
-/** Validates the textual GIMP Palette interchange structure emitted by Inkscape. */
+/**
+ * Validates the textual GIMP Palette interchange structure emitted by Inkscape.
+ * `Columns:` is optional in the GIMP format, and Inkscape 1.4.4 does not emit
+ * it; when present it must be a bounded integer.
+ */
 export function inspectGpl(bytes: Uint8Array): GplMetadata {
   if (bytes.length === 0 || [...bytes].some((byte) => byte === 0))
     throw new Error("GPL output is empty or contains NUL bytes");
@@ -19,9 +25,11 @@ export function inspectGpl(bytes: Uint8Array): GplMetadata {
   if (!name || name.length > 256)
     throw new Error("GPL output is missing a bounded palette name");
   const columnsLine = lines.find((line) => line.startsWith("Columns:"));
-  const columns = Number(columnsLine?.slice("Columns:".length).trim());
-  if (!Number.isInteger(columns) || columns < 1 || columns > 32)
-    throw new Error("GPL output has invalid palette columns");
+  if (columnsLine !== undefined) {
+    const columns = Number(columnsLine.slice("Columns:".length).trim());
+    if (!Number.isInteger(columns) || columns < 0 || columns > 256)
+      throw new Error("GPL output has invalid palette columns");
+  }
   const colorCount = lines.filter((line) => {
     const match = /^(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})(?:\s+.*)?$/u.exec(
       line.trim(),

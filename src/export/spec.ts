@@ -381,6 +381,16 @@ const sifExportSchema = commonExportSchema
   })
   .strict();
 
+/** GIMP Palette: the exporter collects every document color, so only the
+ * whole drawing is a truthful area; a selection would promise a subset. */
+const gplExportSchema = commonExportSchema
+  .extend({
+    area: z.object({ kind: z.literal("drawing") }).strict(),
+    fidelityPolicy: z.literal("acknowledge-limited-fidelity"),
+    format: z.literal("gpl"),
+  })
+  .strict();
+
 export const exportSpecSchema = z
   .discriminatedUnion("format", [
     pngExportSchema,
@@ -393,6 +403,7 @@ export const exportSpecSchema = z
     hpglExportSchema,
     fxgExportSchema,
     sifExportSchema,
+    gplExportSchema,
   ])
   .superRefine((value, context) => {
     const selection = value.area.kind === "selection" ? value.area : undefined;

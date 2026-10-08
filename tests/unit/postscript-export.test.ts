@@ -95,6 +95,48 @@ describe("PostScript export policy and verification", () => {
         target: { kind: "file", overwrite: false, path: "out.sif" },
       }),
     ).toMatchObject({ format: "sif" });
+    expect(
+      parseExportSpec({
+        ...common,
+        fidelityPolicy: "acknowledge-limited-fidelity",
+        format: "gpl",
+        target: { kind: "file", overwrite: false, path: "out.gpl" },
+      }),
+    ).toMatchObject({ format: "gpl" });
+    // A palette collects every document color: a selection area would
+    // promise a subset the exporter does not produce. The same selection is
+    // valid for SIF, so the rejection comes from the GPL adapter alone.
+    const selection = {
+      elementIds: ["shape"],
+      kind: "selection" as const,
+      output: "combined" as const,
+      visibility: "document" as const,
+    };
+    expect(
+      parseExportSpec({
+        ...common,
+        area: selection,
+        fidelityPolicy: "acknowledge-limited-fidelity",
+        format: "sif",
+        target: { kind: "file", overwrite: false, path: "out.sif" },
+      }),
+    ).toMatchObject({ format: "sif" });
+    expect(() =>
+      parseExportSpec({
+        ...common,
+        area: selection,
+        fidelityPolicy: "acknowledge-limited-fidelity",
+        format: "gpl",
+        target: { kind: "file", overwrite: false, path: "out.gpl" },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseExportSpec({
+        ...common,
+        format: "gpl",
+        target: { kind: "file", overwrite: false, path: "out.gpl" },
+      }),
+    ).toThrow();
   });
 
   it("verifies PostScript signatures and requires a concrete EPS bounding box", async () => {

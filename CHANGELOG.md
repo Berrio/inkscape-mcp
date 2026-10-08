@@ -30,10 +30,24 @@ Este proyecto sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) 
   y el árbol de un servidor que muere abruptamente ya no quedan huérfanos;
   `--doctor` informa `processContainment`.
 
+### Added
+
+- `document_export` exporta la paleta de colores GIMP (`.gpl`) mediante el
+  adapter fijo `inkscape-gpl/v1` (sólo área `drawing`, con acknowledgement de
+  fidelidad limitada).
+- `npm run test:installed`: ejecuta todas las puertas end-to-end, el Inspector
+  y los scripts PowerShell contra el paquete empaquetado e instalado.
+
 ### Fixed
 
 - Un ejecutable inexistente ya no provoca una excepción no capturada en el
   runner.
+- `document_export_batch` rechaza al validar, con un mensaje que remite a
+  `document_export`, los formatos que su renderizador no produce (DXF, HPGL,
+  FXG, SIF, GPL, PS/EPS, EMF/WMF); antes fallaban tarde con un error genérico.
+- El verificador GPL ya no exige la cabecera opcional `Columns:`, que
+  Inkscape 1.4.4 no emite; la sonda de doctor deja de marcar GPL como no
+  disponible.
 
 ### Changed
 

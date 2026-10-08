@@ -2042,11 +2042,11 @@ Baseline: especificación MCP `2026-07-28`, SDK TypeScript v2 `@modelcontextprot
 
 #### Puerta F10
 
-- [ ] `F10-G01` Conformance moderno HTTP pasa con seguridad local activa.
-- [ ] `F10-G02` stdio sigue siendo default y no cambia su stdout.
-- [ ] `F10-G03` Matriz publica versión/plataforma/formato con evidencia real.
-- [ ] `F10-G04` 1.5 no se anuncia estable hasta superar fixtures multipágina.
-- [ ] `F10-G05` Evidencia en `docs/progress/F10.md`.
+- [ ] `F10-G01` Conformance moderno HTTP pasa con seguridad local activa. — Abierta: Inspector 2.9.0 y Conformance 0.1.16 (última publicada) aún no soportan el protocolo HTTP `2026-07-28` (`npm run test:f10-inspector`, 2026-10-07).
+- [x] `F10-G02` stdio sigue siendo default y no cambia su stdout. — 2026-10-07: `DEFAULT_CONFIG.transport` es `stdio`; `node dist/cli.js` sin argumentos escribe 0 bytes en stdout y sólo `stdio_listening` a stderr; `stdio-logging`/`config` tests, `test:mcp` y `test:installed` (27/27) pasan por stdio.
+- [x] `F10-G03` Matriz publica versión/plataforma/formato con evidencia real. — 2026-10-07: `docs/compatibility-matrix.md` separa baseline probado (Windows/MSIX 1.4.4, stdio, adapters con smoke), experimental (Linux/macOS sólo CI, 1.5+) y cada exporter INX con su motivo.
+- [x] `F10-G04` 1.5 no se anuncia estable hasta superar fixtures multipágina. — 2026-10-07: 1.5+ sigue devolviendo `INKSCAPE_1_5_EXPERIMENTAL`/`PAGES_V15_NOT_IMPLEMENTED` (F10-T12), sin anuncio estable.
+- [x] `F10-G05` Evidencia en `docs/progress/F10.md`. — 2026-10-07: sección «Puertas F10» de `docs/progress/F10.md`.
 
 ---
 
@@ -2683,7 +2683,7 @@ Nota: la URL histórica de unidades contiene el título `Units_In_Inkscape`; ver
 - [x] F08 Importación/formatos/presets.
 - [x] F09 MCP completo.
 - [~] F11 Release Windows/stdio 1.0: todas las puertas cerradas (`F11-G01`–`G07`); falta únicamente la publicación `F11-T23–T25`, que requiere autorización explícita del usuario.
-- [~] F10 Expansión HTTP/versiones/plataformas (P2; no bloquea 1.0).
+- [~] F10 Expansión HTTP/versiones/plataformas (P2; no bloquea 1.0): G02–G05 cerradas; G01 bloqueada por herramientas de conformance sin HTTP `2026-07-28`.
 - [~] F12 Opcionales.
 
 ### Continuidad sin tokens

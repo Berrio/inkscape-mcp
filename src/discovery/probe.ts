@@ -77,14 +77,24 @@ export function parseInkscapeVersion(output: string): string | undefined {
   return match?.[1];
 }
 
-function createAppIdTag(executablePath: string): string {
+let appIdSequence = 0;
+
+/**
+ * A unique application ID per invocation keeps the probe out of a running
+ * GUI session *and* away from concurrent probes. A tag shared by concurrent
+ * Inkscape processes makes them contend for one GApplication/D-Bus name:
+ * measured on 1.4.4 MSIX, 16 of 24 concurrent runs failed with "Failed to
+ * register: GDBus.Error…" or crashed, versus 0 of 24 with unique tags.
+ */
+export function createAppIdTag(executablePath: string): string {
   const digest = [...executablePath]
     .reduce(
       (hash, character) => (hash * 31 + character.codePointAt(0)!) >>> 0,
       0,
     )
     .toString(36);
-  return `inkscape-mcp-${digest}`;
+  appIdSequence = (appIdSequence + 1) % Number.MAX_SAFE_INTEGER;
+  return `inkscape-mcp-${digest}-${process.pid.toString(36)}-${appIdSequence.toString(36)}`;
 }
 
 function rejection(

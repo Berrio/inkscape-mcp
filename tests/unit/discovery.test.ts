@@ -204,4 +204,45 @@ describe("Inkscape discovery", () => {
     });
     expect(fakeInkscape).toContain("fake-inkscape.mjs");
   });
+
+  it("gives every probe its own application ID so concurrent runs never contend", async () => {
+    const tags: string[] = [];
+    const runner = {
+      run: async (
+        _executable: string,
+        request: { args: readonly string[] },
+      ) => {
+        tags.push(
+          request.args.find((arg) => arg.startsWith("--app-id-tag=")) ?? "",
+        );
+        return {
+          durationMs: 1,
+          exitCode: 0,
+          pid: 1,
+          signal: null,
+          stderr: Buffer.alloc(0),
+          stderrTruncated: false,
+          stdout: Buffer.from("Inkscape 1.4.4 (dcaf3e7, 2026-05-05)\n"),
+          stdoutTruncated: false,
+          terminationReason: "completed" as const,
+        };
+      },
+    };
+    const candidate = {
+      executablePath: "C:/fake/inkscape.exe",
+      installKind: "path" as const,
+      sources: ["configured" as const],
+    };
+    await Promise.all(
+      Array.from({ length: 4 }, () =>
+        probeInkscapeCandidate(runner, candidate, process.cwd()),
+      ),
+    );
+    expect(tags).toHaveLength(4);
+    expect(new Set(tags).size).toBe(4);
+    for (const tag of tags)
+      expect(tag).toMatch(
+        /^--app-id-tag=inkscape-mcp-[0-9a-z]+-[0-9a-z]+-[0-9a-z]+$/u,
+      );
+  });
 });
